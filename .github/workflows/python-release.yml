@@ -15,9 +15,12 @@ jobs:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
 
     steps:
-    - name: Download all the dists
-      uses: actions/download-artifact@v3
+    - name: Download artifact
+      id: download-artifact
+      uses: dawidd6/action-download-artifact@v2
       with:
+        workflow: python-build.yml
+        workflow_conclusion: success
         name: python-package-distributions
         path: dist/
     - name: Publish distribution 📦 to PyPI
