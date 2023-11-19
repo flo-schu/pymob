@@ -10,8 +10,8 @@ from plotly.colors import sample_colorscale, qualitative
 import plotly.graph_objects as go
 from dash_bootstrap_components import (
     Row, Col, Container, themes, Card, CardBody, Tab, Tabs)
-from moppy.utils import store_file as store
-from moppy.sims.simulation import update_parameters
+from pymob.utils import store_file as store
+from pymob.sims.simulation import update_parameters
 
 CASE_STUDIES = "case_studies"
 assert os.path.exists(CASE_STUDIES), "make sure you have a 'case_studies' directory in your project directory"

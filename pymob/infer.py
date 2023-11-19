@@ -1,7 +1,7 @@
 import click
 
-from moppy.utils import help
-from moppy.utils.store_file import prepare_casestudy, import_package
+from pymob.utils import help
+from pymob.utils.store_file import prepare_casestudy, import_package
 
 @click.command()
 @click.option("-c", "--case_study", type=str, default="test_case_study", 

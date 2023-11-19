@@ -1,8 +1,8 @@
 import numpy as np
 import argparse
-from moppy.sims.optimization import IndyOptimizer
-from moppy.sims.simulation import create_sim, update_parameters
-from moppy.utils.store_file import read_config
+from pymob.sims.optimization import IndyOptimizer
+from pymob.sims.simulation import create_sim, update_parameters
+from pymob.utils.store_file import read_config
 
 parser = argparse.ArgumentParser(
     prog="Parameter optimization on observation timeseries of individuals")

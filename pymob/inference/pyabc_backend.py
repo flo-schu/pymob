@@ -7,8 +7,8 @@ import xarray as xr
 import arviz as az
 from matplotlib import pyplot as plt
 
-from moppy.utils.store_file import prepare_casestudy, import_package, opt
-from moppy import SimulationBase
+from pymob.utils.store_file import prepare_casestudy, import_package, opt
+from pymob import SimulationBase
 
 
 class PyabcBackend:

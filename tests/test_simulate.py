@@ -3,7 +3,7 @@ import xarray as xr
 import numpy as np
 from click.testing import CliRunner
 
-from moppy.utils.store_file import prepare_casestudy
+from pymob.utils.store_file import prepare_casestudy
 
 def load_test_case_study():
     config = prepare_casestudy(
@@ -30,7 +30,7 @@ def test_interactive_mode():
     sim.interactive()
 
 def test_commandline_API():
-    from moppy.simulate import main
+    from pymob.simulate import main
     runner = CliRunner()
     
     args = "--case_study=test_case_study --scenario=test_scenario"

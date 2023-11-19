@@ -3,7 +3,7 @@ import xarray as xr
 import numpy as np
 from click.testing import CliRunner
 
-from moppy.utils.store_file import prepare_casestudy
+from pymob.utils.store_file import prepare_casestudy
 
 def test_scripting_API():
     config = prepare_casestudy(
@@ -41,14 +41,14 @@ def test_inference_evaluation():
 
 
 def test_commandline_API_redis():
-    from moppy.infer import main
+    from pymob.infer import main
     runner = CliRunner()
     
     args = "--case_study=test_case_study --scenario=test_scenario"
     result = runner.invoke(main, args.split(" "))
 
 def test_commandline_API_infer():
-    from moppy.infer import main
+    from pymob.infer import main
     runner = CliRunner()
     
     args = "--case_study=test_case_study --scenario=test_scenario"

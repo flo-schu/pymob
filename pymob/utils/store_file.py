@@ -7,8 +7,8 @@ import sys
 import xarray as xr
 from glob import glob
 from importlib import import_module
-from moppy.utils.misc import get_host
-from moppy.utils.errors import errormsg
+from pymob.utils.misc import get_host
+from pymob.utils.errors import errormsg
 
 def create_fname_date_ver(dirname="./", fname="file", fextension=".txt"):
     ver = 0

@@ -4,8 +4,8 @@ import click
 import numpy as np
 from collections import Counter
 
-from moppy.utils.store_file import prepare_casestudy
-from moppy.utils import help
+from pymob.utils.store_file import prepare_casestudy
+from pymob.utils import help
 
 @click.command()
 @click.option("-c", "--case_study", type=str, default="core_daphnia", 

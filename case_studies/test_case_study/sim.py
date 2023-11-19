@@ -3,7 +3,7 @@ import xarray as xr
 from scipy.integrate import odeint
 from mod import lotka_volterra
 from plot import plot_trajectory
-from moppy import SimulationBase
+from pymob import SimulationBase
 
 class Simulation(SimulationBase):
     def initialize(self, input):

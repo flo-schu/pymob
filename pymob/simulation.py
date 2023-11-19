@@ -10,8 +10,8 @@ import dpath.util as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from toopy import Param, FloatParam, IntParam
 
-from moppy.utils.errors import errormsg
-from moppy.utils.store_file import scenario_file, parse_config_section
+from pymob.utils.errors import errormsg
+from pymob.utils.store_file import scenario_file, parse_config_section
 
 
 def update_parameters_dict(config, x, parnames):
@@ -118,12 +118,12 @@ class SimulationBase:
     
     def set_inferer(self, backend):
         if backend == "pyabc":
-            from moppy.inference.pyabc_backend import PyabcBackend
+            from pymob.inference.pyabc_backend import PyabcBackend
 
             self.inferer = PyabcBackend(simulation=self)
 
         if backend == "pymoo":
-            from moppy.inference.pymoo_backend import PymooBackend
+            from pymob.inference.pymoo_backend import PymooBackend
 
             self.inferer = PymooBackend(simulation=self)
 

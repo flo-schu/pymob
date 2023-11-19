@@ -5,10 +5,10 @@ import numpy as np
 import xarray as xr
 
 # import own packages
-from moppy.utils.store_file import (
+from pymob.utils.store_file import (
     prepare_casestudy, import_package, opt, prepare_scenario)
-from moppy.sim.simulation import update_parameters
-from moppy.utils import help
+from pymob.sim.simulation import update_parameters
+from pymob.utils import help
 
 @click.command()
 @click.option("-c", "--case_study", type=str, default="core_daphnia", 

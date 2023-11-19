@@ -1,7 +1,7 @@
 import numpy as np
 import xarray as xr
 
-from moppy.utils.store_file import prepare_casestudy
+from pymob.utils.store_file import prepare_casestudy
 
 config = prepare_casestudy(("test_case_study", "test_scenario"), "settings.cfg")
 from test_case_study.sim import Simulation

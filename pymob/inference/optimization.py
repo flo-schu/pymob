@@ -1,7 +1,7 @@
 from scipy.optimize import basinhopping
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer, MinMaxScaler
 from data.datasets import indy
-from moppy.utils.store_file import read_config
+from pymob.utils.store_file import read_config
 from sims.simulation import create_sim, Simulation
 from matplotlib import pyplot as plt
 import os

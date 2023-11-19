@@ -4,9 +4,9 @@ import click
 import numpy as np
 
 # import own packages
-from moppy.utils.store_file import (
+from pymob.utils.store_file import (
     prepare_casestudy, import_package, parse_config_section)
-from moppy.utils import help
+from pymob.utils import help
 
 
 @click.command()

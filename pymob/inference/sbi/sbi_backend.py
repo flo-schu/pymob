@@ -3,14 +3,14 @@ import click
 import numpy as np
 from functools import partial
 
-from moppy.utils.store_file import (
+from pymob.utils.store_file import (
     import_package, opt, prepare_casestudy, prepare_scenario, 
     store_sbi_simulations)
-from moppy.utils import help
-from moppy.helpers.errors import errormsg
-from moppy.sims.simulation import update_parameters
-from moppy.objects.housekeeping import LOGGER
-from moppy.sims.priors import TransformedMV
+from pymob.utils import help
+from pymob.helpers.errors import errormsg
+from pymob.sims.simulation import update_parameters
+from pymob.objects.housekeeping import LOGGER
+from pymob.sims.priors import TransformedMV
 
 # Prepare priors and simulator =================================================
 # training the network. Here I learn the relationship between parameter inout
@@ -81,7 +81,7 @@ def main(case_study, scenario, number_simulations, worker, return_only_simulator
 
     # load sbi relevant packages
     from sbi.inference import simulate_for_sbi
-    from moppy.inference.sbi import sbi_utils
+    from pymob.inference.sbi import sbi_utils
     from torch import tensor
 
     def sbi_forward(theta):

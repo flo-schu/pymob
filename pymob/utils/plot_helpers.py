@@ -1,7 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import ticker
-from moppy.utils.misc import Date2Delta
+from pymob.utils.misc import Date2Delta
 import arviz as az
 
 def plot_loghist(x, name="", bins=10, ax=None, hdi=False, decorate=True, 

@@ -3,7 +3,7 @@ from sbi.utils.user_input_checks_utils import MultipleIndependent
 from sbi.utils.user_input_checks import process_prior
 from torch.distributions import Distribution
 from torch import Tensor, tensor, Size
-from moppy.sim import priors
+from pymob.sim import priors
 
 def prepare_simulator_for_sbi(user_simulator, prior):
     assert callable(user_simulator), "Simulator must be a function."

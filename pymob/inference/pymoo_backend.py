@@ -9,7 +9,7 @@ from pymoo.termination.default import DefaultMultiObjectiveTermination
 from sklearn.preprocessing import MinMaxScaler
 from matplotlib import pyplot as plt
 
-from moppy import SimulationBase
+from pymob import SimulationBase
 
 
 class PymooBackend:

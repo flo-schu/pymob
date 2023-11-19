@@ -1,5 +1,5 @@
 import pytest
-from moppy import SimulationBase
+from pymob import SimulationBase
 
 def test_simulation():
     pytest.skip()

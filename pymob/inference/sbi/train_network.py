@@ -6,8 +6,8 @@ import numpy as np
 from torch import tensor
 from sbi.inference import SNPE, SNLE
 
-from moppy.utils.store_file import import_package, prepare_casestudy
-from moppy.utils import help
+from pymob.utils.store_file import import_package, prepare_casestudy
+from pymob.utils import help
 
 
 def round_to_multiple(number, multiple):

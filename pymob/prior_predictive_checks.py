@@ -4,10 +4,10 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 # import own packages
-from moppy.utils.store_file import (
+from pymob.utils.store_file import (
     import_package, opt, prepare_casestudy, prepare_scenario, 
     store_sbi_simulations)
-from moppy.utils import help
+from pymob.utils import help
 
 # Prepare priors and simulator =================================================
 # training the network. Here I learn the relationship between parameter inout
