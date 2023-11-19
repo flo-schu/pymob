@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "moppy"
+name = "pymob"
 version = "0.1.0"
 authors = [
   { name="Florian Schunck", email="fluncki@protonmail.com" },
@@ -37,15 +37,15 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/flo-schu/moppy"
-"Issue Tracker" = "https://github.com/flo-schu/moppy/issues"
+"Homepage" = "https://github.com/flo-schu/pymob"
+"Issue Tracker" = "https://github.com/flo-schu/pymob/issues"
 
 [project.scripts]
-moppy-simulate = "moppy:simulate.main"
-moppy-infer = "moppy:infer.main"
+pymob-simulate = "pymob:simulate.main"
+pymob-infer = "pymob:infer.main"
 
 [tool.setuptools.packages.find]
-include = ["moppy", "tests", "config", "docs", "case_studies"]
+include = ["pymob", "tests", "config", "docs", "case_studies"]
 
 [project.optional-dependencies]
 dev = ["pytest >= 7.3", "pyinstrument >= 4.5", "bumpver"]
