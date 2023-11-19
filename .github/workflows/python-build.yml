@@ -11,6 +11,8 @@ jobs:
   build:
     name: Build distribution 📦
     
+    needs: test-package
+    
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
