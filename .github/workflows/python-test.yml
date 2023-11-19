@@ -5,9 +5,9 @@ name: 🛠️ Test Python 🐍 package
 
 on:
   push:
-    branches: [ "main", "dev"]
+    branches: ["dev"]
   pull_request:
-    branches: [ "main", "dev"]
+    branches: ["master", "dev"]
   workflow_call:
 
 jobs:
