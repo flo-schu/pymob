@@ -1,21 +1,13 @@
 __pycache__
 /data/
 /dist/
+/results/
+/work/
 /.vscode/
-.pytest_cache
+/sbi-logs/
 *.code-workspace
 *checkpoint.ipynb
-/sbi-logs/
-case_studies/core_daphnia/docs/modelling_presentation
-case_studies/core_daphnia/data/
-case_studies/tktd_mix/data/Diclofenac
-case_studies/tktd_mix/data/Naproxen
-case_studies/tktd_mix/data/Diuron
-case_studies/tktd_mix/data/Mix3
-case_studies/tktd_mix/data/
-case_studies/*/data/
-
-case_studies/*/data/*.txt
+.pytest_cache
 case_studies/*/results/
 case_studies/*/tests/
 
@@ -28,6 +20,3 @@ config/settings.json
 *.log
 *.synctex.gz
 /*.egg-info/
-work
-results
-data
