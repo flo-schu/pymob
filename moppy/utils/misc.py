@@ -8,6 +8,7 @@
 #
 # ------------------------------------------------------------------------------
 from typing import List
+from datetime import timedelta
 import itertools as it
 import socket
 import numpy as np
@@ -96,9 +97,6 @@ def match_columns(features, dataset):
     return exp_cols
 
 
-
-
-
 def dayTicks(x, pos):
     x = timedelta(seconds=x / 10**9)  # format nanoseconds to seconds
     return str(x.days)
@@ -106,9 +104,6 @@ def dayTicks(x, pos):
 def hourTicks(x, pos):
     x = timedelta(seconds=x / 10**9)  # format nanoseconds to seconds
     return str(int(x.total_seconds() / 3600))
-
-def timedelta_stepper(timerange, interval):
-    np.arange(0, x.max(), )
 
 class Date2Delta: 
     def __init__(self, origin):
