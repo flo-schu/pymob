@@ -44,6 +44,9 @@ classifiers = [
 pymob-simulate = "pymob:simulate.main"
 pymob-infer = "pymob:infer.main"
 
+[tool.setuptools.packages.find]
+include = ["pymob*"]
+
 [project.optional-dependencies]
 dev = ["pytest >= 7.3", "pyinstrument >= 4.5", "bumpver"]
 inference = ["pyabc ~= 0.12.3"]
