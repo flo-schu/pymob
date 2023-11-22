@@ -285,9 +285,9 @@ class SimulationBase:
         """
         raise NotImplementedError
     
-    def objective_function(self, results):
+    def objective_function(self, results, **kwargs):
         func = getattr(self, self.objective)
-        obj = func(results)
+        obj = func(results, **kwargs)
 
         if obj.ndim == 0:
             obj_value = float(obj)
