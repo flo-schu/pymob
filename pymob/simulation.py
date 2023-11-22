@@ -36,6 +36,12 @@ class SimulationBase:
         self.model_parameters: tuple = ()
         self.observations = None
         self._objective_names = []
+        
+        # seed gloabal RNG
+        self.RNG = np.random.default_rng(self.seed)
+        # draw a selection of 1e8 integers for using those throughout the
+        # simulation
+        self._random_integers = self.RNG.integers(0, 1e18, int(1e7)).tolist()
 
         self.initialize(input=self.input_file_paths)
         
@@ -512,6 +518,9 @@ class SimulationBase:
     def n_cores(self, value):
         self.config.set("multiprocessing", "cores", str(value))
     
+    def draw_seed(self):
+        return self._random_integers.pop(0)
+
     @property
     def seed(self):
         return int(self.config.get("simulation", "seed", fallback=1))
