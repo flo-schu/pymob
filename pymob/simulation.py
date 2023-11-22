@@ -514,7 +514,7 @@ class SimulationBase:
     
     @property
     def seed(self):
-        return self.config.get("simulation", "seed", fallback=1)
+        return int(self.config.get("simulation", "seed", fallback=1))
 
     def set_free_model_parameters(self):
         try:
