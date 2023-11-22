@@ -1,13 +1,14 @@
 import os
+from functools import lru_cache
 import tempfile
-import click
+
 import numpy as np
 import pyabc
 import xarray as xr
 import arviz as az
 from matplotlib import pyplot as plt
+from pathos import multiprocessing as mp
 
-from pymob.utils.store_file import prepare_casestudy, import_package, opt
 from pymob import SimulationBase
 
 
@@ -252,24 +253,43 @@ class PyabcBackend:
     def store_results(self):
         """results are stored by default in database"""
         pass
+   
+    @lru_cache
+    def make_posterior_predictions(self, n=50, seed=1):
+        rng = np.random.default_rng(seed)
+        post = self.posterior
+        total_samples = post.samples.shape[1]
+
+        # draw samples from posterior
+        posterior_samples = rng.choice(post.samples.draw, size=n, replace=False)
+
+        def predict(posterior_sample_id):
+            params = post.draw(i=posterior_sample_id)
+            res = self.evaluator(params.to_dict())
+            res = self.simulation.results_to_df(res["sim_results"])
+            res = res.assign_coords({"draw": posterior_sample_id, "chain": 1})
+            res["params"] = params.samples
+            res = res.expand_dims(("chain", "draw"))
+            return res
+        
+        if self.simulation.n_cores == 1:
+            results = list(map(predict, posterior_samples))
+        else:
+            with mp.ProcessingPool(self.simulation.n_cores) as pool:        
+                results = pool.map(predict, posterior_samples)
+            
+        return xr.combine_by_coords(results)
 
     def plot_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={}
         ):
         obs = self.simulation.observations.sel(subset)
         
-        results = []
-        for i in range(self.n_predictions):
-            res = self.evaluator(self.posterior.draw(i).to_dict())
-            self.simulation.Y = res["sim_results"]
-            # sim_normalized = np.array(res["sim_normalized"][0])
-            # sim = scalers[0].inverse_transform(sim_normalized)
-            res = self.simulation.results
-            res = res.assign_coords({"draw": i, "chain": 1})
-            res = res.expand_dims(("chain", "draw"))
-            results.append(res)
-
-        post_pred = xr.combine_by_coords(results).sel(subset)
+        post_pred = self.make_posterior_predictions(
+            n=self.n_predictions, 
+            # seed only controls the parameters samples drawn from posterior
+            seed=self.simulation.seed
+        ).sel(subset)
 
         hdi = az.hdi(post_pred, .95)
 

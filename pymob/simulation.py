@@ -508,7 +508,10 @@ class SimulationBase:
         else: 
             return cpu_set
     
-    
+    @property
+    def seed(self):
+        return self.config.get("simulation", "seed", fallback=1)
+
     def set_free_model_parameters(self):
         try:
             params = parse_config_section(self.config["model-parameters"], method="strfloat")
