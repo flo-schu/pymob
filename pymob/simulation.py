@@ -508,6 +508,10 @@ class SimulationBase:
         else: 
             return cpu_set
     
+    @n_cores.setter
+    def n_cores(self, value):
+        self.config.set("multiprocessing", "cores", str(value))
+    
     @property
     def seed(self):
         return self.config.get("simulation", "seed", fallback=1)
