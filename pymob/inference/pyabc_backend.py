@@ -272,6 +272,7 @@ class PyabcBackend:
             res = res.expand_dims(("chain", "draw"))
             return res
         
+        print(f"Using {self.simulation.n_cores} CPUs")
         if self.simulation.n_cores == 1:
             results = list(map(predict, posterior_samples))
         else:
