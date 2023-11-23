@@ -36,12 +36,13 @@ class SimulationBase:
         self.model_parameters: tuple = ()
         self.observations = None
         self._objective_names = []
+        self._seed_buffer_size = self.n_cores * 2
         
         # seed gloabal RNG
         self.RNG = np.random.default_rng(self.seed)
         # draw a selection of 1e8 integers for using those throughout the
         # simulation
-        self._random_integers = self.RNG.integers(0, 1e18, int(1e7)).tolist()
+        self._random_integers = self.create_random_integers(n=self._seed_buffer_size)
 
         self.initialize(input=self.input_file_paths)
         
@@ -517,9 +518,24 @@ class SimulationBase:
     @n_cores.setter
     def n_cores(self, value):
         self.config.set("multiprocessing", "cores", str(value))
-    
+
+    def create_random_integers(self, n):
+        return self.RNG.integers(0, 1e18, n).tolist()
+        
+    def refill_consumed_seeds(self):
+        n_seeds_left = len(self._random_integers)
+        if n_seeds_left == self.n_cores:
+            n_new_seeds = self._seed_buffer_size - n_seeds_left
+            new_seeds = self.create_random_integers(n=n_new_seeds)
+            self._random_integers.extend(new_seeds)
+            print(f"Appended {n_new_seeds} new seeds to sim.")
+        
     def draw_seed(self):
-        return self._random_integers.pop(0)
+        return None       
+        # the collowing has no multiprocessing stability
+        # self.refill_consumed_seeds()
+        # seed = self._random_integers.pop(0)
+        # return seed
 
     @property
     def seed(self):
