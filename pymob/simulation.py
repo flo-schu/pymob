@@ -1,6 +1,7 @@
 import os
 import inspect
 import warnings
+from typing import Optional, List, Union
 import configparser
 from functools import partial
 import multiprocessing as mp
@@ -8,6 +9,7 @@ from typing import Callable, Dict
 from multiprocessing.pool import ThreadPool, Pool
 import re
 
+from pydantic import BaseModel
 import numpy as np
 import xarray as xr
 import dpath.util as dp
@@ -19,6 +21,9 @@ from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
+from pymob.sim.config import Config
+
+config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 
 def is_iterable(x):
     try:
@@ -99,44 +104,81 @@ class SimulationBase:
     model: Callable
     def __init__(
         self, 
-        config: configparser.ConfigParser, 
+        config: Optional[Union[str,configparser.ConfigParser]] = None, 
     ) -> None:
         
-        self.config = config
+        self.config = Config(config=config)
+        self._observations: xr.Dataset = xr.Dataset()
+        self._objective_names: Union[str, List[str]] = []
+        self._coordinates: dict = {}
+
         self.model_parameters: Dict = {}
         self.observations = None
         self._objective_names = []
-        self._seed_buffer_size = self.n_cores * 2
         self.indices = {}
 
         # seed gloabal RNG
-        self.RNG = np.random.default_rng(self.seed)
-        # draw a selection of 1e8 integers for using those throughout the
-        # simulation
+        self._seed_buffer_size: int = self.config.multiprocessing.n_cores * 2
+        self.RNG = np.random.default_rng(self.config.simulation.seed)
         self._random_integers = self.create_random_integers(n=self._seed_buffer_size)
-
      
+        # simulation
         self.initialize(input=self.input_file_paths)
         self.n_ode_states = self.infer_ode_states()
         
-        if self.observations is not None:
-            self.create_data_scaler()
+        if not os.path.exists(self.config.case_study.output_path):
+            os.makedirs(self.config.case_study.output_path)
+
+
+    def setup(self):
+        """Simulation setup routine, when the following methods have been 
+        defined:
         
         coords = self.set_coordinates(input=self.input_file_paths)
         self.coordinates = self.create_coordinates(coordinate_data=coords)
         self.var_dim_mapper = self.create_dim_index()
+        init-methods
+        ------------
+
+        self.initialize --> may be replaced by self.set_observations
+
+        """
+
+        self.initialize(input=self.config.input_file_paths)
+        
+        # coords = self.set_coordinates(input=self.config.input_file_paths)
+        # self.coordinates = self.create_coordinates(coordinate_data=coords)
         self.free_model_parameters  = self.set_free_model_parameters()
 
-        if not os.path.exists(self.output_path):
-            os.makedirs(self.output_path)
-
-        self.validate()
         # TODO: set up logger
         self.parameterize = partial(self.parameterize, model_parameters=self.model_parameters)
 
+    @property
+    def observations(self):
+        assert isinstance(self._observations, xr.Dataset), "Observations must be an xr.Dataset"
+        return self._observations
+
+    @observations.setter
+    def observations(self, value):
+        self._observations = value
+        self.create_data_scaler()
+        self.coordinates = self.set_coordinates(input=self.config.input_file_paths)
+        
+
+    @property
+    def coordinates(self):
+        return self._coordinates
+
+    @coordinates.setter
+    def coordinates(self, value):
+        self._coordinates = self.create_coordinates(coordinate_data=value)
+
 
     def __repr__(self) -> str:
-        return f"Simulation(case_study={self.case_study}, scenario={self.scenario})"
+        return (
+            f"Simulation(case_study={self.config.case_study.name}, "
+            f"scenario={self.config.case_study.scenario})"
+        )
 
     def load_functions(self):
         _model = self.config["simulation"].get("model", fallback=None)
@@ -154,10 +196,9 @@ class SimulationBase:
             print("\n")
             print(f"[{section}]", end="\n")
 
-            for opt, val in self.config.items(section):
-                print(f"{opt} = {val}", end="\n")
-
-        print("========================", end="\n")
+    def set_coordinates(self, input):
+        dimensions = self.config.simulation.dimensions
+        return [self.observations[dim].values for dim in dimensions]
 
     def benchmark(self, n=100, **kwargs):
         evaluator = self.dispatch(theta=self.model_parameter_dict, **kwargs)
@@ -489,14 +530,14 @@ class SimulationBase:
             f"Settings(dims={self.dimensions}) != dataset(dims={ds_dims})"
         )
         
-    def dataset_to_2Darray(self, dataset: xr.Dataset): 
+    def dataset_to_2Darray(self, dataset: xr.Dataset) -> xr.DataArray: 
         self.check_dimensions(dataset=dataset)
-        array_2D = dataset.stack(multiindex=self.dimensions)
+        array_2D = dataset.stack(multiindex=self.config.simulation.dimensions)
         return array_2D.to_array().transpose("multiindex", "variable")
 
-    def array2D_to_dataset(self, dataarray: xr.DataArray): 
+    def array2D_to_dataset(self, dataarray: xr.DataArray) -> xr.Dataset: 
         dataset_2D = dataarray.to_dataset(dim="variable")      
-        return dataset_2D.unstack().transpose(*self.dimensions)
+        return dataset_2D.unstack().transpose(*self.config.simulation.dimensions)
 
     def create_data_scaler(self):
         """Creates a scaler for the data variables of the dataset over all
@@ -506,13 +547,14 @@ class SimulationBase:
         # make sure the dataset follows the order of variables specified in
         # the config file. This is important so also in the simulation results
         # the scalers are matched.
-        ordered_dataset = self.observations[self.data_variables]
+        ordered_dataset = self.observations[self.config.simulation.data_variables]
         obs_2D_array = self.dataset_to_2Darray(dataset=ordered_dataset)
         # scaler = StandardScaler()
         scaler = MinMaxScaler()
         
         # add bounds to array of observations and fit scaler
-        lower_bounds, upper_bounds = self.data_variable_bounds
+        lower_bounds = np.array(self.config.simulation.data_variables_min)
+        upper_bounds = np.array(self.config.simulation.data_variables_max)
         stacked_array = np.row_stack([lower_bounds, upper_bounds, obs_2D_array])
         scaler.fit(stacked_array)
 
@@ -524,17 +566,17 @@ class SimulationBase:
 
     def print_scaling_info(self):
         scaler = type(self.scaler).__name__
-        for i, var in enumerate(self.data_variables):
+        for i, var in enumerate(self.config.simulation.data_variables):
             print(
                 f"{scaler}(variable={var}, "
                 f"min={self.scaler.data_min_[i]}, max={self.scaler.data_max_[i]})"
             )
 
     def scale_(self, dataset: xr.Dataset):
-        ordered_dataset = dataset[self.data_variables]
+        ordered_dataset = dataset[self.config.simulation.data_variables]
         data_2D_array = self.dataset_to_2Darray(dataset=ordered_dataset)
         obs_2D_array_scaled = data_2D_array.copy() 
-        obs_2D_array_scaled.values = self.scaler.transform(data_2D_array)
+        obs_2D_array_scaled.values = self.scaler.transform(data_2D_array) # type: ignore
         return self.array2D_to_dataset(obs_2D_array_scaled)
 
     @property
@@ -542,7 +584,7 @@ class SimulationBase:
         warnings.warn("Discouraged to use results property.", DeprecationWarning, 2)
         return self.create_dataset_from_numpy(
             Y=self.Y, 
-            Y_names=self.data_variables, 
+            Y_names=self.config.simulation.data_variables, 
             coordinates=self.coordinates
         )
 
@@ -558,7 +600,7 @@ class SimulationBase:
         elif isinstance(results, np.ndarray):
             return create_dataset_from_numpy(
                 Y=results,
-                Y_names=self.data_variables,
+                Y_names=self.config.simulation.data_variables,
                 coordinates=self.coordinates,
             )
         else:
@@ -576,7 +618,7 @@ class SimulationBase:
     def scale_results(self, Y):
         ds = self.create_dataset_from_numpy(
             Y=Y, 
-            Y_names=self.data_variables, 
+            Y_names=self.config.simulation.data_variables, 
             coordinates=self.coordinates
         )
         return self.scale_(ds)
@@ -619,8 +661,26 @@ class SimulationBase:
         # TODO: run checks if the simulation was set up correctly
         #       - do observation dimensions match the model output (run a mini
         #         simulation with reduced coordinates to verify)
-        #       - 
-        pass
+        #       -
+        if len(self.config.simulation.data_variables) == 0:
+            raise RuntimeError(
+                "No data_variables were specified. "
+                "Specify like sim.config.simulation.data_variables = ['a', 'b'] "
+                "Or in the simulation section of the config file. "
+                "Data variables track the state variables of the simulation. "
+                "If you want to do inference, they must match the variables of "
+                "the observations."
+            )
+
+                    
+        if len(self.config.simulation.dimensions) == 0:
+            raise RuntimeError(
+                "No dimensions of the simulation were specified. "
+                "Which observations are you expecting? "
+                "'time' or 'id' are reasonable choices. But it all depends on "
+                "your data. Dimensions must match your data if you want to do "
+                "Parameter inference."
+            )
 
     @staticmethod
     def parameterize(free_parameters: list[param.Param], model_parameters) -> dict:
@@ -663,15 +723,17 @@ class SimulationBase:
         raise NotImplementedError
     
     def objective_function(self, results, **kwargs):
-        func = getattr(self, self.objective)
+        func = getattr(self, self.config.inference.objective_function)
         obj = func(results, **kwargs)
 
         if obj.ndim == 0:
             obj_value = float(obj)
             obj_name = "objective"
-        if obj.ndim == 1:
+        elif obj.ndim == 1:
             obj_value = obj.values
             obj_name = list(obj.coords["variable"].values)
+        else:
+            raise ValueError("Objectives should be at most 1-dimensional.")
 
         if len(self._objective_names) == 0:
             self._objective_names = obj_name
@@ -702,16 +764,17 @@ class SimulationBase:
         pass
 
     def create_coordinates(self, coordinate_data):
-        if not isinstance(coordinate_data, tuple):
+        if not isinstance(coordinate_data, (list, tuple)):
             coordinate_data = (coordinate_data, )
 
-        assert len(self.dimensions) == len(coordinate_data), errormsg(
+        assert len(self.config.simulation.dimensions) == len(coordinate_data), errormsg(
             f"""number of dimensions, specified in the configuration file
             must match the coordinate data (X) returned by the `run` method.
             """
         )
 
-        coords = {dim: x_i for dim, x_i in zip(self.dimensions, coordinate_data)}
+        coord_zipper = zip(self.config.simulation.dimensions, coordinate_data)
+        coords = {dim: x_i for dim, x_i in coord_zipper}
         return coords
 
     @staticmethod
@@ -743,6 +806,7 @@ class SimulationBase:
 
     @staticmethod
     def option_as_list(opt):
+        # TODO: Remove when all methods have been updated to the new config API
         if not isinstance(opt, (list, tuple)):
             opt_list = [opt]
         else:
@@ -752,6 +816,7 @@ class SimulationBase:
 
     @property
     def input_file_paths(self):
+        # TODO: Remove when all method has been updated to the new config API
         paths_input_files = []
         for file in self.input_files:
             fp = scenario_file(file, self.case_study, self.scenario)
@@ -773,16 +838,21 @@ class SimulationBase:
     # config as properties
     @property
     def dimensions(self):
-        dims = self.config.getlist("simulation", "dimensions")
-        return self.option_as_list(dims)
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        return self.config.dimensions
 
     @property
     def data_variables(self):
-        data_vars = self.config.getlist("simulation", "data_variables")
-        return self.option_as_list(data_vars)
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        return self.config.data_variables
 
     @property
     def n_ode_states(self):
+        # TODO: Remove when all method has been updated to the new config API
+        # TODO: Add n_ode_states to config
+        warnings.warn(config_deprecation, DeprecationWarning)
         n_ode_states = self.config.getint(
             "simulation", "n_ode_states", fallback=None
         )
@@ -791,35 +861,51 @@ class SimulationBase:
     
     @n_ode_states.setter
     def n_ode_states(self, n_ode_state):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         self.config.set("simulation", "n_ode_states", f"{n_ode_state}")
 
     @property
     def solver_post_processing(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         return self.config["simulation"].get("solver_post_processing", fallback=None)
 
     @property
     def input_files(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         input_files = self.config.getlist("simulation", "input_files", fallback=[])
         return self.option_as_list(input_files)
   
     @property
     def case_study_path(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         return self.config.get("case-study", "package")
 
     @property
     def root_path(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         return self.config.get("case-study", "root")
 
     @property
     def case_study(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         return self.config.get("case-study", "name")
 
     @property
     def scenario(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         return self.config.get("case-study", "scenario")
 
     @property
     def scenario_path(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         return os.path.join(
             self.root_path, 
             self.case_study_path, 
@@ -827,6 +913,7 @@ class SimulationBase:
             self.scenario
         )
 
+    # TODO Outsource model parameters also to config (if it makes sense)
     @property
     def model_parameter_values(self):
         return [p.value for p in self.free_model_parameters]
@@ -846,6 +933,8 @@ class SimulationBase:
 
     @property
     def output_path(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         output_path_ = self.config.get("case-study", "output")
         if not os.path.isabs(output_path_):
             return os.path.join(
@@ -859,6 +948,8 @@ class SimulationBase:
 
     @property
     def data_path(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         data_path_ = self.config.get("case-study", "data")
         if not os.path.isabs(data_path_):
             return os.path.join(
@@ -871,6 +962,8 @@ class SimulationBase:
 
     @property
     def data_variable_bounds(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         lower_bounds = self.config.getlistfloat(
             "simulation", "data_variables_min", fallback=None
         )
@@ -898,22 +991,32 @@ class SimulationBase:
 
     @property
     def objective(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         return self.config.get("inference", "objective_function", fallback="total_average")
 
     @property
     def n_objectives(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         return self.config.getint("inference", "n_objectives", fallback=1)
 
     @property
     def objective_names(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         return self._objective_names
 
     @property
     def n_threads(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         return self.config.getint("multiprocessing", "threads", fallback=4)
     
     @property
     def n_cores(self):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         cpu_avail = mp.cpu_count()
         cpu_set = self.config.getint("multiprocessing", "cores", fallback=1)
         if cpu_set <= 0:
@@ -923,14 +1026,16 @@ class SimulationBase:
     
     @n_cores.setter
     def n_cores(self, value):
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
         self.config.set("multiprocessing", "cores", str(value))
 
-    def create_random_integers(self, n):
-        return self.RNG.integers(0, 1e8, n).tolist()
+    def create_random_integers(self, n: int):
+        return self.RNG.integers(low=0, high=int(1e18), size=n).tolist()
         
     def refill_consumed_seeds(self):
         n_seeds_left = len(self._random_integers)
-        if n_seeds_left == self.n_cores:
+        if n_seeds_left == self.config.multiprocessing.n_cores:
             n_new_seeds = self._seed_buffer_size - n_seeds_left
             new_seeds = self.create_random_integers(n=n_new_seeds)
             self._random_integers.extend(new_seeds)
@@ -944,28 +1049,23 @@ class SimulationBase:
         seed = self._random_integers.pop(0)
         return seed
 
-    @property
-    def seed(self):
-        return int(self.config.get("simulation", "seed", fallback=1))
-
     def set_free_model_parameters(self):
-        if self.config.has_section("model-parameters"):
+        if self.config._config.has_section("model-parameters"):
             warnings.warn(
                 "config section 'model-parameters' is deprecated, "
                 "use 'free-model-parameters' and 'fixed-model-parameters'", 
                 DeprecationWarning
             )
             params = parse_config_section(
-                self.config["model-parameters"], method="strfloat"
+                self.config._config["model-parameters"], method="strfloat"
             )
         elif self.config.has_section("free-model-parameters"):
             params = parse_config_section(
-                self.config["free-model-parameters"], method="strfloat"
+                self.config_.config["free-model-parameters"], method="strfloat"
             )
         else:
             warnings.warn("No parameters were specified.")
             params = {}
-
         
         # create a nested dictionary from model parameters
         parameter_dict = {}

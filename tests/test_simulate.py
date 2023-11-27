@@ -8,7 +8,8 @@ from pymob.utils.store_file import prepare_casestudy
 def load_test_case_study():
     config = prepare_casestudy(
         case_study=("test_case_study", "test_scenario"),
-        config_file="settings.cfg"
+        config_file="settings.cfg",
+        pkg_dir="case_studies"
     )
     from case_studies.test_case_study.sim import Simulation
     return Simulation(config=config)
@@ -31,6 +32,7 @@ def test_indexing_simulation():
 
 def test_interactive_mode():
     sim = load_test_case_study()
+    sim.setup()
     sim.interactive()
 
 def test_commandline_API():
