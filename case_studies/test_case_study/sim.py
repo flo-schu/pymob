@@ -10,7 +10,7 @@ class Simulation(SimulationBase):
         self.observations = xr.load_dataset(input[1])
         
     
-    def parameterize(self, input, theta):
+    def parameterize(self, input, theta: dict):
         # Initial conditions and parameters
         
         y0 = [40, 9]  # initial population of prey and predator
@@ -53,4 +53,4 @@ class Simulation(SimulationBase):
        
     def plot(self):
         fig = plot_trajectory(self.results)
-        fig.savefig(f"{self.output_path}/trajectory.png")
+        fig.savefig(f"{self.config.case_study.output_path}/trajectory.png")

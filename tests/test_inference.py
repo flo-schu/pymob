@@ -13,6 +13,7 @@ def test_scripting_API():
     from case_studies.test_case_study.sim import Simulation
     
     sim = Simulation(config=config)
+    sim.setup()
     sim.set_inferer(backend="pyabc")
     sim.inferer.run()
 
@@ -27,6 +28,7 @@ def test_inference_evaluation():
     from case_studies.test_case_study.sim import Simulation
     
     sim = Simulation(config=config)
+    sim.setup()
     sim.set_inferer(backend="pyabc")
 
     sim.inferer.load_results()
