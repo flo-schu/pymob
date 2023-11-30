@@ -1,8 +1,10 @@
 import os
 import configparser
+import warnings
 import multiprocessing as mp
 from typing import List, Optional, Union, Dict, Any
 from typing_extensions import Annotated
+import tempfile
 
 import numpy as np
 
@@ -76,7 +78,7 @@ class Config:
         self.inference = self.InferenceSect(**self.load_section("inference"))
         self.multiprocessing = self.MultiprocessingSect(**self.load_section("multiprocessing"))
         self.model_parameters = self.ModelparameterSect(**self.load_section("model-parameters"))
-
+        self.inference_pyabc = self.PyabcSect(**self.load_section("inference.pyabc"))
 
         self.print()
         
@@ -131,14 +133,15 @@ class Config:
         data_variables_max: Optional[OptionListFloat] = None
 
         @model_validator(mode='after')
-        def post_update(self) -> Dict[str, Any]:
-            if len(self.data_variables_min) != len(self.data_variables):
-                self.data_variables_min = None
-                self.data_variables_max = None
-            # else:
-            #     values['last_enabled'] = None
-            #     values['last_disabled'] = datetime.now()
-
+        def post_update(self):
+            if self.data_variables_min is not None:
+                if len(self.data_variables_min) != len(self.data_variables):
+                    self.data_variables_min = None
+            
+            if self.data_variables_max is not None:
+                if len(self.data_variables_max) != len(self.data_variables):
+                    self.data_variables_max = None
+                    
             return self
             
         @validator("data_variables_min", "data_variables_max", always=True)
@@ -191,6 +194,39 @@ class Config:
     class ModelparameterSect(BaseModel):
         _name = "model-parameters"
         model_config = {"validate_assignment" : True, "extra": "allow"}
+
+
+    class PyabcSect(BaseModel):
+        _name = "inference.pyabc"
+        model_config = {"validate_assignment" : True}
+
+        sampler: str = "SingleCoreSampler"
+        population_size: int = 100
+        minimum_epsilon: Optional[float] = None
+        min_eps_diff: Optional[float] = None
+        max_nr_populations: Optional[int] = None
+        
+        # database configuration
+        database_path: str = f"{tempfile.gettempdir()}/pyabc.db"
+
+    class PyabcRedisSect(BaseModel):
+        _name = "inference.pyabc.redis"
+
+        history_id: Optional[int] = -1
+        model_id: int = 0
+
+        # redis configuration
+        password: str = "nopassword"
+        port: int = 1111
+
+        @model_validator(mode='after')
+        def post_update(self):
+            warnings.warn(
+                "inference.pyabc.redis section will no longer be supported in "
+                "future versions. Use inference.pyabc to specify the parameters."
+            )
+            return self
+
 
     def load_section(self, section: str) -> dict:
         if self._config.has_section(section):
