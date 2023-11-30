@@ -58,7 +58,7 @@ class FloatParam(BaseModel):
 
 
         
-class CasestudySect(BaseModel):
+class Casestudy(BaseModel):
     _name = "case-study"
     model_config = {"validate_assignment" : True}
 
@@ -97,7 +97,7 @@ class CasestudySect(BaseModel):
             return os.path.abspath(self.data)
     
 
-class SimulationSect(BaseModel):
+class Simulation(BaseModel):
     _name = "simulation"
     model_config = {"validate_assignment" : True, "extra": "allow"}
 
@@ -141,7 +141,7 @@ class SimulationSect(BaseModel):
         else:
             return [float("nan")] * len(data_variables)
     
-class InferenceSect(BaseModel):
+class Inference(BaseModel):
     _name = "inference"
     model_config = {"validate_assignment" : True}
 
@@ -150,7 +150,7 @@ class InferenceSect(BaseModel):
     objective_names: List = []
     backend: Optional[str] = None
 
-class MultiprocessingSect(BaseModel):
+class Multiprocessing(BaseModel):
     _name = "multiprocessing"
     model_config = {"validate_assignment" : True, "extra": "ignore"}
 
@@ -167,12 +167,12 @@ class MultiprocessingSect(BaseModel):
         else: 
             return cpu_set
         
-class ModelparameterSect(BaseModel):
+class Modelparameters(BaseModel):
     _name = "model-parameters"
     model_config = {"validate_assignment" : True, "extra": "allow"}
 
 
-class PyabcSect(BaseModel):
+class Pyabc(BaseModel):
     _name = "inference.pyabc"
     model_config = {"validate_assignment" : True}
 
@@ -186,7 +186,7 @@ class PyabcSect(BaseModel):
     # database configuration
     database_path: str = f"{tempfile.gettempdir()}/pyabc.db"
 
-class PyabcRedisSect(BaseModel):
+class Redis(BaseModel):
     _name = "inference.pyabc.redis"
 
     # redis configuration
@@ -228,13 +228,13 @@ class Config(BaseModel):
 
         super().__init__(**cfg_dict)
 
-    case_study: CasestudySect = Field(default=CasestudySect(), alias="case-study")
-    simulation: SimulationSect = Field(default=SimulationSect())
-    inference: InferenceSect = Field(default=InferenceSect())
-    model_parameters: ModelparameterSect = Field(default=ModelparameterSect(), alias="model-parameters")
-    multiprocessing: MultiprocessingSect = Field(default=MultiprocessingSect())
-    inference_pyabc: PyabcSect = Field(default=PyabcSect(), alias="inference.pyabc")
-    inference_pyabc_redis: PyabcRedisSect = Field(default=PyabcRedisSect(), alias="inference.pyabc.redis")
+    case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
+    simulation: Simulation = Field(default=Simulation())
+    inference: Inference = Field(default=Inference())
+    model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters")
+    multiprocessing: Multiprocessing = Field(default=Multiprocessing())
+    inference_pyabc: Pyabc = Field(default=Pyabc(), alias="inference.pyabc")
+    inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")
 
         
     @property
