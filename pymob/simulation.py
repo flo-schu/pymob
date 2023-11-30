@@ -444,22 +444,24 @@ class SimulationBase:
 
     def set_free_model_parameters(self):
         try:
-            params = parse_config_section(self.config._config["model-parameters"], method="strfloat")
+            params = self.config.model_parameters.model_dump()
             
             # create a nested dictionary from model parameters
             parameter_dict = {}
             for par_key, par_value in params.items():
                 dp.new(parameter_dict, par_key, par_value, separator=".")
 
+            parse = lambda x: None if x is None else float(x)
+
             # create Param instances
             parameters = []
             for param_name, param_dict in parameter_dict.items():
                 p = FloatParam(
-                    value=param_dict.get("value"),
+                    value=parse(param_dict.get("value")),
                     name=param_name,
-                    min=param_dict.get("min", None),
-                    max=param_dict.get("max", None),
-                    step=param_dict.get("step", None),
+                    min=parse(param_dict.get("min")),
+                    max=parse(param_dict.get("max")),
+                    step=parse(param_dict.get("step")),
                     prior=param_dict.get("prior", None)
                 )
                 parameters.append(p)
