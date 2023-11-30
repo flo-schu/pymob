@@ -4,7 +4,7 @@ import numpy as np
 from click.testing import CliRunner
 from matplotlib import pyplot as plt
 
-from pymob.utils.store_file import prepare_casestudy
+from tests.fixtures import init_test_case_study
 
 def create_simulation():
     config = prepare_casestudy(
@@ -33,6 +33,14 @@ def test_scripting_api_pyabc():
     )
 
 
+def test_pymoo():
+    sim = init_test_case_study()
+    sim.set_inferer(backend="pymoo")
+    sim.inferer.run()
+
+    # TODO: write test (something like if error smaller x)
+
+
 def test_inference_evaluation():
     sim = create_simulation()
     sim.set_inferer(backend="pyabc")
@@ -51,13 +59,6 @@ def test_inference_evaluation():
 
         fig.savefig(f"{sim.output_path}/pyabc_posterior_predictions_{data_var}.png")
         plt.close()
-
-def test_commandline_API_redis():
-    from pymob.infer import main
-    runner = CliRunner()
-    
-    args = "--case_study=test_case_study --scenario=test_scenario"
-    result = runner.invoke(main, args.split(" "))
 
 def test_commandline_API_infer():
     from pymob.infer import main

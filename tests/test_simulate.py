@@ -3,16 +3,7 @@ import xarray as xr
 import numpy as np
 from click.testing import CliRunner
 
-from pymob.utils.store_file import prepare_casestudy
-
-def load_test_case_study():
-    config = prepare_casestudy(
-        case_study=("test_case_study", "test_scenario"),
-        config_file="settings.cfg",
-        pkg_dir="case_studies"
-    )
-    from case_studies.test_case_study.sim import Simulation
-    return Simulation(config=config)
+from tests.fixtures import init_test_case_study
 
 def test_scripting_API():
     sim = load_test_case_study()
@@ -31,7 +22,7 @@ def test_indexing_simulation():
     pytest.skip()
 
 def test_interactive_mode():
-    sim = load_test_case_study()
+    sim = init_test_case_study()
     sim.setup()
     sim.interactive()
 
