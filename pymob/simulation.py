@@ -1056,13 +1056,9 @@ class SimulationBase:
                 "use 'free-model-parameters' and 'fixed-model-parameters'", 
                 DeprecationWarning
             )
-            params = parse_config_section(
-                self.config._config["model-parameters"], method="strfloat"
-            )
-        elif self.config.has_section("free-model-parameters"):
-            params = parse_config_section(
-                self.config_.config["free-model-parameters"], method="strfloat"
-            )
+            params = self.config.model_parameters.model_dump()
+        elif self.config._config.has_section("free-model-parameters"):
+            params = self.config.model_parameters.model_dump()
         else:
             warnings.warn("No parameters were specified.")
             params = {}
@@ -1072,12 +1068,25 @@ class SimulationBase:
         for par_key, par_value in params.items():
             dp.new(parameter_dict, par_key, par_value, separator=".")
 
+        parse = lambda x: None if x is None else float(x)
+
         # create Param instances
         parameters = []
         for param_name, param_dict in parameter_dict.items():
-            value = param_dict.get("value", 1)
-            if isinstance(value, (int, float)):
-                p = param.FloatParam(
+            p = param.FloatParam(
+                value=parse(param_dict.get("value")),
+                name=param_name,
+                min=parse(param_dict.get("min")),
+                max=parse(param_dict.get("max")),
+                step=parse(param_dict.get("step")),
+                prior=param_dict.get("prior", None)
+            )
+        else:
+            # check for array notation
+            pattern = r"(\d+(\.\d+)?(\s+\d+(\.\d+)?)*|\s*)"
+            if re.fullmatch(pattern, value):
+                value = np.array([float(v) for v in value.split(" ")])
+                p = param.ArrayParam(
                     value=value,
                     name=param_name,
                     min=param_dict.get("min", None),
@@ -1086,23 +1095,10 @@ class SimulationBase:
                     prior=param_dict.get("prior", None)
                 )
             else:
-                # check for array notation
-                pattern = r"(\d+(\.\d+)?(\s+\d+(\.\d+)?)*|\s*)"
-                if re.fullmatch(pattern, value):
-                    value = np.array([float(v) for v in value.split(" ")])
-                    p = param.ArrayParam(
-                        value=value,
-                        name=param_name,
-                        min=param_dict.get("min", None),
-                        max=param_dict.get("max", None),
-                        step=param_dict.get("step", None),
-                        prior=param_dict.get("prior", None)
-                    )
-                else:
-                    raise NotImplementedError(
-                        f"Parameter specification '{value}' cannot be parsed."
-                    )
-            parameters.append(p)
+                raise NotImplementedError(
+                    f"Parameter specification '{value}' cannot be parsed."
+                )
+        parameters.append(p)
 
         return parameters
 
