@@ -200,15 +200,18 @@ class Redis(BaseModel):
     history_id: int = Field(default=-1, alias="eval.history_id")
     model_id: int = Field(default=0, alias="eval.model_id")
 
-    @model_validator(mode='after')
-    def post_update(self):
-        warnings.warn(
-            "inference.pyabc.redis section will no longer be supported in "
-            "future versions. Use inference.pyabc to specify the parameters."
-        )
-        return self
 
+class Pymoo(BaseModel):
+    model_config = {"validate_assignment" : True}
 
+    algortihm: str = "UNSGA3"
+    population_size: int = 100
+    max_nr_populations: int = 1000
+    ftol: float = 1e-5
+    xtol: float = 1e-7
+    cvtol: float = 1e-7
+    verbose: bool = True
+    
 
 class Config(BaseModel):
     __pydantic_private__ = {"_config": configparser.ConfigParser}
@@ -237,7 +240,7 @@ class Config(BaseModel):
     multiprocessing: Multiprocessing = Field(default=Multiprocessing())
     inference_pyabc: Pyabc = Field(default=Pyabc(), alias="inference.pyabc")
     inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")
-
+    inference_pymoo: Pymoo = Field(default=Pymoo(), alias="inference.pymoo")
         
     @property
     def input_file_paths(self) -> list:
