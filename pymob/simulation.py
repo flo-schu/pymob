@@ -39,6 +39,7 @@ class SimulationBase:
         self._observations: xr.Dataset = xr.Dataset()
         self._objective_names: Union[str, List[str]] = []
         self._coordinates: dict = {}
+        self.free_model_parameters: list = []
 
         # draw some seeds
         self._seed_buffer_size: int = self.config.multiprocessing.n_cores * 2
@@ -442,7 +443,7 @@ class SimulationBase:
         # seed = self._random_integers.pop(0)
         # return seed
 
-    def set_free_model_parameters(self):
+    def set_free_model_parameters(self) -> list:
         try:
             params = self.config.model_parameters.model_dump()
             
@@ -468,6 +469,6 @@ class SimulationBase:
 
             return parameters
         except KeyError:
-            return {}
+            return []
         
             
