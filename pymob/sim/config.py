@@ -187,6 +187,8 @@ class Pyabc(BaseModel):
     database_path: str = f"{tempfile.gettempdir()}/pyabc.db"
 
 class Redis(BaseModel):
+    model_config = {"validate_assignment" : True, "protected_namespaces": ()}
+
     _name = "inference.pyabc.redis"
 
     # redis configuration
@@ -210,7 +212,7 @@ class Redis(BaseModel):
 
 class Config(BaseModel):
     __pydantic_private__ = {"_config": configparser.ConfigParser}
-    model_config = {"validate_assignment" : True, "extra": "allow"}
+    model_config = {"validate_assignment" : True, "extra": "allow", "protected_namespaces": ()}
 
     def __init__(
         self,
