@@ -420,7 +420,7 @@ class PyabcBackend:
         hdi = az.hdi(post_pred, .95)
 
         if ax is None:
-            ax = plt.subplot(111)
+            _, ax = plt.subplots(1,1)
         
         y_mean = post_pred[data_variable].mean(dim=("chain", "draw"))
         ax.plot(

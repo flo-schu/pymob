@@ -12,7 +12,7 @@ import re
 from pydantic import BaseModel
 import numpy as np
 import xarray as xr
-import dpath.util as dp
+import dpath as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from toopy import param, benchmark
 
