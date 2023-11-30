@@ -3,6 +3,7 @@ import re
 from functools import lru_cache
 import tempfile
 import inspect
+import warnings
 
 import numpy as np
 import xarray as xr
@@ -35,11 +36,14 @@ class PyabcBackend:
         self.abc = None
         self.history = None
         self.posterior = None
+        self.config = simulation.config
 
 
     @property
     def extra_vars(self):
-        extra = self.simulation.config.getlist( 
+        # TODO: Remove when all methods have been changed
+        warnings.warn("Deprecation warning. Use `Simulation.config.OPTION` API")
+        extra = self.config._config.getlist( 
             "inference", "extra_vars", fallback=[]
         )
         return extra if isinstance(extra, list) else [extra]
@@ -47,60 +51,42 @@ class PyabcBackend:
     
     @property
     def sampler(self):
-        return self.simulation.config.get("inference.pyabc", "sampler")
+        # TODO: Remove when all methods have been changed
+        warnings.warn("Deprecation warning. Use `Simulation.config.OPTION` API")
+        return self.config.inference_pyabc.sampler
     
     @property
     def population_size(self):
-        return self.simulation.config.getint("inference.pyabc", "population_size")
+        # TODO: Remove when all methods have been changed
+        warnings.warn("Deprecation warning. Use `Simulation.config.OPTION` API")
+        return self.config.inference_pyabc.population_size
     
     @property
     def minimum_epsilon(self):
-        return self.simulation.config.getfloat("inference.pyabc", "minimum_epsilon")
+        # TODO: Remove when all methods have been changed
+        warnings.warn("Deprecation warning. Use `Simulation.config.OPTION` API")
+        return self.config.inference_pyabc.minimum_epsilon
     
     @property
     def min_eps_diff(self):
-        return self.simulation.config.getfloat("inference.pyabc", "min_eps_diff")
+        # TODO: Remove when all methods have been changed
+        warnings.warn("Deprecation warning. Use `Simulation.config.OPTION` API")
+        return self.config.inference_pyabc.min_eps_diff
     
     @property
     def max_nr_populations(self):
-        return self.simulation.config.getint("inference.pyabc", "max_nr_populations")
+        # TODO: Remove when all methods have been changed
+        warnings.warn("Deprecation warning. Use `Simulation.config.OPTION` API")
+        return self.config.inference_pyabc.max_nr_populations
     
     @property
     def database(self):
-        tmp = tempfile.gettempdir()
-        dbp = self.simulation.config.get(
-            "inference.pyabc", "database_path", fallback=f"{tmp}/pyabc.db"
-        )
+        dbp = self.config.inference_pyabc.database_path
         if os.path.isabs(dbp):
             return dbp
         else:
-            return os.path.join(self.simulation.output_path, dbp)
+            return os.path.join(self.config.case_study.output_path, dbp)
     
-    @property
-    def redis_password(self):
-        return self.simulation.config.get("inference.pyabc.redis", "password", "nopassword")
-    
-    @property
-    def redis_port(self):
-        return self.simulation.config.getint("inference.pyabc.redis", "port", 1111)
-    
-    @property
-    def history_id(self):
-        return self.simulation.config.getint(
-            "inference.pyabc", "eval.history_id", fallback=-1
-        )
-
-    @property
-    def model_id(self):
-        return self.simulation.config.getint(
-            "inference.pyabc", "eval.model_id", fallback=0
-        )
-    
-    @property
-    def n_predictions(self):
-        return self.simulation.config.getint(
-            "inference.pyabc", "eval.n_predictions", fallback=50
-        )
     
     @staticmethod
     def param_to_prior(par):
@@ -188,14 +174,18 @@ class PyabcBackend:
     
     @property
     def plot_function(self):
-        return self.simulation.config.get(
-            "inference.pyabc", "plot_function", 
-            fallback=None
-        )
+        return self.config.inference_pyabc.plot_function
 
     def plot(self):
-        plot_func = getattr(self.simulation, self.plot_function)
-        plot_func()
+        if self.plot_function is not None:
+            plot_func = getattr(self.simulation, self.plot_function)
+            plot_func()
+        else:
+            warnings.warn(
+                "No posterior prediction plot function specified in config under "
+                "inference.pyabc.plot_function",
+                category=UserWarning
+            )
         
 
     def model_parser(self):
@@ -231,26 +221,27 @@ class PyabcBackend:
         return distance_function
 
     def run(self):
-        n_cores = self.simulation.n_cores
+        n_cores = self.config.multiprocessing.n_cores
         print(f"Using {n_cores} CPU cores", flush=True)
 
+        sampler = self.config.inference_pyabc.sampler.lower()
         # before launch server in bash with `redis-server --port 1803`
-        if self.sampler.lower() == "RedisEvalParallelSampler".lower():
+        if sampler == "RedisEvalParallelSampler".lower():
             abc_sampler = pyabc.sampler.RedisEvalParallelSampler(
                 host="localhost", 
-                password=self.redis_password, 
-                port=self.redis_port
+                password=self.config.inference_pyabc_redis.password, 
+                port=self.config.inference_pyabc_redis.port
             )
 
-        elif self.sampler.lower() == "SingleCoreSampler".lower():
+        elif sampler == "SingleCoreSampler".lower():
             abc_sampler = pyabc.sampler.SingleCoreSampler()
 
-        elif self.sampler.lower() == "MulticoreParticleParallelSampler".lower():
+        elif sampler == "MulticoreParticleParallelSampler".lower():
             abc_sampler = pyabc.sampler.MulticoreParticleParallelSampler(
                 n_procs=n_cores
             )
 
-        elif self.sampler.lower() == "MulticoreEvalParallelSampler".lower():
+        elif sampler == "MulticoreEvalParallelSampler".lower():
             abc_sampler = pyabc.sampler.MulticoreEvalParallelSampler(
                 n_procs=n_cores
             )
@@ -267,15 +258,15 @@ class PyabcBackend:
             parameter_priors=self.prior, 
             distance_function=self.distance_function, 
             sampler=abc_sampler,
-            population_size=self.population_size
+            population_size=self.config.inference_pyabc.population_size
         )
 
         self.history = self.abc.new("sqlite:///" + self.database)
 
         self.abc.run(
-            minimum_epsilon=self.minimum_epsilon,
-            min_eps_diff=self.min_eps_diff,
-            max_nr_populations=self.max_nr_populations
+            minimum_epsilon=self.config.inference_pyabc.minimum_epsilon,
+            min_eps_diff=self.config.inference_pyabc.min_eps_diff,
+            max_nr_populations=self.config.inference_pyabc.max_nr_populations
         )
 
 
@@ -284,10 +275,10 @@ class PyabcBackend:
             self.history = pyabc.History(f"sqlite:///" + self.database)
         
         # set history id
-        db_id = self.history_id
+        db_id = self.config.inference_pyabc_redis.history_id
         self.history.id = self.history._find_latest_id() if db_id == -1 else db_id
         
-        mod_id = self.model_id
+        mod_id = self.config.inference_pyabc_redis.model_id
         samples, w = self.history.get_distribution(m=mod_id, t=self.history.max_t)
         
         # re-sort parameters based on prior order
@@ -328,6 +319,11 @@ class PyabcBackend:
         return posterior_coords
 
     def plot_chains(self):
+        assert self.history is not None, AssertionError(
+            "results must be loaded before they can be accessed. "
+            "Call load_results() before executing plot_chains. "
+            "E.g. sim.inferer.load_results()"
+        )
 
         distributions = []
         for t in range(self.history.max_t + 1):
@@ -379,6 +375,11 @@ class PyabcBackend:
    
     @lru_cache
     def posterior_predictions(self, n=50, seed=1):
+        assert self.posterior is not None, AssertionError(
+            "results must be loaded before Posterior can be accessed. "
+            "Call load_results() before executing plot_chains. "
+            "E.g. sim.inferer.load_results()"
+        )
         rng = np.random.default_rng(seed)
         post = self.posterior
         total_samples = post.samples.shape[1]
@@ -396,11 +397,11 @@ class PyabcBackend:
             res = res.expand_dims(("chain", "draw"))
             return res
         
-        print(f"Using {self.simulation.n_cores} CPUs")
-        if self.simulation.n_cores == 1:
+        print(f"Using {self.config.multiprocessing.n_cores} CPUs")
+        if self.config.multiprocessing.n_cores == 1:
             results = list(map(predict, posterior_samples))
         else:
-            with mp.ProcessingPool(self.simulation.n_cores) as pool:        
+            with mp.ProcessingPool(self.config.multiprocessing.n_cores) as pool:        
                 results = pool.map(predict, posterior_samples)
             
         return xr.combine_by_coords(results)
@@ -411,9 +412,9 @@ class PyabcBackend:
         obs = self.simulation.observations.sel(subset)
         
         post_pred = self.posterior_predictions(
-            n=self.n_predictions, 
+            n=self.config.inference_pyabc_redis.n_predictions, 
             # seed only controls the parameters samples drawn from posterior
-            seed=self.simulation.seed
+            seed=self.config.simulation.seed
         ).sel(subset)
 
         hdi = az.hdi(post_pred, .95)
@@ -428,7 +429,7 @@ class PyabcBackend:
         )
 
         ax.fill_between(
-            post_pred[x_dim].values, *hdi[data_variable].values.T, 
+            post_pred[x_dim].values, *hdi[data_variable].values.T,  # type: ignore
             alpha=.5, color="grey"
         )
 

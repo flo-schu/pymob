@@ -111,6 +111,7 @@ class SimulationBase:
         self._observations: xr.Dataset = xr.Dataset()
         self._objective_names: Union[str, List[str]] = []
         self._coordinates: dict = {}
+        self.free_model_parameters: list = []
 
         self.model_parameters: Dict = {}
         self.observations = None
@@ -1073,32 +1074,33 @@ class SimulationBase:
         # create Param instances
         parameters = []
         for param_name, param_dict in parameter_dict.items():
-            p = param.FloatParam(
-                value=parse(param_dict.get("value")),
-                name=param_name,
-                min=parse(param_dict.get("min")),
-                max=parse(param_dict.get("max")),
-                step=parse(param_dict.get("step")),
-                prior=param_dict.get("prior", None)
-            )
-        else:
-            # check for array notation
-            pattern = r"(\d+(\.\d+)?(\s+\d+(\.\d+)?)*|\s*)"
-            if re.fullmatch(pattern, value):
-                value = np.array([float(v) for v in value.split(" ")])
-                p = param.ArrayParam(
-                    value=value,
+            if isinstance(value, (int, float)):
+                p = param.FloatParam(
+                    value=parse(param_dict.get("value")),
                     name=param_name,
-                    min=param_dict.get("min", None),
-                    max=param_dict.get("max", None),
-                    step=param_dict.get("step", None),
+                    min=parse(param_dict.get("min")),
+                    max=parse(param_dict.get("max")),
+                    step=parse(param_dict.get("step")),
                     prior=param_dict.get("prior", None)
                 )
             else:
-                raise NotImplementedError(
-                    f"Parameter specification '{value}' cannot be parsed."
-                )
-        parameters.append(p)
+                # check for array notation
+                pattern = r"(\d+(\.\d+)?(\s+\d+(\.\d+)?)*|\s*)"
+                if re.fullmatch(pattern, value):
+                    value = np.array([float(v) for v in value.split(" ")])
+                    p = param.ArrayParam(
+                        value=value,
+                        name=param_name,
+                        min=param_dict.get("min", None),
+                        max=param_dict.get("max", None),
+                        step=param_dict.get("step", None),
+                        prior=param_dict.get("prior", None)
+                    )
+                else:
+                    raise NotImplementedError(
+                        f"Parameter specification '{value}' cannot be parsed."
+                    )
+            parameters.append(p)
 
         return parameters
 

@@ -178,9 +178,10 @@ class PyabcSect(BaseModel):
 
     sampler: str = "SingleCoreSampler"
     population_size: int = 100
-    minimum_epsilon: Optional[float] = None
-    min_eps_diff: Optional[float] = None
-    max_nr_populations: Optional[int] = None
+    minimum_epsilon: float = 0.0
+    min_eps_diff: float = 0.0
+    max_nr_populations: int = 1000
+    plot_function: Optional[str]
     
     # database configuration
     database_path: str = f"{tempfile.gettempdir()}/pyabc.db"
@@ -188,12 +189,14 @@ class PyabcSect(BaseModel):
 class PyabcRedisSect(BaseModel):
     _name = "inference.pyabc.redis"
 
-    history_id: Optional[int] = -1
-    model_id: int = 0
-
     # redis configuration
     password: str = "nopassword"
     port: int = 1111
+
+    # eval configuration
+    n_predictions: int = Field(default=50, alias="eval.n_predictions")
+    history_id: int = Field(default=-1, alias="eval.history_id")
+    model_id: int = Field(default=0, alias="eval.model_id")
 
     @model_validator(mode='after')
     def post_update(self):
@@ -230,7 +233,8 @@ class Config(BaseModel):
     inference: InferenceSect
     model_parameters: ModelparameterSect = Field(alias="model-parameters")
     multiprocessing: MultiprocessingSect
-    inference_pyabc: Optional[PyabcSect] = Field(alias="inference.pyabc")
+    inference_pyabc: PyabcSect = Field(alias="inference.pyabc")
+    inference_pyabc_redis: PyabcRedisSect = Field(alias="inference.pyabc.redis")
 
         
     @property
