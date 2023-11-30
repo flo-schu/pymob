@@ -155,11 +155,13 @@ class SimulationBase:
 
             self.inferer = PyabcBackend(simulation=self)
 
-        if backend == "pymoo":
+        elif backend == "pymoo":
             from pymob.inference.pymoo_backend import PymooBackend
 
             self.inferer = PymooBackend(simulation=self)
 
+        else:
+            raise NotImplementedError("Inference backend is not implemented.")
         
     def dataset_to_2Darray(self, dataset: xr.Dataset) -> xr.DataArray: 
         array_2D = dataset.stack(multiindex=self.config.simulation.dimensions)

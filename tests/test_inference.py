@@ -32,14 +32,14 @@ def test_inference_evaluation():
     sim.set_inferer(backend="pyabc")
 
     sim.inferer.load_results()
-    fig = sim.inferer.plot_chains()
-    fig.savefig(sim.output_path + "/pyabc_chains.png")
+    fig = sim.inferer.plot_chains() # type: ignore
+    fig.savefig(sim.config.case_study.output_path + "/pyabc_chains.png")
     ax = sim.inferer.plot_predictions(
         data_variable="rabbits", 
         x_dim="time"
     )
     fig = ax.get_figure()
-    fig.savefig(sim.output_path + "/pyabc_posterior_predictions.png")
+    fig.savefig(sim.config.case_study.output_path + "/pyabc_posterior_predictions.png")
 
 
 def test_commandline_API_redis():
@@ -58,4 +58,4 @@ def test_commandline_API_infer():
 
 
 # test_inference_evaluation()
-test_commandline_API_infer()
+# test_commandline_API_infer()

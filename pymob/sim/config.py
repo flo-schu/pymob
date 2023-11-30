@@ -181,7 +181,7 @@ class PyabcSect(BaseModel):
     minimum_epsilon: float = 0.0
     min_eps_diff: float = 0.0
     max_nr_populations: int = 1000
-    plot_function: Optional[str]
+    plot_function: Optional[str] = None
     
     # database configuration
     database_path: str = f"{tempfile.gettempdir()}/pyabc.db"
@@ -210,6 +210,8 @@ class PyabcRedisSect(BaseModel):
 
 class Config(BaseModel):
     __pydantic_private__ = {"_config": configparser.ConfigParser}
+    model_config = {"validate_assignment" : True, "extra": "allow"}
+
     def __init__(
         self,
         config: Optional[Union[str, configparser.ConfigParser]],
@@ -222,19 +224,17 @@ class Config(BaseModel):
         else:
             self._config = configparser.ConfigParser(converters=converters)
 
-        cfg_dict = {k:dict(s) for k, s in dict(self._config).items()}
+        cfg_dict = {k:dict(s) for k, s in dict(self._config).items() if k != "DEFAULT"}
 
         super().__init__(**cfg_dict)
 
-        self.print()
-
-    case_study: CasestudySect = Field(alias="case-study")
-    simulation: SimulationSect
-    inference: InferenceSect
-    model_parameters: ModelparameterSect = Field(alias="model-parameters")
-    multiprocessing: MultiprocessingSect
-    inference_pyabc: PyabcSect = Field(alias="inference.pyabc")
-    inference_pyabc_redis: PyabcRedisSect = Field(alias="inference.pyabc.redis")
+    case_study: CasestudySect = Field(default=CasestudySect(), alias="case-study")
+    simulation: SimulationSect = Field(default=SimulationSect())
+    inference: InferenceSect = Field(default=InferenceSect())
+    model_parameters: ModelparameterSect = Field(default=ModelparameterSect(), alias="model-parameters")
+    multiprocessing: MultiprocessingSect = Field(default=MultiprocessingSect())
+    inference_pyabc: PyabcSect = Field(default=PyabcSect(), alias="inference.pyabc")
+    inference_pyabc_redis: PyabcRedisSect = Field(default=PyabcRedisSect(), alias="inference.pyabc.redis")
 
         
     @property

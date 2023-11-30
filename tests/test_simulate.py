@@ -17,9 +17,12 @@ def load_test_case_study():
 def test_scripting_API():
     sim = load_test_case_study()
     sim.setup()
-    sim.compute()
 
-    ds = sim.results
+    # compute results
+    theta = sim.model_parameter_dict
+    results = sim.evaluate(theta=theta)
+    ds = sim.results_to_df(results=results)
+
     ds_ref = xr.load_dataset(f"{sim.config.case_study.data_path}/simulated_data.nc")
 
     np.testing.assert_allclose(
