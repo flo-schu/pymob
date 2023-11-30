@@ -8,7 +8,7 @@ import tempfile
 
 import numpy as np
 
-from pydantic import BaseModel, Field, computed_field, validator, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 
@@ -105,8 +105,8 @@ class Simulation(BaseModel):
     dimensions: OptionListStr = []
     data_variables: OptionListStr = []
     seed: int = 1
-    data_variables_min: Optional[OptionListFloat] = None
-    data_variables_max: Optional[OptionListFloat] = None
+    data_variables_min: Optional[OptionListFloat] = Field(default=None, validate_default=True)
+    data_variables_max: Optional[OptionListFloat] = Field(default=None, validate_default=True)
 
     @model_validator(mode='after')
     def post_update(self):
@@ -120,11 +120,11 @@ class Simulation(BaseModel):
                 
         return self
         
-    @validator("data_variables_min", "data_variables_max", always=True)
-    def set_data_variable_bounds(cls, v, values, **kwargs):
+    @field_validator("data_variables_min", "data_variables_max", mode="after")
+    def set_data_variable_bounds(cls, v, info, **kwargs):
         # For conditionally updating values (e.g. when data variables change)
         # see https://github.com/pydantic/pydantic/discussions/7127
-        data_variables = values.get("data_variables")
+        data_variables = info.data.get("data_variables")
         if v is not None:
             if len(v) != len(data_variables):
                 raise AssertionError(
