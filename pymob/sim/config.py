@@ -31,9 +31,10 @@ def list_to_string(lst: List):
 serialize_list_to_string = PlainSerializer(
     list_to_string, 
     return_type=str, 
-    when_used="always"
+    when_used="json"
 )
 
+to_str = PlainSerializer(lambda x: str(x), return_type=str, when_used="json")
 
 OptionListStr = Annotated[
     List[str], 
@@ -59,7 +60,6 @@ class FloatParam(BaseModel):
 
         
 class Casestudy(BaseModel):
-    _name = "case-study"
     model_config = {"validate_assignment" : True}
 
     name: str = "unnamed_case_study"
@@ -70,7 +70,8 @@ class Casestudy(BaseModel):
     logging: str = "DEBUG"
     observations: OptionListStr = []
     package: str = "case_studies"
-    root: Optional[str] = None
+    root: Optional[str] = os.getcwd()
+    settings_path: Optional[str] = Field(default=None, exclude=True)
 
     @computed_field
     @property
@@ -79,6 +80,7 @@ class Casestudy(BaseModel):
             return os.path.join(
                 os.path.relpath(self.output),
                 os.path.relpath(self.package),
+                os.path.relpath(self.name),
                 "results",
                 self.scenario,
             )
@@ -91,20 +93,34 @@ class Casestudy(BaseModel):
         if not os.path.isabs(self.data):
             return os.path.join(
                 self.package, 
+                os.path.relpath(self.name),
                 os.path.relpath(self.data)
             ) 
         else:
             return os.path.abspath(self.data)
     
+    @computed_field
+    @property
+    def settings(self) -> str:
+        if self.settings_path is not None:
+            return self.settings_path
+        else:
+            return os.path.join(
+                os.path.relpath(self.package),
+                os.path.relpath(self.name),
+                "scenarios", 
+                self.scenario, 
+                "settings.cfg"
+            )
+        
 
 class Simulation(BaseModel):
-    _name = "simulation"
     model_config = {"validate_assignment" : True, "extra": "allow"}
 
     input_files: OptionListStr = []
     dimensions: OptionListStr = []
     data_variables: OptionListStr = []
-    seed: int = 1
+    seed: Annotated[int, to_str] = 1
     data_variables_min: Optional[OptionListFloat] = Field(default=None, validate_default=True)
     data_variables_max: Optional[OptionListFloat] = Field(default=None, validate_default=True)
 
@@ -142,12 +158,11 @@ class Simulation(BaseModel):
             return [float("nan")] * len(data_variables)
     
 class Inference(BaseModel):
-    _name = "inference"
     model_config = {"validate_assignment" : True}
 
     objective_function: str = "total_average"
-    n_objectives: int = 1
-    objective_names: List = []
+    n_objectives: Annotated[int, to_str] = 1
+    objective_names: OptionListStr = []
     backend: Optional[str] = None
 
 class Multiprocessing(BaseModel):
@@ -155,11 +170,10 @@ class Multiprocessing(BaseModel):
     model_config = {"validate_assignment" : True, "extra": "ignore"}
 
     # TODO: Use as private field
-    cores: int = 1
+    cores: Annotated[int, to_str] = 1
     
-    @computed_field
     @property
-    def n_cores(self) -> int:
+    def n_cores(self) -> Annotated[int, to_str]:
         cpu_avail = mp.cpu_count()
         cpu_set = self.cores
         if cpu_set <= 0:
@@ -168,19 +182,17 @@ class Multiprocessing(BaseModel):
             return cpu_set
         
 class Modelparameters(BaseModel):
-    _name = "model-parameters"
     model_config = {"validate_assignment" : True, "extra": "allow"}
 
 
 class Pyabc(BaseModel):
-    _name = "inference.pyabc"
     model_config = {"validate_assignment" : True}
 
     sampler: str = "SingleCoreSampler"
-    population_size: int = 100
-    minimum_epsilon: float = 0.0
-    min_eps_diff: float = 0.0
-    max_nr_populations: int = 1000
+    population_size: Annotated[int, to_str] = 100
+    minimum_epsilon: Annotated[float, to_str] = 0.0
+    min_eps_diff: Annotated[float, to_str] = 0.0
+    max_nr_populations: Annotated[int, to_str] = 1000
     plot_function: Optional[str] = None
     
     # database configuration
@@ -193,45 +205,51 @@ class Redis(BaseModel):
 
     # redis configuration
     password: str = "nopassword"
-    port: int = 1111
+    port: Annotated[int, to_str] = 1111
 
     # eval configuration
-    n_predictions: int = Field(default=50, alias="eval.n_predictions")
-    history_id: int = Field(default=-1, alias="eval.history_id")
-    model_id: int = Field(default=0, alias="eval.model_id")
+    n_predictions: Annotated[int, to_str] = Field(default=50, alias="eval.n_predictions")
+    history_id: Annotated[int, to_str] = Field(default=-1, alias="eval.history_id")
+    model_id: Annotated[int, to_str] = Field(default=0, alias="eval.model_id")
 
 
 class Pymoo(BaseModel):
     model_config = {"validate_assignment" : True}
 
     algortihm: str = "UNSGA3"
-    population_size: int = 100
-    max_nr_populations: int = 1000
-    ftol: float = 1e-5
-    xtol: float = 1e-7
-    cvtol: float = 1e-7
-    verbose: bool = True
+    population_size: Annotated[int, to_str] = 100
+    max_nr_populations: Annotated[int, to_str] = 1000
+    ftol: Annotated[float, to_str] = 1e-5
+    xtol: Annotated[float, to_str] = 1e-7
+    cvtol: Annotated[float, to_str] = 1e-7
+    verbose: Annotated[bool, to_str] = True
     
 
 class Config(BaseModel):
-    __pydantic_private__ = {"_config": configparser.ConfigParser}
     model_config = {"validate_assignment" : True, "extra": "allow", "protected_namespaces": ()}
+    _config: configparser.ConfigParser
 
     def __init__(
         self,
         config: Optional[Union[str, configparser.ConfigParser]],
     ) -> None:
+
+        _cfg_fp = None
         if isinstance(config, str):
-            self._config = configparser.ConfigParser(converters=converters)        
-            self._config.read(config)
+            _config = configparser.ConfigParser(converters=converters)        
+            _cfg_file_paths = _config.read(config)
+            _cfg_fp = _cfg_file_paths[0]
         elif isinstance(config, configparser.ConfigParser):
-            self._config = config
+            _config = config
         else:
-            self._config = configparser.ConfigParser(converters=converters)
+            _config = configparser.ConfigParser(converters=converters)
+        # pass arguments to config
 
-        cfg_dict = {k:dict(s) for k, s in dict(self._config).items() if k != "DEFAULT"}
-
+        if _cfg_fp is not None: _config.set("case-study", "settings_path", _cfg_fp)
+        cfg_dict = {k:dict(s) for k, s in dict(_config).items() if k != "DEFAULT"}
         super().__init__(**cfg_dict)
+
+        self._config = _config
 
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
     simulation: Simulation = Field(default=Simulation())
@@ -266,3 +284,26 @@ class Config(BaseModel):
             print(f"{section}({getattr(self, section)})", end="\n") # type: ignore
 
         print("========================", end="\n")
+
+    def save(self):
+        """Saves the configuration to a settings.cfg file
+        
+        Uses serializers defined at the top, which parse the options to str
+        so they can be processed by configfile. 
+
+        In case the model configuration should be stored to a json file use
+        something like `json.dumps(self.model_dump())`, because the build in
+        function, is somewhat disabled by the listparsers which are needed for
+        configfile lists.
+        """
+
+        settings = self.model_dump(
+            by_alias=True, 
+            mode="json", 
+            exclude_none=True,
+            exclude={"case_study": {"settings", "output_path", "data_path", "root"}}
+        )
+        self._config.update(**settings)
+
+        with open(self.case_study.settings, "w") as fp:
+            self._config.write(fp)

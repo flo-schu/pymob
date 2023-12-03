@@ -218,15 +218,15 @@ def prepare_casestudy(
     config["case-study"]["scenario"] = case_study[1]
 
     # store package dir
-    path_case_study = os.path.join(pkg_dir, case_study[0])
-    config["case-study"]["package"] = path_case_study
+    # path_case_study = os.path.join(pkg_dir, case_study[0])
+    config["case-study"]["package"] = pkg_dir
 
     # append relevant paths to sys
     root = os.path.join(config.get("case-study", "root"), pkg_dir)
     if root not in sys.path:
         sys.path.append(root)
     
-    package = os.path.join(config.get("case-study", "root"), config.get("case-study", "package"))
+    package = os.path.join(config.get("case-study", "root"), pkg_dir, case_study[0])
     if package not in sys.path:
         sys.path.append(package)
 
