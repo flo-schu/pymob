@@ -15,7 +15,7 @@ def test_simulation():
     sim.config.case_study.observations = ["simulated_data.nc"]
     sim.config.simulation.data_variables = ["rabbits", "wolves"]
     sim.config.simulation.dimensions = ["time"]
-    sim.config.case_study.settings_path = "./settings.cfg"
+    # sim.config.case_study.settings_path = "./settings.cfg"
     sim.validate()
 
     sim.observations = xr.load_dataset(sim.config.input_file_paths[0])
@@ -24,6 +24,11 @@ def test_simulation():
     sim.setup()
     sim.config.save()
 
+def test_load_generated_simulation():
+    sim = SimulationBase("case_studies/test_case_study/scenarios/test_scenario_scripting_api/settings.cfg")
+    sim
+
 
 if __name__ == "__main__":
+    test_load_generated_simulation()
     test_simulation()
