@@ -5,7 +5,6 @@ import configparser
 import multiprocessing as mp
 from multiprocessing.pool import ThreadPool, Pool
 
-from pydantic import BaseModel
 import numpy as np
 import xarray as xr
 import dpath as dp
@@ -46,10 +45,6 @@ class SimulationBase:
         self.RNG = np.random.default_rng(self.config.simulation.seed)
         self._random_integers = self.create_random_integers(n=self._seed_buffer_size)
         
-        if not os.path.exists(self.config.case_study.output_path):
-            os.makedirs(self.config.case_study.output_path)
-
-
     def setup(self):
         """Simulation setup routine, when the following methods have been 
         defined:
@@ -66,6 +61,16 @@ class SimulationBase:
         # coords = self.set_coordinates(input=self.config.input_file_paths)
         # self.coordinates = self.create_coordinates(coordinate_data=coords)
         self.free_model_parameters  = self.set_free_model_parameters()
+
+        output_dir = self.config.case_study.output_path
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            print(f"Created directory: {output_dir}")
+
+        scenario_dir = os.path.dirname(self.config.case_study.settings)
+        if not os.path.exists(scenario_dir):
+            os.makedirs(scenario_dir)
+            print(f"Created directory: {scenario_dir}")
 
         # TODO: set up logger
 

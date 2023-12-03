@@ -9,18 +9,20 @@ def test_simulation():
     sim = SimulationBase()
 
     sim.config.case_study.name = "test_case_study"
-    sim.config.case_study.scenario = "test_scenario"
+    sim.config.case_study.scenario = "test_scenario_scripting_api"
     sim.config.case_study.package = "case_studies"
-    sim.config.case_study.data = "./test_case_study/data/"
+    sim.config.case_study.data = "data"
     sim.config.case_study.observations = ["simulated_data.nc"]
     sim.config.simulation.data_variables = ["rabbits", "wolves"]
     sim.config.simulation.dimensions = ["time"]
+    sim.config.case_study.settings_path = "./settings.cfg"
     sim.validate()
 
     sim.observations = xr.load_dataset(sim.config.input_file_paths[0])
     
 
     sim.setup()
+    sim.config.save()
 
 
 if __name__ == "__main__":
