@@ -235,14 +235,21 @@ class Config(BaseModel):
     ) -> None:
 
         _cfg_fp = None
+        interp = configparser.ExtendedInterpolation()
         if isinstance(config, str):
-            _config = configparser.ConfigParser(converters=converters)        
+            _config = configparser.ConfigParser(
+                converters=converters,
+                interpolation=interp
+            )        
             _cfg_file_paths = _config.read(config)
             _cfg_fp = _cfg_file_paths[0]
         elif isinstance(config, configparser.ConfigParser):
             _config = config
         else:
-            _config = configparser.ConfigParser(converters=converters)
+            _config = configparser.ConfigParser(
+                converters=converters,
+                interpolation=interp
+            )
         # pass arguments to config
 
         if _cfg_fp is not None: _config.set("case-study", "settings_path", _cfg_fp)
