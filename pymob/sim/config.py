@@ -292,7 +292,7 @@ class Config(BaseModel):
 
         print("========================", end="\n")
 
-    def save(self):
+    def save(self, force=False):
         """Saves the configuration to a settings.cfg file
         
         Uses serializers defined at the top, which parse the options to str
@@ -302,6 +302,12 @@ class Config(BaseModel):
         something like `json.dumps(self.model_dump())`, because the build in
         function, is somewhat disabled by the listparsers which are needed for
         configfile lists.
+
+        Parameters
+        ----------
+
+        force: [bool] should the settings file be overwritten without asking
+            for user confirmation (default: False)
         """
 
         settings = self.model_dump(
@@ -312,5 +318,12 @@ class Config(BaseModel):
         )
         self._config.update(**settings)
 
-        with open(self.case_study.settings, "w") as fp:
-            self._config.write(fp)
+
+        write = True
+        if os.path.exists(self.case_study.settings) and not force:
+            ui_overwrite = input("Settings file already exists. Overwrite? [y/N]")
+            write = True if ui_overwrite == "y" else False
+
+        if write:
+            with open(self.case_study.settings, "w") as fp:
+                self._config.write(fp)
