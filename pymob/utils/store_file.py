@@ -50,7 +50,10 @@ def read_config(config_file):
             return json.load(f)
 
     if ext == "cfg":
-        config = configparser.ConfigParser(converters=converters)
+        config = configparser.ConfigParser(
+            converters=converters,
+            interpolation=configparser.ExtendedInterpolation()
+        )
         _ = config.read(config_file)
         return config
 

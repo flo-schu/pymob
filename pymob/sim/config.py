@@ -65,8 +65,8 @@ class Casestudy(BaseModel):
     name: str = "unnamed_case_study"
     scenario: str = "unnamed_scenario"
     
-    output: str = "."
-    data: str = "."
+    output: Optional[str] = None
+    data: Optional[str] = None
     logging: str = "DEBUG"
     observations: OptionListStr = []
     package: str = "case_studies"
@@ -76,28 +76,27 @@ class Casestudy(BaseModel):
     @computed_field
     @property
     def output_path(self) -> str:
-        if not os.path.isabs(self.output):
+        if self.output is not None:
+            return self.output
+        else:
             return os.path.join(
-                os.path.relpath(self.output),
                 os.path.relpath(self.package),
                 os.path.relpath(self.name),
                 "results",
                 self.scenario,
             )
-        else:
-            return os.path.abspath(self.output)
 
     @computed_field
     @property
     def data_path(self) -> str:
-        if not os.path.isabs(self.data):
-            return os.path.join(
-                self.package, 
-                os.path.relpath(self.name),
-                os.path.relpath(self.data)
-            ) 
+        if self.data is not None:
+            return self.data
         else:
-            return os.path.abspath(self.data)
+            return os.path.join(
+                os.path.relpath(self.package), 
+                os.path.relpath(self.name),
+                "data"
+            ) 
     
     @computed_field
     @property
