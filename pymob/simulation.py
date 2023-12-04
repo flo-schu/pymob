@@ -2,6 +2,7 @@ import os
 import warnings
 import configparser
 import multiprocessing as mp
+from typing import Callable
 from multiprocessing.pool import ThreadPool, Pool
 
 import numpy as np
@@ -12,7 +13,7 @@ from toopy import Param, FloatParam, IntParam
 
 from pymob.utils.errors import errormsg
 from pymob.utils.store_file import scenario_file, parse_config_section
-
+from pymob.sim.evaluator import EvaluatorBase
 
 def update_parameters_dict(config, x, parnames):
     for par, val, in zip(parnames, x):
@@ -27,6 +28,7 @@ def update_parameters_dict(config, x, parnames):
 
 
 class SimulationBase:
+    model: Callable
     def __init__(
         self, 
         config: configparser.ConfigParser, 
@@ -74,6 +76,39 @@ class SimulationBase:
                 print(f"{opt} = {val}", end="\n")
 
         print("========================", end="\n")
+
+
+    def dispatch(self, theta, **evaluator_kwargs):
+        """Dispatch an evaluator, which will compute the model at parameters
+        (theta). Evaluators are advantageous, because they are easier serialized
+        than the whole simulation object. Comparison can then happen back in 
+        the simulation.
+
+        Theoretically, this could also be used to constrain coordinates etc, 
+        before evaluating.  
+        """
+        model_parameters = self.parameterize(self.input_file_paths, theta)
+        
+        # TODO: make sure the evaluator has all arguments required for solving
+        # model
+        # TODO: Check if model is bound. If yes extract
+        if hasattr(self.model, "__func__"):
+            model = self.model.__func__
+        else:
+            model = self.model
+
+        evaluator = EvaluatorBase(
+            model=model,
+            y0=model_parameters["y0"],
+            parameters=model_parameters["parameters"],
+            dimensions=self.dimensions,
+            data_variables=self.data_variables,
+            coordinates=self.coordinates,
+            seed=self.draw_seed(),
+            **evaluator_kwargs
+        )
+
+        return evaluator
 
     def evaluate(self, theta):
         """Wrapper around run to modify paramters of the model.
@@ -339,6 +374,10 @@ class SimulationBase:
 
     @staticmethod
     def create_dataset_from_numpy(Y, Y_names, coordinates):
+        warnings.warn(
+            "Use `create_dataset_from_numpy` defined in sim.evaluator",
+            category=DeprecationWarning
+        )
         n_vars = Y.shape[-1]
         n_dims = len(Y.shape)
         assert n_vars == len(Y_names), errormsg(
@@ -531,11 +570,12 @@ class SimulationBase:
             print(f"Appended {n_new_seeds} new seeds to sim.")
         
     def draw_seed(self):
-        return None       
-        # the collowing has no multiprocessing stability
-        # self.refill_consumed_seeds()
-        # seed = self._random_integers.pop(0)
-        # return seed
+        # return None       
+        # the collowing has no multiprocessing stability when the simulation is
+        # serialized directly
+        self.refill_consumed_seeds()
+        seed = self._random_integers.pop(0)
+        return seed
 
     @property
     def seed(self):
