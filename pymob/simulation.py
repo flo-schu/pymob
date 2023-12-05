@@ -559,7 +559,7 @@ class SimulationBase:
         self.config.set("multiprocessing", "cores", str(value))
 
     def create_random_integers(self, n):
-        return self.RNG.integers(0, 1e18, n).tolist()
+        return self.RNG.integers(0, 1e8, n).tolist()
         
     def refill_consumed_seeds(self):
         n_seeds_left = len(self._random_integers)
