@@ -169,8 +169,19 @@ class SimulationBase:
 
             self.inferer = PymooBackend(simulation=self)
 
+    def check_dimensions(self, dataset):
+        """Check if dataset dimensions match the specified dimensions.
+        TODO: Name datasets for referencing them in errormessages
+        """
+        ds_dims = list(dataset.dims.keys())
+        in_dims = [k in self.dimensions for k in ds_dims]
+        assert all(in_dims), IndexError(
+            "Not all dataset dimensions, were not found in specified dimensions. "
+            f"Settings(dims={self.dimensions}) != dataset(dims={ds_dims})"
+        )
         
     def dataset_to_2Darray(self, dataset: xr.Dataset): 
+        self.check_dimensions(dataset=dataset)
         array_2D = dataset.stack(multiindex=self.dimensions)
         return array_2D.to_array().transpose("multiindex", "variable")
 
