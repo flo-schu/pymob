@@ -33,6 +33,7 @@ class EvaluatorBase:
             dimensions: List,
             coordinates: Dict,
             data_variables: List,
+            stochastic: bool = False,
             seed: Optional[int] = None,
             **kwargs
         ) -> None:
@@ -42,6 +43,7 @@ class EvaluatorBase:
         self.dimensions = dimensions
         self.data_variables = data_variables
         self.coordinates = coordinates
+        self.stochastic = stochastic
         self.seed = seed
         
         if isinstance(model, type):

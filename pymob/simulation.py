@@ -97,6 +97,8 @@ class SimulationBase:
         else:
             model = self.model
 
+        stochastic = self.config.get("simulation", "modeltype", fallback=False)
+            
         evaluator = EvaluatorBase(
             model=model,
             y0=model_parameters["y0"],
@@ -105,6 +107,8 @@ class SimulationBase:
             data_variables=self.data_variables,
             coordinates=self.coordinates,
             seed=self.draw_seed(),
+            # TODO: pass the whole simulation settings section
+            stochastic=True if stochastic == "stochastic" else False,
             **evaluator_kwargs
         )
 
@@ -164,10 +168,18 @@ class SimulationBase:
 
             self.inferer = PyabcBackend(simulation=self)
 
-        if backend == "pymoo":
+        elif backend == "pymoo":
             from pymob.inference.pymoo_backend import PymooBackend
 
             self.inferer = PymooBackend(simulation=self)
+
+        elif backend == "numpyro":
+            from pymob.inference.numpyro_backend import NumpyroBackend
+
+            self.inferer = NumpyroBackend(simulation=self)
+    
+        else:
+            raise NotImplementedError(f"Backend: {backend} is not implemented.")
 
     def check_dimensions(self, dataset):
         """Check if dataset dimensions match the specified dimensions.
