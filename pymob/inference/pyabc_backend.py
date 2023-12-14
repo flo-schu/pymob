@@ -85,17 +85,23 @@ class PyabcBackend:
         )
     
     @staticmethod
-    def prior_parser(free_model_parameters: list):
+    def param_to_prior(par):
+        parname = par.name
+        distribution, cluttered_arguments = par.prior.split("(", 1)
+        param_strings = cluttered_arguments.split(")", 1)[0].split(",")
+        params = {}
+        for parstr in param_strings:
+            key, val = parstr.split("=")
+            params.update({key:float(val)})
+
+        return parname, distribution, params
+
+    @classmethod
+    def prior_parser(cls, free_model_parameters: list):
 
         prior_dict = {}
         for mp in free_model_parameters:
-            parname = mp.name
-            distribution, cluttered_arguments = mp.prior.split("(", 1)
-            param_strings = cluttered_arguments.split(")", 1)[0].split(",")
-            params = {}
-            for parstr in param_strings:
-                key, val = parstr.split("=")
-                params.update({key:float(val)})
+            name, distribution, params = cls.param_to_prior(par=mp)
 
             prior = pyabc.RV(distribution, **params)
             prior_dict.update({parname: prior})
