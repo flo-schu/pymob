@@ -85,7 +85,7 @@ class NumpyroBackend:
 
         n_chains = 1
         numpyro.set_host_device_count(n_chains)
-
+        EPS = 1e-8
 
         @jax.jit
         def solver(theta, y0, t):
@@ -133,9 +133,9 @@ class NumpyroBackend:
             r_rd = numpyro.sample("r_rd", dist.LogNormal(loc=jnp.log(0.5), scale=1))
             v_rt = numpyro.sample("v_rt", dist.LogNormal(loc=jnp.log(1.0), scale=1))
             z_ci = numpyro.sample("z_ci", dist.LogNormal(loc=jnp.log(500.0), scale=1))
-            # r_pt = numpyro.sample("r_pt", dist.LogNormal(loc=jnp.log(0.1), scale=s))
-            # r_pd = numpyro.sample("r_pd", dist.LogNormal(loc=jnp.log(0.01), scale=s))
-            # volume_ratio = numpyro.sample("volume_ratio", dist.LogNormal(loc=jnp.log(5000), scale=s))
+            r_pt = numpyro.sample("r_pt", dist.LogNormal(loc=jnp.log(0.1), scale=1))
+            r_pd = numpyro.sample("r_pd", dist.LogNormal(loc=jnp.log(0.01), scale=1))
+            volume_ratio = numpyro.sample("volume_ratio", dist.LogNormal(loc=jnp.log(5000), scale=1))
             # z = numpyro.sample("z", dist.LogNormal(loc=jnp.log(2.0), scale=s))
             # kk = numpyro.sample("kk", dist.LogNormal(loc=jnp.log(0.02), scale=s))
             # b_base = numpyro.sample("b_base", dist.LogNormal(loc=jnp.log(0.1), scale=s))
@@ -149,9 +149,9 @@ class NumpyroBackend:
                 "r_rd": r_rd,
                 "v_rt": v_rt,
                 "z_ci": z_ci,
-                # "r_pt": r_pt,
-                # "r_pd": r_pd,
-                # "volume_ratio": volume_ratio,
+                "r_pt": r_pt,
+                "r_pd": r_pd,
+                "volume_ratio": volume_ratio,
                 # "z": z,
                 # "kk": kk,
                 # "b_base": b_base,
@@ -161,24 +161,24 @@ class NumpyroBackend:
                 # "r_rd": 0.5,
                 # "v_rt": 1.0,
                 # "z_ci": 500,
-                "r_pt": 0.1,
-                "r_pd": 0.01,
-                "volume_ratio": 5000,
+                # "r_pt": 0.1,
+                # "r_pd": 0.01,
+                # "volume_ratio": 5000,
                 "z": 2.0,
                 "kk": 0.02,
                 "b_base": 0.1,
             }
             # theta = (k_i, 0.1, 0.5, 1.0 ,500, 0.1, 0.01, 5000)
             sim = solver(theta=theta)
+            cext = numpyro.deterministic("cext", sim[0])
+            cint = numpyro.deterministic("cint", sim[1])
+            nrf2 = numpyro.deterministic("nrf2", sim[2])
 
             # cext = numpyro.sample("cext", dist.LogNormal(loc=jnp.log(y[0]), scale=sigma_cext).mask(mask["cext"].values), obs=obs["cext"].values)
             # cint = numpyro.sample("cint", dist.LogNormal(loc=jnp.log(y[1]), scale=sigma_cint).mask(mask["cint"].values), obs=obs["cint"].values)
-            
-            sim_cint_i = sim[1]
-            obs_cint_i = obs[1]
-            numpyro.sample("cint", dist.Normal(loc=sim_cint_i, scale=10), obs=obs_cint_i)
-        
-            # nrf2 = numpyro.sample("nrf2", dist.LogNormal(loc=jnp.log(y[2]), scale=sigma_nrf2).mask(mask["nrf2"].values), obs=obs["nrf2"].values)
+            numpyro.sample("lp_cext", dist.LogNormal(loc=jnp.log(cext + EPS), scale=0.1), obs=obs[0] + EPS)
+            numpyro.sample("lp_cint", dist.LogNormal(loc=jnp.log(cint + EPS), scale=0.1), obs=obs[1] + EPS)
+            # numpyro.sample("lp_nrf2", dist.LogNormal(loc=jnp.log(), scale=0.1), obs=obs[2])
             # leth = numpyro.sample("lethality", dist.Binomial(probs=y[3], total_count=nzfe).mask(mask["lethality"].values), obs=obs["lethality"].values)
 
 
@@ -188,27 +188,24 @@ class NumpyroBackend:
         t = jnp.array(self.simulation.coordinates["time"])
 
         ode_sol = partial(solver, y0=y0, t=t)
-
         y_sim = ode_sol(theta=theta)
 
         # obs = self.observations.transpose("id", "time", "substance")
         # mask = obs.isnull()
         # n = len(self.simulation.coordinates["time"])
         # nzfe = jnp.tile(self.observations.nzfe.values, n).reshape((n, 50)).T
-        
+        mcmc.posterior
         model = partial(model, solver=ode_sol)    
         # model = partial(self.model, solver=self.evaluator)    
         kernel = infer.NUTS(
             model, 
             dense_mass=False, 
             # inverse_mass_matrix=inverse_mass_matrix,
-            # step_size=0.1,
+            step_size=0.001,
             adapt_mass_matrix=True,
             adapt_step_size=True,
             target_accept_prob=0.8,
-            init_strategy=infer.init_to_value(
-                values={"k_i": 5.0, "r_rt": 0.1, "r_rd": 0.5, "v_rt": 1.0, "z_ci": 500}
-            )
+            init_strategy=infer.init_to_uniform
         )
 
         # TODO: Try with init args
@@ -220,9 +217,17 @@ class NumpyroBackend:
             progress_bar=True,
         )
 
-        mcmc.run(jax.random.PRNGKey(5), obs=y_sim)
+        mcmc.run(jax.random.PRNGKey(1), obs=y_sim)
         mcmc.print_summary()
+        
+        import arviz as az
+        idata = az.from_numpyro(mcmc)
 
+        idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
+        idata.posterior
+
+        
+        az.plot_pair(idata, divergences=True)
 
         # these arguments are from the adaptation procedure and can be saved
         # and reused for new runs without warmup.
