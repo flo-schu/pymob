@@ -161,14 +161,14 @@ class NumpyroBackend:
             cext = numpyro.deterministic("cext", sim[0])
             cint = numpyro.deterministic("cint", sim[1])
             nrf2 = numpyro.deterministic("nrf2", sim[2])
-            # leth = numpyro.deterministic("leth", sim[3])
+            leth = numpyro.deterministic("leth", sim[3])
 
             # cext = numpyro.sample("cext", dist.LogNormal(loc=jnp.log(y[0]), scale=sigma_cext).mask(mask["cext"].values), obs=obs["cext"].values)
             # cint = numpyro.sample("cint", dist.LogNormal(loc=jnp.log(y[1]), scale=sigma_cint).mask(mask["cint"].values), obs=obs["cint"].values)
             numpyro.sample("lp_cext", dist.LogNormal(loc=jnp.log(cext + EPS), scale=sigma_cext), obs=obs[0] + EPS)
             numpyro.sample("lp_cint", dist.LogNormal(loc=jnp.log(cint + EPS), scale=sigma_cint), obs=obs[1] + EPS)
             numpyro.sample("lp_nrf2", dist.LogNormal(loc=jnp.log(nrf2 + EPS), scale=sigma_nrf2), obs=obs[2] + EPS)
-            # numpyro.sample("lethality", dist.Binomial(probs=leth, total_count=9), obs=obs[3])
+            numpyro.sample("lethality", dist.Binomial(probs=leth, total_count=9), obs=obs[3])
 
         # define parameters of the model
         theta = self.simulation.model_parameter_dict
@@ -205,7 +205,7 @@ class NumpyroBackend:
             step_size=0.001,
             adapt_mass_matrix=True,
             adapt_step_size=True,
-            max_tree_depth=11,
+            max_tree_depth=8,
             target_accept_prob=0.8,
             init_strategy=infer.init_to_median
         )
