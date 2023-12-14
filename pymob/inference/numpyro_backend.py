@@ -178,7 +178,7 @@ class NumpyroBackend:
             # cint = numpyro.sample("cint", dist.LogNormal(loc=jnp.log(y[1]), scale=sigma_cint).mask(mask["cint"].values), obs=obs["cint"].values)
             numpyro.sample("lp_cext", dist.LogNormal(loc=jnp.log(cext + EPS), scale=0.1), obs=obs[0] + EPS)
             numpyro.sample("lp_cint", dist.LogNormal(loc=jnp.log(cint + EPS), scale=0.1), obs=obs[1] + EPS)
-            # numpyro.sample("lp_nrf2", dist.LogNormal(loc=jnp.log(), scale=0.1), obs=obs[2])
+            numpyro.sample("lp_nrf2", dist.LogNormal(loc=jnp.log(nrf2 + EPS), scale=0.1), obs=obs[2] + EPS)
             # leth = numpyro.sample("lethality", dist.Binomial(probs=y[3], total_count=nzfe).mask(mask["lethality"].values), obs=obs["lethality"].values)
 
 
@@ -194,7 +194,7 @@ class NumpyroBackend:
         # mask = obs.isnull()
         # n = len(self.simulation.coordinates["time"])
         # nzfe = jnp.tile(self.observations.nzfe.values, n).reshape((n, 50)).T
-        mcmc.posterior
+        # mcmc.posterior
         model = partial(model, solver=ode_sol)    
         # model = partial(self.model, solver=self.evaluator)    
         kernel = infer.NUTS(
