@@ -134,9 +134,9 @@ class NumpyroBackend:
             r_pt = numpyro.sample("r_pt", dist.LogNormal(loc=jnp.log(0.1), scale=1))
             r_pd = numpyro.sample("r_pd", dist.LogNormal(loc=jnp.log(0.01), scale=1))
             volume_ratio = numpyro.sample("volume_ratio", dist.LogNormal(loc=jnp.log(5000), scale=1))
-            # z = numpyro.sample("z", dist.LogNormal(loc=jnp.log(2.0), scale=s))
-            # kk = numpyro.sample("kk", dist.LogNormal(loc=jnp.log(0.02), scale=s))
-            # b_base = numpyro.sample("b_base", dist.LogNormal(loc=jnp.log(0.1), scale=s))
+            z = numpyro.sample("z", dist.LogNormal(loc=jnp.log(2.0), scale=1))
+            kk = numpyro.sample("kk", dist.LogNormal(loc=jnp.log(0.02), scale=1))
+            b_base = numpyro.sample("b_base", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
             sigma_cint = numpyro.sample("sigma_cint", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
             sigma_cext = numpyro.sample("sigma_cext", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
             sigma_nrf2 = numpyro.sample("sigma_nrf2", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
@@ -150,12 +150,12 @@ class NumpyroBackend:
                 "r_pt": r_pt,
                 "r_pd": r_pd,
                 "volume_ratio": volume_ratio,
-                # "z": z,
-                # "kk": kk,
-                # "b_base": b_base,
-                "z": 2.0,
-                "kk": 0.02,
-                "b_base": 0.1,
+                "z": z,
+                "kk": kk,
+                "b_base": b_base,
+                # "z": 2.0,
+                # "kk": 0.02,
+                # "b_base": 0.1,
             }
             sim = solver(theta=theta)
             cext = numpyro.deterministic("cext", sim[0])
@@ -168,7 +168,7 @@ class NumpyroBackend:
             numpyro.sample("lp_cext", dist.LogNormal(loc=jnp.log(cext + EPS), scale=sigma_cext), obs=obs[0] + EPS)
             numpyro.sample("lp_cint", dist.LogNormal(loc=jnp.log(cint + EPS), scale=sigma_cint), obs=obs[1] + EPS)
             numpyro.sample("lp_nrf2", dist.LogNormal(loc=jnp.log(nrf2 + EPS), scale=sigma_nrf2), obs=obs[2] + EPS)
-            # leth = numpyro.sample("lethality", dist.Binomial(probs=y[3], total_count=nzfe).mask(mask["lethality"].values), obs=obs["lethality"].values)
+            # numpyro.sample("lethality", dist.Binomial(probs=leth, total_count=9), obs=obs[3])
 
         # define parameters of the model
         theta = self.simulation.model_parameter_dict
@@ -185,8 +185,8 @@ class NumpyroBackend:
 
         # create artificial data from Evaluator        
         y_sim = self.evaluator(theta)
-        # key, subkey = jax.random.split(key)
-        # y_sim[3] = dist.Binomial(total_count=9, probs=y_sim[3]).sample(subkey)
+        key, subkey = jax.random.split(key)
+        y_sim[3] = dist.Binomial(total_count=9, probs=y_sim[3]).sample(subkey)
         
         # real observations
         # obs = self.observations.transpose("id", "time", "substance")
@@ -205,7 +205,7 @@ class NumpyroBackend:
             step_size=0.001,
             adapt_mass_matrix=True,
             adapt_step_size=True,
-            max_tree_depth=10,
+            max_tree_depth=11,
             target_accept_prob=0.8,
             init_strategy=infer.init_to_median
         )
