@@ -106,7 +106,6 @@ class SimulationBase:
             dimensions=self.dimensions,
             data_variables=self.data_variables,
             coordinates=self.coordinates,
-            seed=self.draw_seed(),
             # TODO: pass the whole simulation settings section
             stochastic=True if stochastic == "stochastic" else False,
             **evaluator_kwargs

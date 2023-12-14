@@ -14,7 +14,6 @@ from diffrax import (
     PIDController, 
     RecursiveCheckpointAdjoint
 )
-            
 
 DISTRIBUTION_MAPPER = {
     "lognorm": dist.LogNormal,
@@ -38,9 +37,9 @@ class NumpyroBackend:
         self.posterior = None
 
     def model_parser(self):
-        def evaluator(theta):
+        def evaluator(theta, seed=None):
             evaluator = self.simulation.dispatch(theta=theta)
-            evaluator()
+            evaluator(seed)
             return evaluator.Y
         
         return evaluator
@@ -128,7 +127,6 @@ class NumpyroBackend:
 
         def model(solver, obs):
             k_i = numpyro.sample("k_i", dist.LogNormal(loc=jnp.log(5), scale=1))
-            # k_i = numpyro.sample("k_i", dist.Normal(loc=5, scale=10))
             r_rt = numpyro.sample("r_rt", dist.LogNormal(loc=jnp.log(0.1), scale=1))
             r_rd = numpyro.sample("r_rd", dist.LogNormal(loc=jnp.log(0.5), scale=1))
             v_rt = numpyro.sample("v_rt", dist.LogNormal(loc=jnp.log(1.0), scale=1))
@@ -139,9 +137,9 @@ class NumpyroBackend:
             # z = numpyro.sample("z", dist.LogNormal(loc=jnp.log(2.0), scale=s))
             # kk = numpyro.sample("kk", dist.LogNormal(loc=jnp.log(0.02), scale=s))
             # b_base = numpyro.sample("b_base", dist.LogNormal(loc=jnp.log(0.1), scale=s))
-            sigma_cint = numpyro.sample("sigma_cint", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
-            sigma_cext = numpyro.sample("sigma_cext", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
-            sigma_nrf2 = numpyro.sample("sigma_nrf2", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
+            # sigma_cint = numpyro.sample("sigma_cint", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
+            # sigma_cext = numpyro.sample("sigma_cext", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
+            # sigma_nrf2 = numpyro.sample("sigma_nrf2", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
 
             theta = {
                 "k_i": k_i,
@@ -155,48 +153,51 @@ class NumpyroBackend:
                 # "z": z,
                 # "kk": kk,
                 # "b_base": b_base,
-                
-                # "k_i": 1e17, # breaks the ODE
-                # "r_rt": 0.1,
-                # "r_rd": 0.5,
-                # "v_rt": 1.0,
-                # "z_ci": 500,
-                # "r_pt": 0.1,
-                # "r_pd": 0.01,
-                # "volume_ratio": 5000,
                 "z": 2.0,
                 "kk": 0.02,
                 "b_base": 0.1,
             }
-            # theta = (k_i, 0.1, 0.5, 1.0 ,500, 0.1, 0.01, 5000)
             sim = solver(theta=theta)
             cext = numpyro.deterministic("cext", sim[0])
             cint = numpyro.deterministic("cint", sim[1])
             nrf2 = numpyro.deterministic("nrf2", sim[2])
+            # leth = numpyro.deterministic("leth", sim[3])
 
             # cext = numpyro.sample("cext", dist.LogNormal(loc=jnp.log(y[0]), scale=sigma_cext).mask(mask["cext"].values), obs=obs["cext"].values)
             # cint = numpyro.sample("cint", dist.LogNormal(loc=jnp.log(y[1]), scale=sigma_cint).mask(mask["cint"].values), obs=obs["cint"].values)
-            numpyro.sample("lp_cext", dist.LogNormal(loc=jnp.log(cext + EPS), scale=sigma_cext), obs=obs[0] + EPS)
-            numpyro.sample("lp_cint", dist.LogNormal(loc=jnp.log(cint + EPS), scale=sigma_cint), obs=obs[1] + EPS)
-            numpyro.sample("lp_nrf2", dist.LogNormal(loc=jnp.log(nrf2 + EPS), scale=sigma_nrf2), obs=obs[2] + EPS)
+            numpyro.sample("lp_cext", dist.LogNormal(loc=jnp.log(cext + EPS), scale=0.1), obs=obs[0] + EPS)
+            numpyro.sample("lp_cint", dist.LogNormal(loc=jnp.log(cint + EPS), scale=0.1), obs=obs[1] + EPS)
+            numpyro.sample("lp_nrf2", dist.LogNormal(loc=jnp.log(nrf2 + EPS), scale=0.1), obs=obs[2] + EPS)
             # leth = numpyro.sample("lethality", dist.Binomial(probs=y[3], total_count=nzfe).mask(mask["lethality"].values), obs=obs["lethality"].values)
 
-
+        # define parameters of the model
         theta = self.simulation.model_parameter_dict
         theta.update({"volume_ratio": 5000})
         y0 = (18.0, 0.0, 0.0, 0.0)
         t = jnp.array(self.simulation.coordinates["time"])
+        coords = self.simulation.coordinates.copy()
+        self.simulation.coordinates["id"] = self.simulation.coordinates["id"][0:1]
+        key = jax.random.PRNGKey(1)
 
-        ode_sol = partial(solver, y0=y0, t=t)
-        y_sim = ode_sol(theta=theta)
+        # create artificial data from local solver
+        # ode_sol = partial(solver, y0=y0, t=t)
+        # y_sim = ode_sol(theta=theta)
 
+        # create artificial data from Evaluator        
+        y_sim = self.evaluator(theta)
+        # key, subkey = jax.random.split(key)
+        # y_sim[3] = dist.Binomial(total_count=9, probs=y_sim[3]).sample(subkey)
+        
+        # real observations
         # obs = self.observations.transpose("id", "time", "substance")
         # mask = obs.isnull()
         # n = len(self.simulation.coordinates["time"])
         # nzfe = jnp.tile(self.observations.nzfe.values, n).reshape((n, 50)).T
-        # mcmc.posterior
-        model = partial(model, solver=ode_sol)    
-        # model = partial(self.model, solver=self.evaluator)    
+
+        # bind the solver to the numpyro model
+        # model = partial(model, solver=ode_sol)    
+        model = partial(model, solver=self.evaluator)    
+        
         kernel = infer.NUTS(
             model, 
             dense_mass=True, 
@@ -204,8 +205,9 @@ class NumpyroBackend:
             step_size=0.001,
             adapt_mass_matrix=True,
             adapt_step_size=True,
+            max_tree_depth=10,
             target_accept_prob=0.8,
-            init_strategy=infer.init_to_uniform
+            init_strategy=infer.init_to_median
         )
 
         # TODO: Try with init args
@@ -217,9 +219,12 @@ class NumpyroBackend:
             progress_bar=True,
         )
 
-        mcmc.run(jax.random.PRNGKey(1), obs=y_sim)
+        key, subkey = jax.random.split(key)
+        mcmc.run(subkey, obs=y_sim)
         mcmc.print_summary()
-        
+
+
+
         import arviz as az
         idata = az.from_numpyro(mcmc)
 
@@ -227,7 +232,7 @@ class NumpyroBackend:
         idata.posterior
 
         
-        az.plot_pair(idata, divergences=True)
+        az.plot_pair(idata, var_names=["k_i", "r_rt"], divergences=True)
 
         # these arguments are from the adaptation procedure and can be saved
         # and reused for new runs without warmup.
