@@ -139,9 +139,9 @@ class NumpyroBackend:
             # z = numpyro.sample("z", dist.LogNormal(loc=jnp.log(2.0), scale=s))
             # kk = numpyro.sample("kk", dist.LogNormal(loc=jnp.log(0.02), scale=s))
             # b_base = numpyro.sample("b_base", dist.LogNormal(loc=jnp.log(0.1), scale=s))
-            # sigma_cint = numpyro.sample("sigma_cint", dist.LogNormal(loc=jnp.log(0.1), scale=s))
-            # sigma_cext = numpyro.sample("sigma_cext", dist.LogNormal(loc=jnp.log(0.1), scale=s))
-            # sigma_nrf2 = numpyro.sample("sigma_nrf2", dist.HalfNormal(scale=0.1))
+            sigma_cint = numpyro.sample("sigma_cint", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
+            sigma_cext = numpyro.sample("sigma_cext", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
+            sigma_nrf2 = numpyro.sample("sigma_nrf2", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
 
             theta = {
                 "k_i": k_i,
@@ -176,9 +176,9 @@ class NumpyroBackend:
 
             # cext = numpyro.sample("cext", dist.LogNormal(loc=jnp.log(y[0]), scale=sigma_cext).mask(mask["cext"].values), obs=obs["cext"].values)
             # cint = numpyro.sample("cint", dist.LogNormal(loc=jnp.log(y[1]), scale=sigma_cint).mask(mask["cint"].values), obs=obs["cint"].values)
-            numpyro.sample("lp_cext", dist.LogNormal(loc=jnp.log(cext + EPS), scale=0.1), obs=obs[0] + EPS)
-            numpyro.sample("lp_cint", dist.LogNormal(loc=jnp.log(cint + EPS), scale=0.1), obs=obs[1] + EPS)
-            numpyro.sample("lp_nrf2", dist.LogNormal(loc=jnp.log(nrf2 + EPS), scale=0.1), obs=obs[2] + EPS)
+            numpyro.sample("lp_cext", dist.LogNormal(loc=jnp.log(cext + EPS), scale=sigma_cext), obs=obs[0] + EPS)
+            numpyro.sample("lp_cint", dist.LogNormal(loc=jnp.log(cint + EPS), scale=sigma_cint), obs=obs[1] + EPS)
+            numpyro.sample("lp_nrf2", dist.LogNormal(loc=jnp.log(nrf2 + EPS), scale=sigma_nrf2), obs=obs[2] + EPS)
             # leth = numpyro.sample("lethality", dist.Binomial(probs=y[3], total_count=nzfe).mask(mask["lethality"].values), obs=obs["lethality"].values)
 
 
@@ -199,7 +199,7 @@ class NumpyroBackend:
         # model = partial(self.model, solver=self.evaluator)    
         kernel = infer.NUTS(
             model, 
-            dense_mass=False, 
+            dense_mass=True, 
             # inverse_mass_matrix=inverse_mass_matrix,
             step_size=0.001,
             adapt_mass_matrix=True,
