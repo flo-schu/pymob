@@ -1,8 +1,6 @@
-from typing import Callable, Dict, List, Optional, Union, Tuple
+from typing import Callable, Dict, List
 import inspect
 import xarray as xr
-import numpy as np
-from types import FunctionType 
 
 def create_dataset_from_numpy(Y, Y_names, coordinates):
     n_vars = Y.shape[-1]
