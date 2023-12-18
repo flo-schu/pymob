@@ -185,9 +185,12 @@ class NumpyroBackend:
 
         # create artificial data from Evaluator        
         y_sim = self.evaluator(theta)
-        key, subkey = jax.random.split(key)
-        y_sim[3] = dist.Binomial(total_count=9, probs=y_sim[3]).sample(subkey)
-        
+        key, *subkeys = jax.random.split(key, 5)
+        y_sim[0] = dist.LogNormal(loc=jnp.log(y_sim[0]), scale=0.1).sample(subkeys[0])
+        y_sim[1] = dist.LogNormal(loc=jnp.log(y_sim[1]), scale=0.1).sample(subkeys[1])
+        y_sim[2] = dist.LogNormal(loc=jnp.log(y_sim[2]), scale=0.1).sample(subkeys[2])
+        y_sim[3] = dist.Binomial(total_count=9, probs=y_sim[3]).sample(subkeys[3])
+
         # real observations
         # obs = self.observations.transpose("id", "time", "substance")
         # mask = obs.isnull()
@@ -231,7 +234,7 @@ class NumpyroBackend:
         idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
         idata.posterior
 
-        
+        az.plot_trace(idata)
         az.plot_pair(idata, var_names=["k_i", "r_rt"], divergences=True)
 
         # these arguments are from the adaptation procedure and can be saved
