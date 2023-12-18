@@ -1,8 +1,9 @@
 import os
 import warnings
 import configparser
+from functools import partial
 import multiprocessing as mp
-from typing import Callable
+from typing import Callable, Dict
 from multiprocessing.pool import ThreadPool, Pool
 
 import numpy as np
@@ -13,7 +14,7 @@ from toopy import Param, FloatParam, IntParam
 
 from pymob.utils.errors import errormsg
 from pymob.utils.store_file import scenario_file, parse_config_section
-from pymob.sim.evaluator import EvaluatorBase
+from pymob.sim.evaluator import Evaluator
 
 def update_parameters_dict(config, x, parnames):
     for par, val, in zip(parnames, x):
@@ -35,7 +36,7 @@ class SimulationBase:
     ) -> None:
         
         self.config = config
-        self.model_parameters: tuple = ()
+        self.model_parameters: Dict = {}
         self.observations = None
         self._objective_names = []
         self._seed_buffer_size = self.n_cores * 2
@@ -60,6 +61,7 @@ class SimulationBase:
 
         self.validate()
         # TODO: set up logger
+        self.parameterize = partial(self.parameterize, model_parameters=self.model_parameters)
 
 
     def __repr__(self) -> str:
@@ -87,11 +89,16 @@ class SimulationBase:
         Theoretically, this could also be used to constrain coordinates etc, 
         before evaluating.  
         """
-        model_parameters = self.parameterize(self.input_file_paths, theta)
+        model_parameters = self.parameterize(theta)
         
         # TODO: make sure the evaluator has all arguments required for solving
         # model
         # TODO: Check if model is bound. If yes extract
+        if hasattr(self.solver, "__func__"):
+            solver = self.solver.__func__
+        else:
+            solver = self.solver
+
         if hasattr(self.model, "__func__"):
             model = self.model.__func__
         else:
@@ -99,10 +106,10 @@ class SimulationBase:
 
         stochastic = self.config.get("simulation", "modeltype", fallback=False)
             
-        evaluator = EvaluatorBase(
+        evaluator = Evaluator(
             model=model,
-            y0=model_parameters["y0"],
-            parameters=model_parameters["parameters"],
+            solver=solver,
+            parameters=model_parameters,
             dimensions=self.dimensions,
             data_variables=self.data_variables,
             coordinates=self.coordinates,
@@ -116,7 +123,7 @@ class SimulationBase:
     def evaluate(self, theta):
         """Wrapper around run to modify paramters of the model.
         """
-        self.model_parameters = self.parameterize(self.input_file_paths, theta)
+        self.model_parameters = self.parameterize(theta)
         return self.run()
     
     def compute(self):
@@ -310,9 +317,12 @@ class SimulationBase:
         #       - 
         pass
 
-    def parameterize(self, input: list[str], theta: list[Param]):
+    @staticmethod
+    def parameterize(free_parameters: list[Param], model_parameters) -> dict:
         """
-        Optional. Set parameters of the model. By default returns an empty tuple. 
+        Optional. Set parameters and initial values of the model. 
+        Must return a dictionary with the keys 'y0' and 'parameters'
+        
         Can be used to define parameters directly in the script or from a 
         parameter file.
 
@@ -328,7 +338,11 @@ class SimulationBase:
 
         tulpe: tuple of parameters, can have any length.
         """
-        return {p.name: p.value for p in theta}, 
+        parameters = model_parameters["parameters"]
+        y0 = model_parameters["y0"]
+
+        parameters.update({p.name: p.value for p in free_parameters})
+        return {"y0": y0, "parameters": parameters} 
 
     def run(self):
         """
