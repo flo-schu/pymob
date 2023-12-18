@@ -1,5 +1,8 @@
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union, Tuple
+import inspect
 import xarray as xr
+import numpy as np
+from types import FunctionType 
 
 def create_dataset_from_numpy(Y, Y_names, coordinates):
     n_vars = Y.shape[-1]
@@ -22,13 +25,22 @@ def create_dataset_from_numpy(Y, Y_names, coordinates):
 
     return dataset
 
-class EvaluatorBase:
+class Evaluator:
+    """The Evaluator is an instance to evaluate a model. It's purpose is primarily
+    to create objects that can be spawned and evaluated in parallel and can 
+    individually track the results of a simulation or a parameter inference
+    process. If needed the evaluations can be tracked and results can later
+    be collected.
+    
+    Seed may not be set as a property, because this should be something passed
+    through
+    """
     result: xr.Dataset
 
     def __init__(
             self,
             model: Callable,
-            y0: Optional[Union[List, xr.Dataset]],
+            solver: Callable,
             parameters: Dict,
             dimensions: List,
             coordinates: Dict,
@@ -37,20 +49,53 @@ class EvaluatorBase:
             **kwargs
         ) -> None:
         
-        self.y0 = y0
+        self.model = model
         self.parameters = parameters
         self.dimensions = dimensions
         self.data_variables = data_variables
         self.coordinates = coordinates
-        self.stochastic = stochastic
-            
-        if isinstance(model, type):
-            self.model = model()
+        self.is_stochastic = stochastic
+        
+        # set additional arguments of evaluator
+        _ = [setattr(self, key, val) for key, val in kwargs.items()]
+
+        self._signature = {}
+
+        if isinstance(solver, type):
+            self._solver = solver()
         else:
-            self.model = model
+            self._solver = solver
+
+        self.get_call_signature()
+
+
+    def get_call_signature(self):
+        signature = inspect.signature(self._solver)
+        model_args = list(signature.parameters.keys())
+
+        for a in model_args:
+            if a not in self.allowed_model_signature_arguments:
+                raise ValueError(
+                    f"{a} in model signature are not attributes of the Evaluator. "
+                    f"Use one of {self.allowed_model_signature_arguments}, "
+                    f"or set as evaluator_kwargs in the call to "
+                    "'SimulationBase.dispatch'" 
+                )
+            
+            # add argument to signature for call to model
+            if a != "seed":
+                self._signature.update({a: getattr(self, a)})
+        
+    
+    @property
+    def allowed_model_signature_arguments(self):
+        return [a for a in self.__dict__.keys() if a[0] != "_"] + ["seed"]
 
     def __call__(self, seed=None):
-        self.Y = self.model(self, seed=seed)
+        if seed is not None:
+            self._signature.update({"seed": seed})
+
+        self.Y = self._solver(**self._signature)
 
     @property
     def results(self):
