@@ -30,7 +30,7 @@ class NumpyroBackend:
         self.evaluator = self.model_parser()
         self.prior = ...
         self.distance_function = ...
-        self.observations = simulation.observations
+        # self.observations, self.masks = self.observation_parser()
 
         self.abc = None
         self.history = None
@@ -46,6 +46,26 @@ class NumpyroBackend:
 
     def model(self):
         pass
+
+
+    def observation_parser(self):
+        obs = self.simulation.observations \
+            .transpose("id", "time", "substance") \
+            .isel(id=0)
+        data_vars = self.simulation.data_variables
+
+        masks = []
+        observations = []
+        for d in data_vars:
+            o = jnp.array(obs[d].values)
+            m = jnp.logical_not(jnp.isnan(o))
+            observations.append(o)
+            masks.append(m)
+        
+        # masking
+        # m = jnp.nonzero(mask)[0]
+        return observations, masks
+        
 
     @staticmethod
     def param_to_prior(par):
@@ -125,7 +145,7 @@ class NumpyroBackend:
             return sol.ys
 
 
-        def model(solver, obs):
+        def model(solver, obs, masks):
             k_i = numpyro.sample("k_i", dist.LogNormal(loc=jnp.log(5), scale=1))
             r_rt = numpyro.sample("r_rt", dist.LogNormal(loc=jnp.log(0.1), scale=1))
             r_rd = numpyro.sample("r_rd", dist.LogNormal(loc=jnp.log(0.5), scale=1))
@@ -161,41 +181,52 @@ class NumpyroBackend:
             cext = numpyro.deterministic("cext", sim[0])
             cint = numpyro.deterministic("cint", sim[1])
             nrf2 = numpyro.deterministic("nrf2", sim[2])
-            leth = numpyro.deterministic("leth", sim[3])
+            leth = numpyro.deterministic("lethality", sim[3])
 
             # cext = numpyro.sample("cext", dist.LogNormal(loc=jnp.log(y[0]), scale=sigma_cext).mask(mask["cext"].values), obs=obs["cext"].values)
             # cint = numpyro.sample("cint", dist.LogNormal(loc=jnp.log(y[1]), scale=sigma_cint).mask(mask["cint"].values), obs=obs["cint"].values)
-            numpyro.sample("lp_cext", dist.LogNormal(loc=jnp.log(cext + EPS), scale=sigma_cext), obs=obs[0] + EPS)
-            numpyro.sample("lp_cint", dist.LogNormal(loc=jnp.log(cint + EPS), scale=sigma_cint), obs=obs[1] + EPS)
-            numpyro.sample("lp_nrf2", dist.LogNormal(loc=jnp.log(nrf2 + EPS), scale=sigma_nrf2), obs=obs[2] + EPS)
-            numpyro.sample("lethality", dist.Binomial(probs=leth, total_count=9), obs=obs[3])
+            numpyro.sample("cext_obs", dist.LogNormal(loc=jnp.log(cext + EPS), scale=sigma_cext).mask(masks[0]), obs=obs[0] + EPS)
+            numpyro.sample("cint_obs", dist.LogNormal(loc=jnp.log(cint + EPS), scale=sigma_cint).mask(masks[1]), obs=obs[1] + EPS)
+            numpyro.sample("nrf2_obs", dist.LogNormal(loc=jnp.log(nrf2 + EPS), scale=sigma_nrf2).mask(masks[2]), obs=obs[2] + EPS)
+            numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=9).mask(masks[3]), obs=obs[3])
 
         # define parameters of the model
         theta = self.simulation.model_parameter_dict
         theta.update({"volume_ratio": 5000})
-        y0 = (18.0, 0.0, 0.0, 0.0)
-        t = jnp.array(self.simulation.coordinates["time"])
-        coords = self.simulation.coordinates.copy()
-        self.simulation.coordinates["id"] = self.simulation.coordinates["id"][0:1]
+        # y0 = (18.0, 0.0, 0.0, 0.0)
+        # t = jnp.array(self.simulation.coordinates["time"])
+        # coords = self.simulation.coordinates.copy()
+        # self.simulation.coordinates["id"] = self.simulation.coordinates["id"][0:1]
         key = jax.random.PRNGKey(1)
 
         # create artificial data from local solver
         # ode_sol = partial(solver, y0=y0, t=t)
         # y_sim = ode_sol(theta=theta)
 
-        # create artificial data from Evaluator        
-        y_sim = self.evaluator(theta)
-        key, *subkeys = jax.random.split(key, 5)
-        y_sim[0] = dist.LogNormal(loc=jnp.log(y_sim[0]), scale=0.1).sample(subkeys[0])
-        y_sim[1] = dist.LogNormal(loc=jnp.log(y_sim[1]), scale=0.1).sample(subkeys[1])
-        y_sim[2] = dist.LogNormal(loc=jnp.log(y_sim[2]), scale=0.1).sample(subkeys[2])
-        y_sim[3] = dist.Binomial(total_count=9, probs=y_sim[3]).sample(subkeys[3])
+        # create artificial data from Evaluator      
+        def generate_artificial_data(key):  
+            y_sim = self.evaluator(theta)
+            key, *subkeys = jax.random.split(key, 5)
+            y_sim[0] = dist.LogNormal(loc=jnp.log(y_sim[0]), scale=0.1).sample(subkeys[0])
+            y_sim[1] = dist.LogNormal(loc=jnp.log(y_sim[1]), scale=0.1).sample(subkeys[1])
+            y_sim[2] = dist.LogNormal(loc=jnp.log(y_sim[2]), scale=0.1).sample(subkeys[2])
+            y_sim[3] = dist.Binomial(total_count=9, probs=y_sim[3]).sample(subkeys[3]).astype(float)
+
+            # add missing data
+            masks = []
+            key, *subkeys = jax.random.split(key, 5)
+            for i in range(4):
+                nans = dist.Bernoulli(probs=0.2).expand(y_sim[i].shape).sample(subkeys[i])
+                y_sim[i] = y_sim[i].at[jnp.nonzero(nans)].set(jnp.nan)
+                m = jnp.where(nans==1, False, True)
+                masks.append(m)
+
+            return y_sim, masks
+        
+        # obs, masks = generate_artificial_data()
+        obs, masks = self.observation_parser()
 
         # real observations
-        # obs = self.observations.transpose("id", "time", "substance")
-        # mask = obs.isnull()
-        # n = len(self.simulation.coordinates["time"])
-        # nzfe = jnp.tile(self.observations.nzfe.values, n).reshape((n, 50)).T
 
         # bind the solver to the numpyro model
         # model = partial(model, solver=ode_sol)    
@@ -203,7 +234,7 @@ class NumpyroBackend:
         
         kernel = infer.NUTS(
             model, 
-            dense_mass=True, 
+            dense_mass=False, 
             # inverse_mass_matrix=inverse_mass_matrix,
             step_size=0.001,
             adapt_mass_matrix=True,
@@ -216,14 +247,15 @@ class NumpyroBackend:
         # TODO: Try with init args
         mcmc = infer.MCMC(
             sampler=kernel,
-            num_warmup=1000,
+            num_warmup=2000,
             num_samples=1000,
             num_chains=n_chains,
             progress_bar=True,
         )
 
         key, subkey = jax.random.split(key)
-        mcmc.run(subkey, obs=y_sim)
+        mcmc.run(subkey, obs=obs, masks=masks)
+        # mcmc_warmup.run(subkey, obs=obs, masks=masks)
         mcmc.print_summary()
 
 
