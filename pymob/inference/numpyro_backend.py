@@ -249,7 +249,7 @@ class NumpyroBackend:
             step_size=0.01,
             adapt_mass_matrix=True,
             adapt_step_size=True,
-            max_tree_depth=8,
+            max_tree_depth=10,
             target_accept_prob=0.8,
             init_strategy=infer.init_to_median
         )
@@ -257,8 +257,8 @@ class NumpyroBackend:
         # TODO: Try with init args
         mcmc = infer.MCMC(
             sampler=kernel,
-            num_warmup=20,
-            num_samples=20,
+            num_warmup=4000,
+            num_samples=2000,
             num_chains=n_chains,
             progress_bar=True,
         )
@@ -267,7 +267,7 @@ class NumpyroBackend:
         mcmc.print_summary()
 
         idata = az.from_numpyro(mcmc)
-        self.data = idata
+        self.idata = idata
 
     def store_results(self):
         self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
