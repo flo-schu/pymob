@@ -258,25 +258,28 @@ class NumpyroBackend:
         # mcmc_warmup.run(subkey, obs=obs, masks=masks)
         mcmc.print_summary()
 
+        self.mcmc = mcmc
 
-
-        import arviz as az
+    def store_data(self):
+        mcmc = self.mcmc
         idata = az.from_numpyro(mcmc)
 
         idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
-        idata.posterior
 
+    def plot(self):
         az.plot_trace(idata)
         az.plot_pair(idata, var_names=["k_i", "r_rt"], divergences=True)
+# idata.posterior
 
-        # these arguments are from the adaptation procedure and can be saved
-        # and reused for new runs without warmup.
-        inverse_mass_matrix = mcmc.last_state.adapt_state.inverse_mass_matrix
-        step_size = mcmc.last_state.adapt_state.step_size
-        
-        # also get point to initialize
-        proposal = mcmc.last_state
 
-        # apprently also last state can be passed to the run method
-        # TODO: It would possibly be a good idea to split warmup and sampling 
-        #       and save the mass matrix if warump was successful. 
+# # these arguments are from the adaptation procedure and can be saved
+# # and reused for new runs without warmup.
+# inverse_mass_matrix = mcmc.last_state.adapt_state.inverse_mass_matrix
+# step_size = mcmc.last_state.adapt_state.step_size
+
+# # also get point to initialize
+# proposal = mcmc.last_state
+
+# apprently also last state can be passed to the run method
+# TODO: It would possibly be a good idea to split warmup and sampling 
+#       and save the mass matrix if warump was successful. 
