@@ -275,6 +275,12 @@ class NumpyroBackend:
             progress_bar=True,
         )
 
+
+    
+        with numpyro.handlers.seed(rng_seed=1):
+            trace = numpyro.handlers.trace(model).get_trace(obs=obs, masks=masks)
+        print(numpyro.util.format_shapes(trace))
+    
         mcmc.run(next(keys), obs=obs, masks=masks)
         mcmc.print_summary()
 
