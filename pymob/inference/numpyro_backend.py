@@ -177,9 +177,6 @@ class NumpyroBackend:
     def model(solver, obs, masks):
         EPS = 1e-8
 
-        
-        
-
         k_i = numpyro.sample("k_i", LogNormalTrans(loc=5, scale=1))
         r_rt = numpyro.sample("r_rt", LogNormalTrans(loc=0.1, scale=1))
         r_rd = numpyro.sample("r_rd", LogNormalTrans(loc=0.5, scale=1))
@@ -236,7 +233,7 @@ class NumpyroBackend:
         theta.update({"volume_ratio": 5000})
         coords = self.simulation.coordinates.copy()
         # self.simulation.coordinates["id"] = self.simulation.coordinates["id"][0:1]
-        key = jax.random.PRNGKey(2)
+        key = jax.random.PRNGKey(1)
         key, *subkeys = jax.random.split(key, 20)
         keys = iter(subkeys)
 
@@ -245,9 +242,9 @@ class NumpyroBackend:
         # y0 = (18.0, 0.0, 0.0, 0.0)
         # ode_sol = partial(solver, y0=y0, t=t)
         # y_sim = ode_sol(theta=theta)
-        obs, masks = self.generate_artificial_data(theta, key=next(keys), nan_frac=0.0)
-        # obs, masks = self.observation_parser()
-
+        # obs, masks = self.generate_artificial_data(theta, key=next(keys), nan_frac=0.0)
+        obs, masks = self.observation_parser()
+        n = len(self.simulation.coordinates["id"])
         # real observations
 
         # bind the solver to the numpyro model
@@ -260,7 +257,7 @@ class NumpyroBackend:
             model, 
             dense_mass=True, 
             # inverse_mass_matrix=inverse_mass_matrix,
-            step_size=0.001,
+            step_size=0.01,
             adapt_mass_matrix=True,
             adapt_step_size=True,
             max_tree_depth=8,
