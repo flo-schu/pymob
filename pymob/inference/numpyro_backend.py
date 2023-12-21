@@ -4,6 +4,7 @@ import numpyro
 import jax
 import jax.numpy as jnp
 from numpyro import distributions as dist
+from numpyro.distributions import Normal, transforms, TransformedDistribution
 from numpyro import infer
 from diffrax import (
     diffeqsolve, 
@@ -14,6 +15,19 @@ from diffrax import (
 )
 
 import arviz as az
+
+def LogNormalTrans(loc, scale):
+    return TransformedDistribution(
+        Normal(0,1), 
+        [
+            transforms.AffineTransform(loc=jnp.log(loc), scale=scale), 
+            exp()
+        ]
+    )
+
+exp = transforms.ExpTransform
+sigmoid = transforms.SigmoidTransform
+C = transforms.ComposeTransform
 
 DISTRIBUTION_MAPPER = {
     "lognorm": dist.LogNormal,
@@ -162,17 +176,20 @@ class NumpyroBackend:
     def model(solver, obs, masks):
         EPS = 1e-8
 
-        k_i = numpyro.sample("k_i", dist.LogNormal(loc=jnp.log(5), scale=1))
-        r_rt = numpyro.sample("r_rt", dist.LogNormal(loc=jnp.log(0.1), scale=1))
-        r_rd = numpyro.sample("r_rd", dist.LogNormal(loc=jnp.log(0.5), scale=1))
-        v_rt = numpyro.sample("v_rt", dist.LogNormal(loc=jnp.log(1.0), scale=1))
-        z_ci = numpyro.sample("z_ci", dist.LogNormal(loc=jnp.log(500.0), scale=1))
-        r_pt = numpyro.sample("r_pt", dist.LogNormal(loc=jnp.log(0.1), scale=1))
-        r_pd = numpyro.sample("r_pd", dist.LogNormal(loc=jnp.log(0.01), scale=1))
+        
+        
+
+        k_i = numpyro.sample("k_i", LogNormalTrans(loc=5, scale=1))
+        r_rt = numpyro.sample("r_rt", LogNormalTrans(loc=0.1, scale=1))
+        r_rd = numpyro.sample("r_rd", LogNormalTrans(loc=0.5, scale=1))
+        v_rt = numpyro.sample("v_rt", LogNormalTrans(loc=1.0, scale=1))
+        z_ci = numpyro.sample("z_ci", LogNormalTrans(loc=500.0, scale=1))
+        r_pt = numpyro.sample("r_pt", LogNormalTrans(loc=0.1, scale=1))
+        r_pd = numpyro.sample("r_pd", LogNormalTrans(loc=0.01, scale=1))
         # volume_ratio = numpyro.sample("volume_ratio", dist.LogNormal(loc=jnp.log(5000), scale=1))
-        z = numpyro.sample("z", dist.LogNormal(loc=jnp.log(2.0), scale=1))
-        kk = numpyro.sample("kk", dist.LogNormal(loc=jnp.log(0.005), scale=1))
-        b_base = numpyro.sample("b_base", dist.LogNormal(loc=jnp.log(0.1), scale=1))
+        z = numpyro.sample("z", LogNormalTrans(loc=2.0, scale=1))
+        kk = numpyro.sample("kk", LogNormalTrans(loc=0.005, scale=1))
+        b_base = numpyro.sample("b_base", LogNormalTrans(loc=0.1, scale=1))
         sigma_cint = numpyro.sample("sigma_cint", dist.HalfNormal(scale=0.1))
         sigma_cext = numpyro.sample("sigma_cext", dist.HalfNormal(scale=0.1))
         sigma_nrf2 = numpyro.sample("sigma_nrf2", dist.HalfNormal(scale=0.1))
@@ -201,9 +218,9 @@ class NumpyroBackend:
 
         # cext = numpyro.sample("cext", dist.LogNormal(loc=jnp.log(y[0]), scale=sigma_cext).mask(mask["cext"].values), obs=obs["cext"].values)
         # cint = numpyro.sample("cint", dist.LogNormal(loc=jnp.log(y[1]), scale=sigma_cint).mask(mask["cint"].values), obs=obs["cint"].values)
-        numpyro.sample("cext_obs", dist.LogNormal(loc=jnp.log(cext + EPS), scale=sigma_cext).mask(masks[0]), obs=obs[0] + EPS)
-        numpyro.sample("cint_obs", dist.LogNormal(loc=jnp.log(cint + EPS), scale=sigma_cint).mask(masks[1]), obs=obs[1] + EPS)
-        numpyro.sample("nrf2_obs", dist.LogNormal(loc=jnp.log(nrf2 + EPS), scale=sigma_nrf2).mask(masks[2]), obs=obs[2] + EPS)
+        numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks[0]), obs=obs[0] + EPS)
+        numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks[1]), obs=obs[1] + EPS)
+        numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks[2]), obs=obs[2] + EPS)
         numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=9).mask(masks[3]), obs=obs[3])
 
 
@@ -215,7 +232,7 @@ class NumpyroBackend:
 
         # define parameters of the model
         theta = self.simulation.model_parameter_dict
-        theta.update({"volume_ratio": jnp.inf})
+        theta.update({"volume_ratio": 5000})
         coords = self.simulation.coordinates.copy()
         # self.simulation.coordinates["id"] = self.simulation.coordinates["id"][0:1]
         key = jax.random.PRNGKey(2)
@@ -227,7 +244,7 @@ class NumpyroBackend:
         # y0 = (18.0, 0.0, 0.0, 0.0)
         # ode_sol = partial(solver, y0=y0, t=t)
         # y_sim = ode_sol(theta=theta)
-        obs, masks = self.generate_artificial_data(theta, key=next(keys), nan_frac=0.2)
+        obs, masks = self.generate_artificial_data(theta, key=next(keys), nan_frac=0.0)
         # obs, masks = self.observation_parser()
 
         # real observations
