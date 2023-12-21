@@ -64,8 +64,7 @@ class NumpyroBackend:
 
     def observation_parser(self):
         obs = self.simulation.observations \
-            .transpose("id", "time", "substance") \
-            .isel(id=0)
+            .transpose("id", "time", "substance")
         data_vars = self.simulation.data_variables
 
         masks = []
