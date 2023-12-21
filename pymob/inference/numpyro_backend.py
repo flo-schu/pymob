@@ -4,8 +4,10 @@ import numpyro
 import jax
 import jax.numpy as jnp
 from numpyro import distributions as dist
+from numpyro.infer import Predictive
 from numpyro.distributions import Normal, transforms, TransformedDistribution
 from numpyro import infer
+import arviz
 from diffrax import (
     diffeqsolve, 
     Dopri5, 
