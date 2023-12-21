@@ -8,17 +8,11 @@ from numpyro import infer
 from diffrax import (
     diffeqsolve, 
     Dopri5, 
-    Kvaerno5,
     ODETerm, 
     SaveAt, 
     PIDController, 
-    RecursiveCheckpointAdjoint
 )
 
-from numpyro.infer import MCMC, NUTS, SVI, Trace_ELBO
-from numpyro.infer.autoguide import AutoBNAFNormal
-from numpyro.infer.reparam import NeuTraReparam
-from numpyro.optim import Adam
 import arviz as az
 
 DISTRIBUTION_MAPPER = {
@@ -171,17 +165,17 @@ class NumpyroBackend:
         k_i = numpyro.sample("k_i", dist.LogNormal(loc=jnp.log(5), scale=1))
         r_rt = numpyro.sample("r_rt", dist.LogNormal(loc=jnp.log(0.1), scale=1))
         r_rd = numpyro.sample("r_rd", dist.LogNormal(loc=jnp.log(0.5), scale=1))
-        v_rt = numpyro.sample("v_rt", dist.LogNormal(loc=jnp.log(1.0), scale=0.1))
-        z_ci = numpyro.sample("z_ci", dist.LogNormal(loc=jnp.log(500.0), scale=0.1))
+        v_rt = numpyro.sample("v_rt", dist.LogNormal(loc=jnp.log(1.0), scale=1))
+        z_ci = numpyro.sample("z_ci", dist.LogNormal(loc=jnp.log(500.0), scale=1))
         r_pt = numpyro.sample("r_pt", dist.LogNormal(loc=jnp.log(0.1), scale=1))
         r_pd = numpyro.sample("r_pd", dist.LogNormal(loc=jnp.log(0.01), scale=1))
         # volume_ratio = numpyro.sample("volume_ratio", dist.LogNormal(loc=jnp.log(5000), scale=1))
-        z = numpyro.sample("z", dist.LogNormal(loc=jnp.log(2.0), scale=0.1))
+        z = numpyro.sample("z", dist.LogNormal(loc=jnp.log(2.0), scale=1))
         kk = numpyro.sample("kk", dist.LogNormal(loc=jnp.log(0.005), scale=1))
-        b_base = numpyro.sample("b_base", dist.LogNormal(loc=jnp.log(0.1), scale=0.1))
-        sigma_cint = numpyro.sample("sigma_cint", dist.HalfNormal(scale=10))
-        sigma_cext = numpyro.sample("sigma_cext", dist.HalfNormal(scale=10))
-        sigma_nrf2 = numpyro.sample("sigma_nrf2", dist.HalfNormal(scale=10))
+        b_base = numpyro.sample("b_base", dist.LogNormal(loc=jnp.log(0.1), scale=1))
+        sigma_cint = numpyro.sample("sigma_cint", dist.HalfNormal(scale=0.1))
+        sigma_cext = numpyro.sample("sigma_cext", dist.HalfNormal(scale=0.1))
+        sigma_nrf2 = numpyro.sample("sigma_nrf2", dist.HalfNormal(scale=0.1))
 
         theta = {
             "k_i": k_i,
@@ -223,8 +217,8 @@ class NumpyroBackend:
         theta = self.simulation.model_parameter_dict
         theta.update({"volume_ratio": jnp.inf})
         coords = self.simulation.coordinates.copy()
-        self.simulation.coordinates["id"] = self.simulation.coordinates["id"][0:1]
-        key = jax.random.PRNGKey(1)
+        # self.simulation.coordinates["id"] = self.simulation.coordinates["id"][0:1]
+        key = jax.random.PRNGKey(2)
         key, *subkeys = jax.random.split(key, 20)
         keys = iter(subkeys)
 
@@ -246,10 +240,10 @@ class NumpyroBackend:
             model, 
             dense_mass=True, 
             # inverse_mass_matrix=inverse_mass_matrix,
-            step_size=0.01,
+            step_size=0.001,
             adapt_mass_matrix=True,
             adapt_step_size=True,
-            max_tree_depth=10,
+            max_tree_depth=8,
             target_accept_prob=0.8,
             init_strategy=infer.init_to_median
         )
@@ -257,7 +251,7 @@ class NumpyroBackend:
         # TODO: Try with init args
         mcmc = infer.MCMC(
             sampler=kernel,
-            num_warmup=4000,
+            num_warmup=2000,
             num_samples=2000,
             num_chains=n_chains,
             progress_bar=True,
