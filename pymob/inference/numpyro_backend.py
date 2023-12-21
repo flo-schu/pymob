@@ -253,6 +253,8 @@ class NumpyroBackend:
         # bind the solver to the numpyro model
         # model = partial(model, solver=ode_sol)    
         model = partial(self.model, solver=self.evaluator)    
+            
+        self.prior_predictive_checks(model, next(keys))
         
         kernel = infer.NUTS(
             model, 
@@ -287,6 +289,11 @@ class NumpyroBackend:
         idata = az.from_numpyro(mcmc)
         self.idata = idata
 
+    def prior_predictive_checks(self, model, key):
+        obs, masks = self.observation_parser()
+        prior_predictive = Predictive(model, num_samples=100)
+        prior_predictions = prior_predictive(key, obs=obs, masks=masks)
+    
     def store_results(self):
         self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
 
