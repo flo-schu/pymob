@@ -226,7 +226,6 @@ class NumpyroBackend:
         sigma_cint = numpyro.sample("sigma_cint", dist.HalfNormal(scale=0.1))
         sigma_cext = numpyro.sample("sigma_cext", dist.HalfNormal(scale=0.1))
         sigma_nrf2 = numpyro.sample("sigma_nrf2", dist.HalfNormal(scale=0.1))
-
         theta = {
             "k_i": k_i,
             "r_rt": r_rt,
@@ -244,17 +243,17 @@ class NumpyroBackend:
             # "b_base": 0.1,
         }
         sim = solver(theta=theta)
-        cext = numpyro.deterministic("cext", sim[0])
-        cint = numpyro.deterministic("cint", sim[1])
-        nrf2 = numpyro.deterministic("nrf2", sim[2])
-        leth = numpyro.deterministic("lethality", sim[3])
+        cext = numpyro.deterministic("cext", sim["cext"])
+        cint = numpyro.deterministic("cint", sim["cint"])
+        nrf2 = numpyro.deterministic("nrf2", sim["nrf2"])
+        leth = numpyro.deterministic("lethality", sim["lethality"])
 
         # cext = numpyro.sample("cext", dist.LogNormal(loc=jnp.log(y[0]), scale=sigma_cext).mask(mask["cext"].values), obs=obs["cext"].values)
         # cint = numpyro.sample("cint", dist.LogNormal(loc=jnp.log(y[1]), scale=sigma_cint).mask(mask["cint"].values), obs=obs["cint"].values)
-        numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks[0]), obs=obs[0] + EPS)
-        numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks[1]), obs=obs[1] + EPS)
-        numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks[2]), obs=obs[2] + EPS)
-        numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=9).mask(masks[3]), obs=obs[3])
+        numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks["cext"]), obs=obs["cext"] + EPS)
+        numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks["cint"]), obs=obs["cint"] + EPS)
+        numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks["nrf2"]), obs=obs["nrf2"] + EPS)
+        numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=9).mask(masks["lethality"]), obs=obs["lethality"])
 
 
     def run(self):
