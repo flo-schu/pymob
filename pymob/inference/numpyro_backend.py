@@ -348,7 +348,7 @@ class NumpyroBackend:
     def store_results(self):
         self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
 
-    def load_data(self):
+    def load_results(self):
         self.idata = az.from_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
 
     def plot(self):
