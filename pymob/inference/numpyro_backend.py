@@ -101,19 +101,20 @@ class NumpyroBackend:
         # create artificial data from Evaluator      
         y_sim = self.evaluator(theta)
         key, *subkeys = jax.random.split(key, 5)
-        y_sim[0] = dist.LogNormal(loc=jnp.log(y_sim[0]), scale=0.1).sample(subkeys[0])
-        y_sim[1] = dist.LogNormal(loc=jnp.log(y_sim[1]), scale=0.1).sample(subkeys[1])
-        y_sim[2] = dist.LogNormal(loc=jnp.log(y_sim[2]), scale=0.1).sample(subkeys[2])
-        y_sim[3] = dist.Binomial(total_count=9, probs=y_sim[3]).sample(subkeys[3]).astype(float)
+        y_sim["cext"] = dist.LogNormal(loc=jnp.log(y_sim["cext"]), scale=0.1).sample(subkeys[0])
+        y_sim["cint"] = dist.LogNormal(loc=jnp.log(y_sim["cint"]), scale=0.1).sample(subkeys[1])
+        y_sim["nrf2"] = dist.LogNormal(loc=jnp.log(y_sim["nrf2"]), scale=0.1).sample(subkeys[2])
+        y_sim["lethality"] = dist.Binomial(total_count=9, probs=y_sim["lethality"]).sample(subkeys[3]).astype(float)
 
         # add missing data
-        masks = []
+        masks = {}
         key, *subkeys = jax.random.split(key, 5)
-        for i in range(4):
-            nans = dist.Bernoulli(probs=nan_frac).expand(y_sim[i].shape).sample(subkeys[i])
-            y_sim[i] = y_sim[i].at[jnp.nonzero(nans)].set(jnp.nan)
+        for i, (k, val) in enumerate(y_sim.items()):
+            nans = dist.Bernoulli(probs=nan_frac).expand(val.shape).sample(subkeys[i])
+            val = val.at[jnp.nonzero(nans)].set(jnp.nan)
             m = jnp.where(nans==1, False, True)
-            masks.append(m)
+            masks.update({k: m})
+            y_sim.update({k: val})
 
         return y_sim, masks
 
