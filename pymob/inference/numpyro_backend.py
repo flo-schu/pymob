@@ -68,6 +68,24 @@ class NumpyroBackend:
         )
     
 
+    @property
+    def chains(self):
+        return self.simulation.config.getint(
+            "inference.numpyro", "chains", fallback=1
+        )
+    
+    @property
+    def draws(self):
+        return self.simulation.config.getint(
+            "inference.numpyro", "draws", fallback=1000
+        )
+    
+    @property
+    def warmup(self):
+        return self.simulation.config.getint(
+            "inference.numpyro", "warmup", fallback=self.draws
+        )
+
     def model_parser(self):
         def evaluator(theta, seed=None):
             evaluator = self.simulation.dispatch(theta=theta)
@@ -242,8 +260,7 @@ class NumpyroBackend:
     def run(self):
         # jax.config.update("jax_enable_x64", True)
 
-        n_chains = 1
-        numpyro.set_host_device_count(n_chains)
+        numpyro.set_host_device_count(self.chains)
 
         # define parameters of the model
         theta = self.simulation.model_parameter_dict
@@ -259,8 +276,8 @@ class NumpyroBackend:
         # y0 = (18.0, 0.0, 0.0, 0.0)
         # ode_sol = partial(solver, y0=y0, t=t)
         # y_sim = ode_sol(theta=theta)
-        # obs, masks = self.generate_artificial_data(theta, key=next(keys), nan_frac=0.0)
-        obs, masks = self.observation_parser()
+        obs, masks = self.generate_artificial_data(theta, key=next(keys), nan_frac=0.0)
+        # obs, masks = self.observation_parser()
         n = len(self.simulation.coordinates["id"])
         # real observations
 
@@ -268,8 +285,6 @@ class NumpyroBackend:
         # model = partial(model, solver=ode_sol)    
         model = partial(self.model, solver=self.evaluator)    
             
-        self.prior_predictive_checks(model, next(keys))
-        
         kernel = infer.NUTS(
             model, 
             dense_mass=True, 
@@ -285,9 +300,9 @@ class NumpyroBackend:
         # TODO: Try with init args
         mcmc = infer.MCMC(
             sampler=kernel,
-            num_warmup=2000,
-            num_samples=2000,
-            num_chains=n_chains,
+            num_warmup=self.warmup,
+            num_samples=self.draws,
+            num_chains=self.chains,
             progress_bar=True,
         )
 
