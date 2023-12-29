@@ -315,9 +315,30 @@ class NumpyroBackend:
         mcmc.run(next(keys), obs=obs, masks=masks)
         mcmc.print_summary()
 
-        idata = az.from_numpyro(mcmc)
+        idata = az.from_numpyro(
+            mcmc, 
+            dims=self.posterior_data_structure,
+            coords=self.posterior_coordinates,
+        )
         self.idata = idata
 
+
+    @property
+    def posterior_data_structure(self):
+        data_structure = self.simulation.data_structure.copy()
+        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
+        data_structure.update(data_structure_loglik)
+        return data_structure
+    
+    @property
+    def posterior_coordinates(self):
+        posterior_coords = self.simulation.coordinates.copy()
+        posterior_coords.update({
+            "draw": list(range(self.draws)), 
+            "chain": list(range(self.chains))
+        })
+        return posterior_coords
+    
     def prior_predictive_checks(self, seed=1):
         key = jax.random.PRNGKey(seed)
         model = partial(self.model, solver=self.evaluator)    
@@ -337,11 +358,8 @@ class NumpyroBackend:
 
         preds = self.simulation.data_variables
         priors = list(self.simulation.model_parameter_dict.keys())
-        posterior_coords = self.simulation.coordinates.copy()
-        posterior_coords.update({"draw": list(range(100)), "chain": [0]})
-        data_structure = self.simulation.data_structure.copy()
-        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
-        data_structure.update(data_structure_loglik)
+        posterior_coords = self.posterior_coords
+        data_structure = self.posterior_data_structure
         
         idata = az.from_dict(
             observed_data=obs,
