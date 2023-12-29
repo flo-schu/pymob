@@ -339,6 +339,12 @@ class NumpyroBackend:
         self.idata = idata
         self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_prior_predictions.nc")
     
+    @staticmethod
+    def get_dict(group: xr.Dataset):
+        data_dict = group.to_dict()["data_vars"]
+        return {k: np.array(val["data"]) for k, val in data_dict.items()}
+
+
     def store_results(self):
         self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
 
