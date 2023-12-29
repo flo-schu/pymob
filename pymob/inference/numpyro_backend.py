@@ -1,0 +1,535 @@
+from functools import partial, lru_cache
+from pymob import SimulationBase
+import numpyro
+import jax
+import jax.numpy as jnp
+import numpy as np
+from numpyro import distributions as dist
+from numpyro.infer import Predictive
+from numpyro.distributions import Normal, transforms, TransformedDistribution
+from numpyro import infer
+import xarray as xr
+import arviz as az
+from diffrax import (
+    diffeqsolve, 
+    Dopri5, 
+    ODETerm, 
+    SaveAt, 
+    PIDController, 
+)
+
+
+def LogNormalTrans(loc, scale):
+    return TransformedDistribution(
+        Normal(0,1), 
+        [
+            transforms.AffineTransform(loc=jnp.log(loc), scale=scale), 
+            exp()
+        ]
+    )
+
+exp = transforms.ExpTransform
+sigmoid = transforms.SigmoidTransform
+C = transforms.ComposeTransform
+
+DISTRIBUTION_MAPPER = {
+    "lognorm": dist.LogNormal,
+    "binom": dist.Binomial,
+    "normal": dist.Normal,
+}
+
+class NumpyroBackend:
+    def __init__(
+        self, 
+        simulation: SimulationBase
+    ):
+        self.simulation = simulation
+        self.evaluator = self.model_parser()
+        self.prior = ...
+        self.distance_function = ...
+        # self.observations, self.masks = self.observation_parser()
+
+        self.abc = None
+        self.history = None
+        self.posterior = None
+        self.idata: az.InferenceData
+
+    @property
+    def plot_function(self):
+        return self.simulation.config.get(
+            "inference", "plot_function", 
+            fallback=None
+        )
+    
+    @property
+    def n_predictions(self):
+        return self.simulation.config.getint(
+            "inference", "n_predictions", fallback=None
+        )
+    
+
+    @property
+    def chains(self):
+        return self.simulation.config.getint(
+            "inference.numpyro", "chains", fallback=1
+        )
+    
+    @property
+    def draws(self):
+        return self.simulation.config.getint(
+            "inference.numpyro", "draws", fallback=1000
+        )
+    
+    @property
+    def warmup(self):
+        return self.simulation.config.getint(
+            "inference.numpyro", "warmup", fallback=self.draws
+        )
+
+    def model_parser(self):
+        def evaluator(theta, seed=None):
+            evaluator = self.simulation.dispatch(theta=theta)
+            evaluator(seed)
+            return evaluator.Y
+        
+        return evaluator
+
+    def model(self):
+        pass
+
+
+    def observation_parser(self):
+        obs = self.simulation.observations \
+            .transpose(*self.simulation.dimensions)
+        data_vars = self.simulation.data_variables
+
+        masks = {}
+        observations = {}
+        for d in data_vars:
+            o = jnp.array(obs[d].values)
+            m = jnp.logical_not(jnp.isnan(o))
+            observations.update({d:o})
+            masks.update({d:m})
+        
+        # masking
+        # m = jnp.nonzero(mask)[0]
+        return observations, masks
+    
+    def generate_artificial_data(self, theta, key, nan_frac=0.2):  
+        # create artificial data from Evaluator      
+        y_sim = self.evaluator(theta)
+        key, *subkeys = jax.random.split(key, 5)
+        y_sim["cext"] = dist.LogNormal(loc=jnp.log(y_sim["cext"]), scale=0.1).sample(subkeys[0])
+        y_sim["cint"] = dist.LogNormal(loc=jnp.log(y_sim["cint"]), scale=0.1).sample(subkeys[1])
+        y_sim["nrf2"] = dist.LogNormal(loc=jnp.log(y_sim["nrf2"]), scale=0.1).sample(subkeys[2])
+        y_sim["lethality"] = dist.Binomial(total_count=9, probs=y_sim["lethality"]).sample(subkeys[3]).astype(float)
+
+        # add missing data
+        masks = {}
+        key, *subkeys = jax.random.split(key, 5)
+        for i, (k, val) in enumerate(y_sim.items()):
+            nans = dist.Bernoulli(probs=nan_frac).expand(val.shape).sample(subkeys[i])
+            val = val.at[jnp.nonzero(nans)].set(jnp.nan)
+            m = jnp.where(nans==1, False, True)
+            masks.update({k: m})
+            y_sim.update({k: val})
+
+        return y_sim, masks
+
+    @staticmethod
+    def param_to_prior(par):
+        parname = par.name
+        distribution, cluttered_arguments = par.prior.split("(", 1)
+        param_strings = cluttered_arguments.split(")", 1)[0].split(",")
+        params = {}
+        for parstr in param_strings:
+            key, val = parstr.split("=")
+            params.update({key:float(val)})
+
+        return parname, distribution, params
+
+    def param(self, name):
+        return [p for p in self.simulation.free_model_parameters if p.name == name][0]
+
+    @classmethod
+    def parse_prior(cls, par):
+        name, dist, params = cls.param_to_prior(par)
+        distribution = DISTRIBUTION_MAPPER[dist]
+        
+        return numpyro.sample(name, distribution, **params)
+
+    def parse_model(self):
+        theta = {}
+        for par in self.simulation.free_model_parameters:
+            p_n, p_d, p_p = self.param_to_prior(par=par)
+            pri = numpyro.sample(p_n, dist.LogNormal(loc=p_p["scale"], scale=p_p["s"]))
+            
+            theta.update({p_n: pri})
+       
+    def create_solver(self):
+        from mod import tktd_rna_3, mappar
+
+        @jax.jit
+        def solver(theta, y0, t):
+            """Solves the SIR model numerically
+
+            A total population of 1000 persons is assumed. The initial value of susceptible
+            persons is 1000 - init_i, whereas the initial number of infected persons is init_i.
+            The solution is returned at the given meas_times.
+
+            Args:
+                init_i: Initial value of infected persons (state I)
+                params: Array with parameters general death rate, cure/death rate,
+                    general birth rate, infection rate (in this order)
+                meas_times: Measurement time points
+
+            Returns:
+                Array with solution at the measurement time points (shape is n_meas x 3)
+            """
+
+
+            args = mappar(tktd_rna_3, theta, exclude=["X", "t"]) 
+            f = lambda t, y0, params: tktd_rna_3(t, y0, *params)
+        
+            term = ODETerm(f)
+            solver = Dopri5()
+            saveat = SaveAt(ts=t)
+            stepsize_controller = PIDController(rtol=1e-6, atol=1e-7)
+
+            sol = diffeqsolve(
+                term, solver, 
+                t0=24, t1=120.0, dt0=0.1, 
+                y0=y0, 
+                saveat=saveat,
+                stepsize_controller=stepsize_controller, 
+                args=args,
+                max_steps=10**6
+            )
+            return sol.ys
+        return solver
+
+    @staticmethod
+    def model(solver, obs, masks):
+        EPS = 1e-8
+
+        k_i = numpyro.sample("k_i", LogNormalTrans(loc=5, scale=1))
+        r_rt = numpyro.sample("r_rt", LogNormalTrans(loc=0.1, scale=1))
+        r_rd = numpyro.sample("r_rd", LogNormalTrans(loc=0.5, scale=1))
+        v_rt = numpyro.sample("v_rt", LogNormalTrans(loc=1.0, scale=1))
+        z_ci = numpyro.sample("z_ci", LogNormalTrans(loc=500.0, scale=1))
+        r_pt = numpyro.sample("r_pt", LogNormalTrans(loc=0.1, scale=1))
+        r_pd = numpyro.sample("r_pd", LogNormalTrans(loc=0.01, scale=1))
+        # volume_ratio = numpyro.sample("volume_ratio", dist.LogNormal(loc=jnp.log(5000), scale=1))
+        z = numpyro.sample("z", LogNormalTrans(loc=2.0, scale=1))
+        kk = numpyro.sample("kk", LogNormalTrans(loc=0.005, scale=1))
+        b_base = numpyro.sample("b_base", LogNormalTrans(loc=0.1, scale=1))
+        sigma_cint = numpyro.sample("sigma_cint", dist.HalfNormal(scale=0.1))
+        sigma_cext = numpyro.sample("sigma_cext", dist.HalfNormal(scale=0.1))
+        sigma_nrf2 = numpyro.sample("sigma_nrf2", dist.HalfNormal(scale=0.1))
+        theta = {
+            "k_i": k_i,
+            "r_rt": r_rt,
+            "r_rd": r_rd,
+            "v_rt": v_rt,
+            "z_ci": z_ci,
+            "r_pt": r_pt,
+            "r_pd": r_pd,
+            "volume_ratio": jnp.inf,
+            "z": z,
+            "kk": kk,
+            "b_base": b_base,
+            # "z": 2.0,
+            # "kk": 0.02,
+            # "b_base": 0.1,
+        }
+        sim = solver(theta=theta)
+        cext = numpyro.deterministic("cext", sim["cext"])
+        cint = numpyro.deterministic("cint", sim["cint"])
+        nrf2 = numpyro.deterministic("nrf2", sim["nrf2"])
+        leth = numpyro.deterministic("lethality", sim["lethality"])
+
+        # cext = numpyro.sample("cext", dist.LogNormal(loc=jnp.log(y[0]), scale=sigma_cext).mask(mask["cext"].values), obs=obs["cext"].values)
+        # cint = numpyro.sample("cint", dist.LogNormal(loc=jnp.log(y[1]), scale=sigma_cint).mask(mask["cint"].values), obs=obs["cint"].values)
+        numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks["cext"]), obs=obs["cext"] + EPS)
+        numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks["cint"]), obs=obs["cint"] + EPS)
+        numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks["nrf2"]), obs=obs["nrf2"] + EPS)
+        numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=9).mask(masks["lethality"]), obs=obs["lethality"])
+
+
+    def run(self):
+        # jax.config.update("jax_enable_x64", True)
+
+        numpyro.set_host_device_count(self.chains)
+
+        # define parameters of the model
+        theta = self.simulation.model_parameter_dict
+        theta.update({"volume_ratio": 5000})
+        coords = self.simulation.coordinates.copy()
+        # self.simulation.coordinates["id"] = self.simulation.coordinates["id"][0:1]
+        key = jax.random.PRNGKey(1)
+        key, *subkeys = jax.random.split(key, 20)
+        keys = iter(subkeys)
+
+        # create artificial data from local solver
+        # t = jnp.array(self.simulation.coordinates["time"])
+        # y0 = (18.0, 0.0, 0.0, 0.0)
+        # ode_sol = partial(solver, y0=y0, t=t)
+        # y_sim = ode_sol(theta=theta)
+        obs, masks = self.generate_artificial_data(theta, key=next(keys), nan_frac=0.0)
+        # obs, masks = self.observation_parser()
+        n = len(self.simulation.coordinates["id"])
+        # real observations
+
+        # bind the solver to the numpyro model
+        # model = partial(model, solver=ode_sol)    
+        model = partial(self.model, solver=self.evaluator)    
+            
+        kernel = infer.NUTS(
+            model, 
+            dense_mass=True, 
+            # inverse_mass_matrix=inverse_mass_matrix,
+            step_size=0.01,
+            adapt_mass_matrix=True,
+            adapt_step_size=True,
+            max_tree_depth=8,
+            target_accept_prob=0.8,
+            init_strategy=infer.init_to_median
+        )
+
+        # TODO: Try with init args
+        mcmc = infer.MCMC(
+            sampler=kernel,
+            num_warmup=self.warmup,
+            num_samples=self.draws,
+            num_chains=self.chains,
+            progress_bar=True,
+        )
+
+
+    
+        with numpyro.handlers.seed(rng_seed=1):
+            trace = numpyro.handlers.trace(model).get_trace(obs=obs, masks=masks)
+        print(numpyro.util.format_shapes(trace))
+    
+        mcmc.run(next(keys), obs=obs, masks=masks)
+        mcmc.print_summary()
+
+        idata = az.from_numpyro(
+            mcmc, 
+            dims=self.posterior_data_structure,
+            coords=self.posterior_coordinates,
+        )
+        self.idata = idata
+
+
+    @property
+    def posterior_data_structure(self):
+        data_structure = self.simulation.data_structure.copy()
+        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
+        data_structure.update(data_structure_loglik)
+        return data_structure
+    
+    @property
+    def posterior_coordinates(self):
+        posterior_coords = self.simulation.coordinates.copy()
+        posterior_coords.update({
+            "draw": list(range(self.draws)), 
+            "chain": list(range(self.chains))
+        })
+        return posterior_coords
+    
+    def prior_predictive_checks(self, seed=1):
+        key = jax.random.PRNGKey(seed)
+        model = partial(self.model, solver=self.evaluator)    
+            
+        obs, masks = self.observation_parser()
+
+        prior_predictive = Predictive(model, num_samples=100, batch_ndims=2)
+        prior_predictions = prior_predictive(key, obs=obs, masks=masks)
+
+        loglik = numpyro.infer.log_likelihood(
+            model=model, 
+            posterior_samples=prior_predictions, 
+            batch_ndims=2, 
+            obs=obs, 
+            masks=masks
+        )
+
+        preds = self.simulation.data_variables
+        priors = list(self.simulation.model_parameter_dict.keys())
+        posterior_coords = self.posterior_coords
+        data_structure = self.posterior_data_structure
+        
+        idata = az.from_dict(
+            observed_data=obs,
+            prior={k: v for k, v in prior_predictions.items() if k in priors},
+            prior_predictive={k: v for k, v in prior_predictions.items() if k in preds},
+            log_likelihood=loglik,
+            dims=data_structure,
+            coords=posterior_coords,
+        )
+
+        self.idata = idata
+        self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_prior_predictions.nc")
+    
+    @staticmethod
+    def get_dict(group: xr.Dataset):
+        data_dict = group.to_dict()["data_vars"]
+        return {k: np.array(val["data"]) for k, val in data_dict.items()}
+
+
+    @lru_cache
+    def posterior_predictions(self, n: int=None, seed=1):
+        posterior = self.idata.posterior
+        stacked_posterior = posterior.stack(sample=("chain", "draw"))
+        n_samples = len(stacked_posterior.sample)
+    
+        if n is not None:
+            key = jax.random.PRNGKey(seed)
+            selection = jax.random.choice(key=key, a=jnp.array((range(n_samples))), replace=False, shape=(n, ))
+            stacked_posterior = stacked_posterior.isel(sample=selection)
+
+
+        preds = []
+        for i in stacked_posterior.sample:
+            sample = i.values.tolist()
+            chain, draw = sample
+            theta = stacked_posterior.sel(sample=sample)
+            evaluator = self.simulation.dispatch(theta=self.get_dict(theta))
+            evaluator()
+            ds = evaluator.results
+
+            ds = ds.assign_coords({"chain": chain, "draw": draw})
+            ds = ds.expand_dims(("chain", "draw"))
+            preds.append(ds)
+
+
+        # key = jax.random.PRNGKey(seed)
+        # model = partial(self.model, solver=self.evaluator)    
+        # predict = numpyro.infer.Predictive(model, posterior_samples=posterior, batch_ndims=2)
+        # predict(key, obs=obs, masks=masks)
+        
+
+        return xr.combine_by_coords(preds)
+
+    def store_results(self):
+        self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
+
+    def load_results(self):
+        self.idata = az.from_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
+
+    def plot(self):
+        az.plot_trace(self.idata)
+        az.plot_pair(self.idata, divergences=True)
+
+
+    def create_idata_from_unlabelled(self):
+        posterior = self.idata.posterior.to_dict()["data_vars"]
+        likelihood = self.idata.log_likelihood.to_dict()["data_vars"]
+        sample_stats = self.idata.sample_stats.to_dict()["data_vars"]
+        obs, masks = self.observation_parser()
+
+        posterior = {k: np.array(val["data"]) for k, val in posterior.items()}
+        likelihood = {k: np.array(val["data"]) for k, val in likelihood.items()}
+        sample_stats = {k: np.array(val["data"]) for k, val in sample_stats.items()}
+        
+        data_structure = self.simulation.data_structure.copy()
+        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
+        data_structure.update(data_structure_loglik)
+        
+        posterior_coords = self.simulation.coordinates.copy()
+        posterior_coords.update({"draw": list(range(2000)), "chain": [0]})
+        self.idata = az.from_dict(
+            observed_data=obs,
+            posterior={k: v for k, v in posterior.items() if k in priors},
+            posterior_predictive={k: v for k, v in posterior.items() if k in preds},
+            log_likelihood=likelihood,
+            sample_stats=sample_stats,
+            dims=data_structure,
+            coords=posterior_coords,
+        )
+
+    def variational_inference(self):
+        model = partial(self.model.__func__, solver=self.evaluator)    
+        obs, masks = self.observation_parser()
+
+        n_chains = 1
+        numpyro.set_host_device_count(n_chains)
+        # Use Variational inference to reparameterize a model 
+        guide = AutoBNAFNormal(
+            model, hidden_factors=[8, 8]
+        )
+        svi = SVI(model, guide, Adam(0.003), Trace_ELBO())
+        
+        print("Start training guide...")
+        key, *subkeys = jax.random.split(key, 3)
+        svi_result = svi.run(subkeys[0], num_steps=10000, obs=obs, masks=masks)
+        # guide_samples = guide.sample_posterior(
+        #     subkeys[1], svi_result.params, sample_shape=(1000,)
+        # )["x"].copy()
+
+
+        print("\nStart NeuTra HMC...")
+        neutra = NeuTraReparam(guide, svi_result.params)
+        neutra_model = neutra.reparam(model)
+        reparameterized_nuts_kernel = NUTS(neutra_model)
+
+        mcmc = infer.MCMC(
+            sampler=reparameterized_nuts_kernel,
+            num_warmup=1000,
+            num_samples=1000,
+            num_chains=n_chains,
+            progress_bar=True,
+        )
+
+        mcmc.run(subkey[2], obs=obs, masks=masks)
+        mcmc.print_summary()
+        # these arguments are from the adaptation procedure and can be saved
+        # and reused for new runs without warmup.
+
+    def sample_from_initialized_matrix(self):
+        model = partial(self.model.__func__, solver=self.evaluator)    
+        inverse_mass_matrix = mcmc.last_state.adapt_state.inverse_mass_matrix
+        step_size = mcmc.last_state.adapt_state.step_size
+        
+
+        sampling_kernel = infer.NUTS(
+            model, 
+            dense_mass=False, 
+            inverse_mass_matrix=inverse_mass_matrix,
+            step_size=step_size,
+            adapt_mass_matrix=True,
+            adapt_step_size=True,
+            max_tree_depth=8,
+            target_accept_prob=0.8,
+            init_strategy=infer.init_to_median
+        )
+
+        mcmc_sampling = infer.MCMC(
+            sampler=sampling_kernel,
+            num_warmup=100,
+            num_samples=1000,
+            num_chains=n_chains,
+            progress_bar=True,
+        )
+
+        key, subkey = jax.random.split(key)
+        # obs, masks = generate_artificial_data(key)
+
+        mcmc_sampling.run(subkey, obs=obs, masks=masks)
+
+        mcmc_sampling.print_summary()
+
+        # also get point to initialize
+
+# # these arguments are from the adaptation procedure and can be saved
+# # and reused for new runs without warmup.
+# inverse_mass_matrix = mcmc.last_state.adapt_state.inverse_mass_matrix
+# step_size = mcmc.last_state.adapt_state.step_size
+
+# # also get point to initialize
+# proposal = mcmc.last_state
+
+# apprently also last state can be passed to the run method
+# TODO: It would possibly be a good idea to split warmup and sampling 
+#       and save the mass matrix if warump was successful. 

@@ -31,7 +31,8 @@ def plot_loghist(x, name="", bins=10, ax=None, hdi=False, decorate=True,
 
     ax.set_xscale("log")
     ax.set_ylim(0, np.max(lhist)*1.1)
-    plt.savefig("work/case_studies/core_daphnia/results/expo_control_3/plots/test.png")
+    return ax
+    # plt.savefig("work/case_studies/core_daphnia/results/expo_control_3/plots/test.png")
 
 def plot_hist(x, name="", bins=10, ax=None, hdi=False, decorate=True):
     median = np.median(x)
