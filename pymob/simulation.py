@@ -54,6 +54,7 @@ class SimulationBase:
         
         coords = self.set_coordinates(input=self.input_file_paths)
         self.coordinates = self.create_coordinates(coordinate_data=coords)
+        self.var_dim_mapper = self.create_dim_index()
         self.free_model_parameters  = self.set_free_model_parameters()
 
         if not os.path.exists(self.output_path):
@@ -111,6 +112,8 @@ class SimulationBase:
             solver=solver,
             parameters=model_parameters,
             dimensions=self.dimensions,
+            var_dim_mapper=self.var_dim_mapper,
+            data_structure=self.data_structure,
             data_variables=self.data_variables,
             coordinates=self.coordinates,
             # TODO: pass the whole simulation settings section
@@ -643,4 +646,46 @@ class SimulationBase:
         except KeyError:
             return {}
         
-            
+    @property
+    def evaluator_dim_order(self):
+        return self.config.getlist("simulation", "evaluator_dim_order", fallback=None)
+
+    def create_dim_index(self):
+        # TODO: If a dimensionality config seciton is implemented this function
+        # may become superflous
+        sim_dims = self.dimensions
+        evaluator_dims = self.evaluator_dim_order
+        obs_ordered = self.observations.transpose(*sim_dims)
+
+        var_dim_mapper = {}
+        for var in self.data_variables:
+            obs_var_dims = obs_ordered[var].dims
+            var_dim_mapper.update({
+                var: [obs_var_dims.index(e_i) for e_i in evaluator_dims if e_i in obs_var_dims]
+            })
+
+        return var_dim_mapper
+    
+    @property
+    def data_structure(self):
+        # TODO: If a dimensionality config seciton is implemented this function
+        # may become superflous
+        obs_ordered = self.observations.transpose(*self.dimensions)
+
+        data_structure = {}
+        for var in self.data_variables:
+            obs_var_dims = obs_ordered[var].dims
+            data_structure.update({
+                var: list(obs_var_dims)
+            })
+
+        return data_structure
+
+    def reorder_dims(self, Y):
+        results = {}
+        for var, mapper in self.var_dim_mapper.items():
+            results.update({
+                var: Y[var][np.array(mapper)]
+            })
+    
+        return results
