@@ -52,6 +52,20 @@ class NumpyroBackend:
         self.history = None
         self.posterior = None
 
+    @property
+    def plot_function(self):
+        return self.simulation.config.get(
+            "inference", "plot_function", 
+            fallback=None
+        )
+    
+    @property
+    def n_predictions(self):
+        return self.simulation.config.getint(
+            "inference", "n_predictions", fallback=None
+        )
+    
+
     def model_parser(self):
         def evaluator(theta, seed=None):
             evaluator = self.simulation.dispatch(theta=theta)
