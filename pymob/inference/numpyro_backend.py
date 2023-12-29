@@ -356,6 +356,32 @@ class NumpyroBackend:
         az.plot_pair(self.idata, divergences=True)
 
 
+    def create_idata_from_unlabelled(self):
+        posterior = self.idata.posterior.to_dict()["data_vars"]
+        likelihood = self.idata.log_likelihood.to_dict()["data_vars"]
+        sample_stats = self.idata.sample_stats.to_dict()["data_vars"]
+        obs, masks = self.observation_parser()
+
+        posterior = {k: np.array(val["data"]) for k, val in posterior.items()}
+        likelihood = {k: np.array(val["data"]) for k, val in likelihood.items()}
+        sample_stats = {k: np.array(val["data"]) for k, val in sample_stats.items()}
+        
+        data_structure = self.simulation.data_structure.copy()
+        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
+        data_structure.update(data_structure_loglik)
+        
+        posterior_coords = self.simulation.coordinates.copy()
+        posterior_coords.update({"draw": list(range(2000)), "chain": [0]})
+        self.idata = az.from_dict(
+            observed_data=obs,
+            posterior={k: v for k, v in posterior.items() if k in priors},
+            posterior_predictive={k: v for k, v in posterior.items() if k in preds},
+            log_likelihood=likelihood,
+            sample_stats=sample_stats,
+            dims=data_structure,
+            coords=posterior_coords,
+        )
+
     def variational_inference(self):
         model = partial(self.model.__func__, solver=self.evaluator)    
         obs, masks = self.observation_parser()
