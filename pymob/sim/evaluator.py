@@ -1,6 +1,7 @@
 from typing import Callable, Dict, List
 import inspect
 import xarray as xr
+import numpy as np
 
 def create_dataset_from_numpy(Y, Y_names, coordinates):
     n_vars = Y.shape[-1]
@@ -23,6 +24,16 @@ def create_dataset_from_numpy(Y, Y_names, coordinates):
 
     return dataset
 
+def create_dataset_from_dict(Y: dict, data_structure, coordinates):
+    arrays = {}
+    for k, v in Y.items():
+        dims = data_structure[k]
+        coords = {d: coordinates[d] for d in dims}
+        da = xr.DataArray(v, coords=coords, dims=dims)
+        arrays.update({k: da})
+
+    return xr.Dataset(arrays)
+
 class Evaluator:
     """The Evaluator is an instance to evaluate a model. It's purpose is primarily
     to create objects that can be spawned and evaluated in parallel and can 
@@ -41,6 +52,8 @@ class Evaluator:
             solver: Callable,
             parameters: Dict,
             dimensions: List,
+            var_dim_mapper: List,
+            data_structure: Dict,
             coordinates: Dict,
             data_variables: List,
             stochastic: bool,
@@ -50,10 +63,12 @@ class Evaluator:
         self.model = model
         self.parameters = parameters
         self.dimensions = dimensions
+        self.var_dim_mapper = var_dim_mapper
+        self.data_structure = data_structure
         self.data_variables = data_variables
         self.coordinates = coordinates
         self.is_stochastic = stochastic
-        
+                
         # set additional arguments of evaluator
         _ = [setattr(self, key, val) for key, val in kwargs.items()]
 
@@ -65,6 +80,7 @@ class Evaluator:
             self._solver = solver
 
         self.get_call_signature()
+
 
 
     def get_call_signature(self):
@@ -96,10 +112,25 @@ class Evaluator:
         self.Y = self._solver(**self._signature)
 
     @property
+    def dimensionality(self):
+        return {key: len(values) for key, values in self.coordinates.items()}
+
+    @property
     def results(self):
-        return create_dataset_from_numpy(
-            Y=self.Y, 
-            Y_names=self.data_variables, 
-            coordinates=self.coordinates
-        )
+        if isinstance(self.Y, dict):
+            return create_dataset_from_dict(
+                Y=self.Y, 
+                coordinates=self.coordinates,
+                data_structure=self.data_structure,
+            )
+        elif isinstance(self.Y, np.ndarray):
+            return create_dataset_from_numpy(
+                Y=self.Y,
+                Y_names=self.data_variables,
+                coordinates=self.coordinates,
+            )
+        else:
+            raise NotImplementedError(
+                "Results returned by the solver must be of type Dict or np.ndarray."
+            )
     
