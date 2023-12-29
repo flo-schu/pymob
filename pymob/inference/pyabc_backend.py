@@ -261,7 +261,7 @@ class PyabcBackend:
         pass
    
     @lru_cache
-    def make_posterior_predictions(self, n=50, seed=1):
+    def posterior_predictions(self, n=50, seed=1):
         rng = np.random.default_rng(seed)
         post = self.posterior
         total_samples = post.samples.shape[1]
