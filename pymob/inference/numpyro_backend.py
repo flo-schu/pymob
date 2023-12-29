@@ -302,10 +302,42 @@ class NumpyroBackend:
         idata = az.from_numpyro(mcmc)
         self.idata = idata
 
-    def prior_predictive_checks(self, model, key):
+    def prior_predictive_checks(self, seed=1):
+        key = jax.random.PRNGKey(seed)
+        model = partial(self.model, solver=self.evaluator)    
+            
         obs, masks = self.observation_parser()
-        prior_predictive = Predictive(model, num_samples=100)
+
+        prior_predictive = Predictive(model, num_samples=100, batch_ndims=2)
         prior_predictions = prior_predictive(key, obs=obs, masks=masks)
+
+        loglik = numpyro.infer.log_likelihood(
+            model=model, 
+            posterior_samples=prior_predictions, 
+            batch_ndims=2, 
+            obs=obs, 
+            masks=masks
+        )
+
+        preds = self.simulation.data_variables
+        priors = list(self.simulation.model_parameter_dict.keys())
+        posterior_coords = self.simulation.coordinates.copy()
+        posterior_coords.update({"draw": list(range(100)), "chain": [0]})
+        data_structure = self.simulation.data_structure.copy()
+        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
+        data_structure.update(data_structure_loglik)
+        
+        idata = az.from_dict(
+            observed_data=obs,
+            prior={k: v for k, v in prior_predictions.items() if k in priors},
+            prior_predictive={k: v for k, v in prior_predictions.items() if k in preds},
+            log_likelihood=loglik,
+            dims=data_structure,
+            coords=posterior_coords,
+        )
+
+        self.idata = idata
+        self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_prior_predictions.nc")
     
     def store_results(self):
         self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
