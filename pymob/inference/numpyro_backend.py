@@ -82,16 +82,16 @@ class NumpyroBackend:
 
     def observation_parser(self):
         obs = self.simulation.observations \
-            .transpose("id", "time", "substance")
+            .transpose(*self.simulation.dimensions)
         data_vars = self.simulation.data_variables
 
-        masks = []
-        observations = []
+        masks = {}
+        observations = {}
         for d in data_vars:
             o = jnp.array(obs[d].values)
             m = jnp.logical_not(jnp.isnan(o))
-            observations.append(o)
-            masks.append(m)
+            observations.update({d:o})
+            masks.update({d:m})
         
         # masking
         # m = jnp.nonzero(mask)[0]
