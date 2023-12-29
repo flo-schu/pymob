@@ -1,13 +1,15 @@
-from functools import partial
+from functools import partial, lru_cache
 from pymob import SimulationBase
 import numpyro
 import jax
 import jax.numpy as jnp
+import numpy as np
 from numpyro import distributions as dist
 from numpyro.infer import Predictive
 from numpyro.distributions import Normal, transforms, TransformedDistribution
 from numpyro import infer
-import arviz
+import xarray as xr
+import arviz as az
 from diffrax import (
     diffeqsolve, 
     Dopri5, 
@@ -16,7 +18,6 @@ from diffrax import (
     PIDController, 
 )
 
-import arviz as az
 
 def LogNormalTrans(loc, scale):
     return TransformedDistribution(
