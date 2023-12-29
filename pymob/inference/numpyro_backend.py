@@ -345,6 +345,40 @@ class NumpyroBackend:
         return {k: np.array(val["data"]) for k, val in data_dict.items()}
 
 
+    @lru_cache
+    def posterior_predictions(self, n: int=None, seed=1):
+        posterior = self.idata.posterior
+        stacked_posterior = posterior.stack(sample=("chain", "draw"))
+        n_samples = len(stacked_posterior.sample)
+    
+        if n is not None:
+            key = jax.random.PRNGKey(seed)
+            selection = jax.random.choice(key=key, a=jnp.array((range(n_samples))), replace=False, shape=(n, ))
+            stacked_posterior = stacked_posterior.isel(sample=selection)
+
+
+        preds = []
+        for i in stacked_posterior.sample:
+            sample = i.values.tolist()
+            chain, draw = sample
+            theta = stacked_posterior.sel(sample=sample)
+            evaluator = self.simulation.dispatch(theta=self.get_dict(theta))
+            evaluator()
+            ds = evaluator.results
+
+            ds = ds.assign_coords({"chain": chain, "draw": draw})
+            ds = ds.expand_dims(("chain", "draw"))
+            preds.append(ds)
+
+
+        # key = jax.random.PRNGKey(seed)
+        # model = partial(self.model, solver=self.evaluator)    
+        # predict = numpyro.infer.Predictive(model, posterior_samples=posterior, batch_ndims=2)
+        # predict(key, obs=obs, masks=masks)
+        
+
+        return xr.combine_by_coords(preds)
+
     def store_results(self):
         self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
 
