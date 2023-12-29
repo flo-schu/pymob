@@ -52,6 +52,7 @@ class NumpyroBackend:
         self.abc = None
         self.history = None
         self.posterior = None
+        self.idata: az.InferenceData
 
     @property
     def plot_function(self):
