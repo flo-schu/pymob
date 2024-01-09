@@ -1,7 +1,19 @@
+from functools import partial
 from pymob.sim.solvetools import mappar
-from scipy.integrate import odeint
+from scipy.integrate import solve_ivp
+import jax.numpy as jnp
+import jax
+from diffrax import (
+    diffeqsolve, 
+    Dopri5, 
+    Kvaerno5,
+    ODETerm, 
+    SaveAt, 
+    PIDController, 
+    RecursiveCheckpointAdjoint
+)
 
-def solve(model, parameters, coordinates, foo):
+def solve(model, parameters, coordinates):
     """Initial value problems always need the same number of recurrent arguments
 
     - parameters: define the model
@@ -21,16 +33,52 @@ def solve(model, parameters, coordinates, foo):
 
     """
     odeargs = mappar(model, parameters["parameters"], exclude=["t", "y"])
-
-    return odeint(
-        func=model,
+    t = coordinates["time"]
+    return solve_ivp(
+        fun=model,
         y0=parameters["y0"],
-        t=coordinates["time"],
+        t_span=(t[0], t[-1]),
+        t_eval=t,
         args=odeargs,
     )
 
+def solve_jax(model, parameters, coordinates, data_variables):
+    time = jnp.array(coordinates["time"])
+    params = parameters["parameters"]
+    y0 = parameters["y0"]
+    ode_args = mappar(model, params, exclude=["t", "y"])
 
-def lotka_volterra(y, t, alpha, beta, gamma, delta):
+    result = odesolve(model, tuple(y0), time, ode_args)
+    res_dict = {v:val for v, val in zip(data_variables, result)}
+    return res_dict
+
+@partial(jax.jit, static_argnames=["model"])
+def odesolve(model, y0, time, args):
+    f = lambda t, y, args: model(t, y, *args)
+    
+    term = ODETerm(f)
+    solver = Dopri5()
+    saveat = SaveAt(ts=time)
+    stepsize_controller = PIDController(rtol=1e-6, atol=1e-7)
+
+    sol = diffeqsolve(
+        terms=term, 
+        solver=solver, 
+        t0=time.min(), 
+        t1=time.max(), 
+        dt0=0.1, 
+        y0=tuple(y0), 
+        args=args, 
+        saveat=saveat, 
+        stepsize_controller=stepsize_controller,
+        adjoint=RecursiveCheckpointAdjoint(),
+        max_steps=10**7
+    )
+    
+    return list(sol.ys)
+
+
+def lotka_volterra(t, y, alpha, beta, gamma, delta):
     """
     Calculate the rate of change of prey and predator populations.
 
@@ -57,5 +105,5 @@ def lotka_volterra(y, t, alpha, beta, gamma, delta):
     prey, predator = y
     dprey_dt = alpha * prey - beta * prey * predator
     dpredator_dt = delta * prey * predator - gamma * predator
-    return [dprey_dt, dpredator_dt]
+    return dprey_dt, dpredator_dt
 

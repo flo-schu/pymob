@@ -1,11 +1,11 @@
 import numpy as np
 import xarray as xr
-from mod import lotka_volterra, solve
+from mod import lotka_volterra, solve, solve_jax
 from plot import plot_trajectory
 from pymob import SimulationBase
 
 class Simulation(SimulationBase):
-    solver = solve
+    solver = solve_jax
     model = lotka_volterra
 
     def initialize(self, input):
@@ -19,7 +19,7 @@ class Simulation(SimulationBase):
         self.observations = xr.load_dataset(input[1])
         
     @staticmethod
-    def parameterize(free_parameters, model_parameters):
+    def parameterize(free_parameters: dict, model_parameters):
         """Should avoid using input arg but instead take a single dictionary as 
         an input. This also then provides an harmonized IO between model and 
         parameters, which in addition is serializable to json.
@@ -29,7 +29,7 @@ class Simulation(SimulationBase):
         parameters = model_parameters["parameters"]
         # mapping of parameters *theta* to the model parameters accessed by
         # the solver. This task is necessary for any model 
-        parameters.update(free_parameters["parameters"])
+        parameters.update(free_parameters)
 
         return dict(y0=y0, parameters=parameters)
 
