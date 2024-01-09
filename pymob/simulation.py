@@ -14,7 +14,7 @@ from toopy import Param, FloatParam, IntParam
 
 from pymob.utils.errors import errormsg
 from pymob.utils.store_file import scenario_file, parse_config_section
-from pymob.sim.evaluator import Evaluator
+from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 
 def update_parameters_dict(config, x, parnames):
     for par, val, in zip(parnames, x):
@@ -259,11 +259,25 @@ class SimulationBase:
         )
 
     def results_to_df(self, results):
-        return self.create_dataset_from_numpy(
-            Y=results, 
-            Y_names=self.data_variables, 
-            coordinates=self.coordinates
-        )
+        if isinstance(results, xr.Dataset):
+            return results
+        elif isinstance(results, dict):
+            return create_dataset_from_dict(
+                Y=results, 
+                coordinates=self.coordinates,
+                data_structure=self.data_structure,
+            )
+        elif isinstance(results, np.ndarray):
+            return create_dataset_from_numpy(
+                Y=results,
+                Y_names=self.data_variables,
+                coordinates=self.coordinates,
+            )
+        else:
+            raise NotImplementedError(
+                "Results returned by the solver must be of type Dict or np.ndarray."
+            )
+    
 
     @property
     def results_scaled(self):
@@ -378,7 +392,8 @@ class SimulationBase:
 
     def total_average(self, results):
         """objective function returning the total MSE of the entire dataset"""
-        diff = (self.scale_results(results) - self.observations_scaled).to_array()
+        
+        diff = (self.scale_(self.results_to_df(results)) - self.observations_scaled).to_array()
         return (diff ** 2).mean()
 
     def prior(self):
