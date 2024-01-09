@@ -104,7 +104,7 @@ class PyabcBackend:
             name, distribution, params = cls.param_to_prior(par=mp)
 
             prior = pyabc.RV(distribution, **params)
-            prior_dict.update({parname: prior})
+            prior_dict.update({name: prior})
 
         return pyabc.Distribution(**prior_dict)
 
@@ -122,13 +122,14 @@ class PyabcBackend:
 
     def model_parser(self):
         def model(theta):
-            Y = self.simulation.evaluate(theta)
-            return {"sim_results": Y}
+            evaluator = self.simulation.dispatch(theta=dict(theta))
+            evaluator()
+            return {k: np.array(v) for k, v in evaluator.Y.items()}
         return model
     
     def distance_function_parser(self):
         def distance_function(x, x0):
-            Y = x["sim_results"]
+            Y = {k: v for k, v in x.items() if k in self.simulation.data_variables}
             obj_name, obj_value = self.simulation.objective_function(results=Y)
             return obj_value
         
