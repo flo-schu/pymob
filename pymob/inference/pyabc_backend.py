@@ -293,8 +293,9 @@ class PyabcBackend:
 
         def predict(posterior_sample_id):
             params = post.draw(i=posterior_sample_id)
-            res = self.evaluator(params.to_dict())
-            res = self.simulation.results_to_df(res["sim_results"])
+            evaluator = self.simulation.dispatch(params.to_dict())
+            evaluator()
+            res = evaluator.results
             res = res.assign_coords({"draw": posterior_sample_id, "chain": 1})
             res["params"] = params.samples
             res = res.expand_dims(("chain", "draw"))
@@ -314,7 +315,7 @@ class PyabcBackend:
         ):
         obs = self.simulation.observations.sel(subset)
         
-        post_pred = self.make_posterior_predictions(
+        post_pred = self.posterior_predictions(
             n=self.n_predictions, 
             # seed only controls the parameters samples drawn from posterior
             seed=self.simulation.seed
