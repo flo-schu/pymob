@@ -95,8 +95,11 @@ class PymooBackend:
             "X": params
         }
         
-        with open(f"{self.simulation.output_path}/pymoo_params.json", "w") as fp:
+        file = f"{self.simulation.output_path}/pymoo_params.json"
+        with open(file, "w") as fp:
             json.dump(res_dict, fp, indent=4)
+
+        print(f"written results to {file}")
 
     def run(self):
         """Implements the parallelization in pymoo"""
