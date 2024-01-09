@@ -207,9 +207,30 @@ class PyabcBackend:
             )
         )
         
+        idata = az.from_dict(
+            posterior={key: col.values for key, col in samples.items()},
+            dims=self.posterior_data_structure,
+            coords=self.posterior_coordinates
+        )
+        self.idata = idata
         # posterior
         self.posterior = Posterior(posterior)
 
+    @property
+    def posterior_data_structure(self):
+        data_structure = self.simulation.data_structure.copy()
+        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
+        data_structure.update(data_structure_loglik)
+        return data_structure
+
+    @property
+    def posterior_coordinates(self):
+        posterior_coords = self.simulation.coordinates.copy()
+        posterior_coords.update({
+            "draw": list(range(self.population_size)), 
+            "chain": [0]
+        })
+        return posterior_coords
 
     def plot_chains(self):
 
