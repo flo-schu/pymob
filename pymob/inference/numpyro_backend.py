@@ -209,7 +209,7 @@ class NumpyroBackend:
         return solver
 
     @staticmethod
-    def model(solver, obs, masks):
+    def model(solver, obs, masks, nzfe):
         EPS = 1e-8
 
         k_i = numpyro.sample("k_i", LogNormalTrans(loc=5, scale=1))
@@ -253,7 +253,7 @@ class NumpyroBackend:
         numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks["cext"]), obs=obs["cext"] + EPS)
         numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks["cint"]), obs=obs["cint"] + EPS)
         numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks["nrf2"]), obs=obs["nrf2"] + EPS)
-        numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=9).mask(masks["lethality"]), obs=obs["lethality"])
+        numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=nzfe).mask(masks["lethality"]), obs=obs["lethality"])
 
 
     def run(self):
@@ -275,9 +275,13 @@ class NumpyroBackend:
         # y0 = (18.0, 0.0, 0.0, 0.0)
         # ode_sol = partial(solver, y0=y0, t=t)
         # y_sim = ode_sol(theta=theta)
-        obs, masks = self.generate_artificial_data(theta, key=next(keys), nan_frac=0.0)
-        # obs, masks = self.observation_parser()
+        # obs, masks = self.generate_artificial_data(theta, key=next(keys), nan_frac=0.0)
+        obs, masks = self.observation_parser()    
         n = len(self.simulation.coordinates["id"])
+        nt = len(self.simulation.coordinates["time"])
+
+        nzfe = self.simulation.observations.nzfe.values
+        nzfe = jnp.array(np.broadcast_to(nzfe, (nt, n)).T)
         # real observations
 
         # bind the solver to the numpyro model
@@ -308,10 +312,10 @@ class NumpyroBackend:
 
     
         with numpyro.handlers.seed(rng_seed=1):
-            trace = numpyro.handlers.trace(model).get_trace(obs=obs, masks=masks)
+            trace = numpyro.handlers.trace(model).get_trace(obs=obs, masks=masks, nzfe=nzfe)
         print(numpyro.util.format_shapes(trace))
     
-        mcmc.run(next(keys), obs=obs, masks=masks)
+        mcmc.run(next(keys), obs=obs, masks=masks, nzfe=nzfe)
         mcmc.print_summary()
 
         idata = az.from_numpyro(
