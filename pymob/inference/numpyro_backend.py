@@ -423,9 +423,29 @@ class NumpyroBackend:
         self.idata = az.from_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
 
     def plot(self):
-        az.plot_trace(self.idata)
-        az.plot_pair(self.idata, divergences=True)
+        # TODO: combine prior_predictions and posterior predictions
+        if hasattr(self.idata, "posterior"):
+            axes = az.plot_trace(
+                self.idata,
+                var_names=self.simulation.model_parameter_names
+            )
+            fig = plt.gcf()
+            fig.savefig(f"{self.simulation.output_path}/trace.png")
+            plt.close()
+            axes = az.plot_pair(
+                self.idata, 
+                divergences=True, 
+                var_names=self.simulation.model_parameter_names
+            )
+            fig = plt.gcf()
+            fig.savefig(f"{self.simulation.output_path}/pairs_posterior.png")
+            plt.close()
 
+        if hasattr(self.idata, "prior_predictive"):
+            self.plot_prior_predictive()
+
+        plot_func = getattr(self.simulation, self.plot_function)
+        plot_func()
 
     def create_idata_from_unlabelled(self):
         posterior = self.idata.posterior.to_dict()["data_vars"]
