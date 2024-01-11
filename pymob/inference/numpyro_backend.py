@@ -10,6 +10,7 @@ from numpyro.distributions import Normal, transforms, TransformedDistribution
 from numpyro import infer
 import xarray as xr
 import arviz as az
+from matplotlib import pyplot as plt
 from diffrax import (
     diffeqsolve, 
     Dopri5, 
@@ -384,6 +385,12 @@ class NumpyroBackend:
 
     @lru_cache
     def posterior_predictions(self, n: int=None, seed=1):
+        # TODO: It may be necessary that the coordinates should be passed as 
+        # constant data. Because if the model is compiled with them once, 
+        # according to the design philosophy of JAX, the model will not 
+        # be evaluated again. But considering that the jitted functions do take
+        # coordinates as an input argument, maybe I'm okay. This should be
+        # tested.
         posterior = self.idata.posterior
         stacked_posterior = posterior.stack(sample=("chain", "draw"))
         n_samples = len(stacked_posterior.sample)
@@ -472,6 +479,9 @@ class NumpyroBackend:
             dims=data_structure,
             coords=posterior_coords,
         )
+
+    def plot_prior_predictive(self):
+        self.idata
 
     def variational_inference(self):
         model = partial(self.model.__func__, solver=self.evaluator)    
