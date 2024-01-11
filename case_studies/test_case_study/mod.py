@@ -72,7 +72,11 @@ def odesolve(model, y0, time, args):
         saveat=saveat, 
         stepsize_controller=stepsize_controller,
         adjoint=RecursiveCheckpointAdjoint(),
-        max_steps=10**7
+        max_steps=10**5,
+        # throw=False returns inf for all t > t_b, where t_b is the time 
+        # at which the solver broke due to reaching max_steps. This behavior
+        # happens instead of throwing an exception.
+        throw=False
     )
     
     return list(sol.ys)
