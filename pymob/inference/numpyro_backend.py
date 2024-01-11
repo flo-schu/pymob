@@ -296,7 +296,7 @@ class NumpyroBackend:
             step_size=0.01,
             adapt_mass_matrix=True,
             adapt_step_size=True,
-            max_tree_depth=8,
+            max_tree_depth=10,
             target_accept_prob=0.8,
             init_strategy=infer.init_to_median
         )
