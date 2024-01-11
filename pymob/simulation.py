@@ -11,6 +11,7 @@ import xarray as xr
 import dpath.util as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from toopy import Param, FloatParam, IntParam
+from toopy import benchmark
 
 from pymob.utils.errors import errormsg
 from pymob.utils.store_file import scenario_file, parse_config_section
@@ -80,7 +81,22 @@ class SimulationBase:
 
         print("========================", end="\n")
 
+    def benchmark(self, n=100):
+        evaluator = self.dispatch(theta=self.model_parameter_dict)
+        evaluator() 
 
+        @benchmark
+        def run_bench():
+            for i in range(n):
+                evaluator()
+        
+        print(f"\nBenchmarking with {n} evaluations")
+        print(f"=================================")
+        run_bench()
+        print(f"=================================\n")
+        
+
+        
     def dispatch(self, theta, **evaluator_kwargs):
         """Dispatch an evaluator, which will compute the model at parameters
         (theta). Evaluators are advantageous, because they are easier serialized
