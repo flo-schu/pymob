@@ -38,8 +38,28 @@ def test_diffrax_exception():
     badness_for_infeasible_alpha = np.array(badness)[np.where(alpha >= ub_alpha)[0]]
     assert sum(badness_for_infeasible_alpha) > 0
 
+
+def test_scripting_api():
+    sim = create_simulation()
+    sim.set_inferer(backend="numpyro")
+    sim.inferer.run()
+    sim.inferer.store_results()
+    sim.inferer.load_results()
+    
+    posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))
+    true_parameters = sim.model_parameter_dict
+    
+    # tests if true parameters are close to recovered parameters from simulated
+    # data
+    np.testing.assert_allclose(
+        posterior_mean.to_dataarray().values,
+        np.array(list(true_parameters.values())),
+        rtol=5e-2, atol=1e-5
+    )
+
+
 if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    test_diffrax_exception()
+    test_scripting_api()
