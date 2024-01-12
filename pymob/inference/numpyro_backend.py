@@ -52,7 +52,8 @@ class NumpyroBackend:
             "lognorm": (LogNormalTrans, {"scale": "loc", "s": "scale"}),
             "binom": (dist.Binomial, {"n":"total_n", "p":"probs"}),
             "normal": dist.Normal,
-            "halfnorm": dist.HalfNormal
+            "halfnorm": dist.HalfNormal,
+            "poisson": (dist.Poisson, {"mu": "rate"}),
         }
         
         self.simulation = simulation
