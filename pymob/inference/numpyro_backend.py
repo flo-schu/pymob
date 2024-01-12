@@ -50,7 +50,7 @@ class NumpyroBackend:
         self.EPS = 1e-8
         self.distribution_map = {
             "lognorm": (LogNormalTrans, {"scale": "loc", "s": "scale"}),
-            "binom": (dist.Binomial, {"n":"total_n", "p":"probs"}),
+            "binom": (dist.Binomial, {"n":"total_count", "p":"probs"}),
             "normal": dist.Normal,
             "halfnorm": dist.HalfNormal,
             "poisson": (dist.Poisson, {"mu": "rate"}),
