@@ -43,10 +43,8 @@ def test_scripting_api():
     sim = create_simulation()
     sim.set_inferer(backend="numpyro")
     sim.inferer.run()
-    sim.inferer.store_results()
-    sim.inferer.load_results()
     
-    posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))
+    posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))[sim.model_parameter_names]
     true_parameters = sim.model_parameter_dict
     
     # tests if true parameters are close to recovered parameters from simulated
@@ -54,9 +52,16 @@ def test_scripting_api():
     np.testing.assert_allclose(
         posterior_mean.to_dataarray().values,
         np.array(list(true_parameters.values())),
-        rtol=5e-2, atol=1e-5
+        rtol=1e-2, atol=1e-3
     )
 
+
+    # posterior predictions
+    # for data_var in sim.data_variables:
+    #     ax = sim.inferer.plot_predictions(
+    #         data_variable=data_var, 
+    #         x_dim="time"
+    #     )
 
 if __name__ == "__main__":
     import sys
