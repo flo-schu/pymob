@@ -1,18 +1,19 @@
 import os
 import warnings
+from typing import Optional, List, Union
 import configparser
 import multiprocessing as mp
 from multiprocessing.pool import ThreadPool, Pool
 
 import numpy as np
 import xarray as xr
-import dpath.util as dp
+import dpath as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from toopy import Param, FloatParam, IntParam
 
 from pymob.utils.errors import errormsg
-from pymob.utils.store_file import scenario_file, parse_config_section
-
+from pymob.utils.store_file import scenario_file, parse_config_section, converters
+from pymob.sim.config import Config
 
 def update_parameters_dict(config, x, parnames):
     for par, val, in zip(parnames, x):
@@ -29,56 +30,86 @@ def update_parameters_dict(config, x, parnames):
 class SimulationBase:
     def __init__(
         self, 
-        config: configparser.ConfigParser, 
+        config: Optional[Union[str,configparser.ConfigParser]] = None, 
     ) -> None:
         
-        self.config = config
+        self.config = Config(config=config)
         self.model_parameters: tuple = ()
-        self.observations = None
-        self._objective_names = []
-        self._seed_buffer_size = self.n_cores * 2
-        
-        # seed gloabal RNG
-        self.RNG = np.random.default_rng(self.seed)
-        # draw a selection of 1e8 integers for using those throughout the
-        # simulation
-        self._random_integers = self.create_random_integers(n=self._seed_buffer_size)
+        self._observations: xr.Dataset = xr.Dataset()
+        self._objective_names: Union[str, List[str]] = []
+        self._coordinates: dict = {}
+        self.free_model_parameters: list = []
 
-        self.initialize(input=self.input_file_paths)
+        # draw some seeds
+        self._seed_buffer_size: int = self.config.multiprocessing.n_cores * 2
+        self.RNG = np.random.default_rng(self.config.simulation.seed)
+        self._random_integers = self.create_random_integers(n=self._seed_buffer_size)
         
-        if self.observations is not None:
-            self.create_data_scaler()
+    def setup(self):
+        """Simulation setup routine, when the following methods have been 
+        defined:
         
-        coords = self.set_coordinates(input=self.input_file_paths)
-        self.coordinates = self.create_coordinates(coordinate_data=coords)
+        init-methods
+        ------------
+
+        self.initialize --> may be replaced by self.set_observations
+
+        """
+
+        self.initialize(input=self.config.input_file_paths)
+        
+        # coords = self.set_coordinates(input=self.config.input_file_paths)
+        # self.coordinates = self.create_coordinates(coordinate_data=coords)
         self.free_model_parameters  = self.set_free_model_parameters()
 
-        if not os.path.exists(self.output_path):
-            os.makedirs(self.output_path)
+        output_dir = self.config.case_study.output_path
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            print(f"Created directory: {output_dir}")
 
-        self.validate()
+        scenario_dir = os.path.dirname(self.config.case_study.settings)
+        if not os.path.exists(scenario_dir):
+            os.makedirs(scenario_dir)
+            print(f"Created directory: {scenario_dir}")
+
         # TODO: set up logger
+
+    @property
+    def observations(self):
+        assert isinstance(self._observations, xr.Dataset), "Observations must be an xr.Dataset"
+        return self._observations
+
+    @observations.setter
+    def observations(self, value):
+        self._observations = value
+        self.create_data_scaler()
+        self.coordinates = self.set_coordinates(input=self.config.input_file_paths)
+        
+
+    @property
+    def coordinates(self):
+        return self._coordinates
+
+    @coordinates.setter
+    def coordinates(self, value):
+        self._coordinates = self.create_coordinates(coordinate_data=value)
 
 
     def __repr__(self) -> str:
-        return f"Simulation(case_study={self.case_study}, scenario={self.scenario})"
+        return (
+            f"Simulation(case_study={self.config.case_study.name}, "
+            f"scenario={self.config.case_study.scenario})"
+        )
 
-    def print_config(self):
-        print("Simulation configuration", end="\n")
-        print("========================")
-        for section in self.config.sections():
-            print("\n")
-            print(f"[{section}]", end="\n")
 
-            for opt, val in self.config.items(section):
-                print(f"{opt} = {val}", end="\n")
-
-        print("========================", end="\n")
+    def set_coordinates(self, input):
+        dimensions = self.config.simulation.dimensions
+        return [self.observations[dim].values for dim in dimensions]
 
     def evaluate(self, theta):
         """Wrapper around run to modify paramters of the model.
         """
-        self.model_parameters = self.parameterize(self.input_file_paths, theta)
+        self.model_parameters = self.parameterize(self.config.input_file_paths, theta)
         return self.run()
     
     def compute(self):
@@ -129,19 +160,21 @@ class SimulationBase:
 
             self.inferer = PyabcBackend(simulation=self)
 
-        if backend == "pymoo":
+        elif backend == "pymoo":
             from pymob.inference.pymoo_backend import PymooBackend
 
             self.inferer = PymooBackend(simulation=self)
 
+        else:
+            raise NotImplementedError("Inference backend is not implemented.")
         
-    def dataset_to_2Darray(self, dataset: xr.Dataset): 
-        array_2D = dataset.stack(multiindex=self.dimensions)
+    def dataset_to_2Darray(self, dataset: xr.Dataset) -> xr.DataArray: 
+        array_2D = dataset.stack(multiindex=self.config.simulation.dimensions)
         return array_2D.to_array().transpose("multiindex", "variable")
 
-    def array2D_to_dataset(self, dataarray: xr.DataArray): 
+    def array2D_to_dataset(self, dataarray: xr.DataArray) -> xr.Dataset: 
         dataset_2D = dataarray.to_dataset(dim="variable")      
-        return dataset_2D.unstack().transpose(*self.dimensions)
+        return dataset_2D.unstack().transpose(*self.config.simulation.dimensions)
 
     def create_data_scaler(self):
         """Creates a scaler for the data variables of the dataset over all
@@ -151,13 +184,14 @@ class SimulationBase:
         # make sure the dataset follows the order of variables specified in
         # the config file. This is important so also in the simulation results
         # the scalers are matched.
-        ordered_dataset = self.observations[self.data_variables]
+        ordered_dataset = self.observations[self.config.simulation.data_variables]
         obs_2D_array = self.dataset_to_2Darray(dataset=ordered_dataset)
         # scaler = StandardScaler()
         scaler = MinMaxScaler()
         
         # add bounds to array of observations and fit scaler
-        lower_bounds, upper_bounds = self.data_variable_bounds
+        lower_bounds = np.array(self.config.simulation.data_variables_min)
+        upper_bounds = np.array(self.config.simulation.data_variables_max)
         stacked_array = np.row_stack([lower_bounds, upper_bounds, obs_2D_array])
         scaler.fit(stacked_array)
 
@@ -169,17 +203,17 @@ class SimulationBase:
 
     def print_scaling_info(self):
         scaler = type(self.scaler).__name__
-        for i, var in enumerate(self.data_variables):
+        for i, var in enumerate(self.config.simulation.data_variables):
             print(
                 f"{scaler}(variable={var}, "
                 f"min={self.scaler.data_min_[i]}, max={self.scaler.data_max_[i]})"
             )
 
     def scale_(self, dataset: xr.Dataset):
-        ordered_dataset = dataset[self.data_variables]
+        ordered_dataset = dataset[self.config.simulation.data_variables]
         data_2D_array = self.dataset_to_2Darray(dataset=ordered_dataset)
         obs_2D_array_scaled = data_2D_array.copy() 
-        obs_2D_array_scaled.values = self.scaler.transform(data_2D_array)
+        obs_2D_array_scaled.values = self.scaler.transform(data_2D_array) # type: ignore
         return self.array2D_to_dataset(obs_2D_array_scaled)
 
     @property
@@ -187,14 +221,14 @@ class SimulationBase:
         warnings.warn("Discouraged to use results property.", DeprecationWarning, 2)
         return self.create_dataset_from_numpy(
             Y=self.Y, 
-            Y_names=self.data_variables, 
+            Y_names=self.config.simulation.data_variables, 
             coordinates=self.coordinates
         )
 
     def results_to_df(self, results):
         return self.create_dataset_from_numpy(
             Y=results, 
-            Y_names=self.data_variables, 
+            Y_names=self.config.simulation.data_variables, 
             coordinates=self.coordinates
         )
 
@@ -207,7 +241,7 @@ class SimulationBase:
     def scale_results(self, Y):
         ds = self.create_dataset_from_numpy(
             Y=Y, 
-            Y_names=self.data_variables, 
+            Y_names=self.config.simulation.data_variables, 
             coordinates=self.coordinates
         )
         return self.scale_(ds)
@@ -250,8 +284,26 @@ class SimulationBase:
         # TODO: run checks if the simulation was set up correctly
         #       - do observation dimensions match the model output (run a mini
         #         simulation with reduced coordinates to verify)
-        #       - 
-        pass
+        #       -
+        if len(self.config.simulation.data_variables) == 0:
+            raise RuntimeError(
+                "No data_variables were specified. "
+                "Specify like sim.config.simulation.data_variables = ['a', 'b'] "
+                "Or in the simulation section of the config file. "
+                "Data variables track the state variables of the simulation. "
+                "If you want to do inference, they must match the variables of "
+                "the observations."
+            )
+
+                    
+        if len(self.config.simulation.dimensions) == 0:
+            raise RuntimeError(
+                "No dimensions of the simulation were specified. "
+                "Which observations are you expecting? "
+                "'time' or 'id' are reasonable choices. But it all depends on "
+                "your data. Dimensions must match your data if you want to do "
+                "Parameter inference."
+            )
 
     def parameterize(self, input: list[str], theta: list[Param]):
         """
@@ -287,15 +339,17 @@ class SimulationBase:
         raise NotImplementedError
     
     def objective_function(self, results, **kwargs):
-        func = getattr(self, self.objective)
+        func = getattr(self, self.config.inference.objective_function)
         obj = func(results, **kwargs)
 
         if obj.ndim == 0:
             obj_value = float(obj)
             obj_name = "objective"
-        if obj.ndim == 1:
+        elif obj.ndim == 1:
             obj_value = obj.values
             obj_name = list(obj.coords["variable"].values)
+        else:
+            raise ValueError("Objectives should be at most 1-dimensional.")
 
         if len(self._objective_names) == 0:
             self._objective_names = obj_name
@@ -325,16 +379,17 @@ class SimulationBase:
         pass
 
     def create_coordinates(self, coordinate_data):
-        if not isinstance(coordinate_data, tuple):
+        if not isinstance(coordinate_data, (list, tuple)):
             coordinate_data = (coordinate_data, )
 
-        assert len(self.dimensions) == len(coordinate_data), errormsg(
+        assert len(self.config.simulation.dimensions) == len(coordinate_data), errormsg(
             f"""number of dimensions, specified in the configuration file
             must match the coordinate data (X) returned by the `run` method.
             """
         )
 
-        coords = {dim: x_i for dim, x_i in zip(self.dimensions, coordinate_data)}
+        coord_zipper = zip(self.config.simulation.dimensions, coordinate_data)
+        coords = {dim: x_i for dim, x_i in coord_zipper}
         return coords
 
     @staticmethod
@@ -360,67 +415,6 @@ class SimulationBase:
 
         return dataset
 
-    @staticmethod
-    def option_as_list(opt):
-        if not isinstance(opt, (list, tuple)):
-            opt_list = [opt]
-        else:
-            opt_list = opt
-
-        return opt_list
-
-    @property
-    def input_file_paths(self):
-        paths_input_files = []
-        for file in self.input_files:
-            fp = scenario_file(file, self.case_study, self.scenario)
-            paths_input_files.append(fp)
-
-        observation_files = self.config.getlist("case-study", "observations", fallback=[])
-        if isinstance(observation_files, str):
-            observation_files = [observation_files]
-
-        for file in observation_files:
-            if not os.path.isabs(file):
-                fp = os.path.join(self.data_path, file)
-            else:
-                fp = file
-            paths_input_files.append(fp)
-
-        return paths_input_files
-
-    # config as properties
-    @property
-    def dimensions(self):
-        dims = self.config.getlist("simulation", "dimensions")
-        return self.option_as_list(dims)
-
-    @property
-    def data_variables(self):
-        data_vars = self.config.getlist("simulation", "data_variables")
-        return self.option_as_list(data_vars)
-
-    @property
-    def input_files(self):
-        input_files = self.config.getlist("simulation", "input_files", fallback=[])
-        return self.option_as_list(input_files)
-  
-    @property
-    def case_study_path(self):
-        return self.config.get("case-study", "package")
-
-    @property
-    def root_path(self):
-        return self.config.get("case-study", "root")
-
-    @property
-    def case_study(self):
-        return self.config.get("case-study", "name")
-
-    @property
-    def scenario(self):
-        return self.config.get("case-study", "scenario")
-
     @property
     def model_parameter_values(self):
         return [p.value for p in self.free_model_parameters]
@@ -438,93 +432,12 @@ class SimulationBase:
         return {p.name:p.value for p in self.free_model_parameters}
 
 
-    @property
-    def output_path(self):
-        output_path_ = self.config.get("case-study", "output")
-        if not os.path.isabs(output_path_):
-            return os.path.join(
-                os.path.relpath(output_path_),
-                os.path.relpath(self.case_study_path), 
-                "results",
-                self.scenario,
-            )
-        else:
-            return os.path.abspath(output_path_)
-
-    @property
-    def data_path(self):
-        data_path_ = self.config.get("case-study", "data")
-        if not os.path.isabs(data_path_):
-            return os.path.join(
-                self.case_study_path, 
-                os.path.relpath(data_path_)
-            )
-        else:
-            return os.path.abspath(data_path_)
-       
-
-    @property
-    def data_variable_bounds(self):
-        lower_bounds = self.config.getlistfloat(
-            "simulation", "data_variables_min", fallback=None
-        )
-        upper_bounds = self.config.getlistfloat(
-            "simulation", "data_variables_max", fallback=None
-        )
-        if lower_bounds is None:
-            lower_bounds = [float("nan")] * 4
-
-        if upper_bounds is None:
-            upper_bounds = [float("nan")] * 4
-
-        if not len(lower_bounds) == len(upper_bounds) == len(self.data_variables):
-            raise ValueError(
-                "If bounds are provided, the must be provided for all data "
-                "variables. If a bound for a variable is unknown, write 'nan' "
-                "in the config file at the position of the variable. "
-                "\nE.g.:"
-                "\ndata_variables = A B C"
-                "\ndata_variables_max = 4 nan 2"
-                "\ndata_variables_min = 0 0 nan"
-            )
-        
-        return np.array(lower_bounds), np.array(upper_bounds)
-
-    @property
-    def objective(self):
-        return self.config.get("inference", "objective_function", fallback="total_average")
-
-    @property
-    def n_objectives(self):
-        return self.config.getint("inference", "n_objectives", fallback=1)
-
-    @property
-    def objective_names(self):
-        return self._objective_names
-
-    @property
-    def n_threads(self):
-        return self.config.getint("multiprocessing", "threads", fallback=4)
-    
-    @property
-    def n_cores(self):
-        cpu_avail = mp.cpu_count()
-        cpu_set = self.config.getint("multiprocessing", "cores", fallback=1)
-        if cpu_set <= 0:
-            return cpu_avail + cpu_set
-        else: 
-            return cpu_set
-    
-    @n_cores.setter
-    def n_cores(self, value):
-        self.config.set("multiprocessing", "cores", str(value))
-
-    def create_random_integers(self, n):
-        return self.RNG.integers(0, 1e18, n).tolist()
+    def create_random_integers(self, n: int):
+        return self.RNG.integers(low=0, high=int(1e18), size=n).tolist()
         
     def refill_consumed_seeds(self):
         n_seeds_left = len(self._random_integers)
-        if n_seeds_left == self.n_cores:
+        if n_seeds_left == self.config.multiprocessing.n_cores:
             n_new_seeds = self._seed_buffer_size - n_seeds_left
             new_seeds = self.create_random_integers(n=n_new_seeds)
             self._random_integers.extend(new_seeds)
@@ -537,34 +450,32 @@ class SimulationBase:
         # seed = self._random_integers.pop(0)
         # return seed
 
-    @property
-    def seed(self):
-        return int(self.config.get("simulation", "seed", fallback=1))
-
-    def set_free_model_parameters(self):
+    def set_free_model_parameters(self) -> list:
         try:
-            params = parse_config_section(self.config["model-parameters"], method="strfloat")
+            params = self.config.model_parameters.model_dump()
             
             # create a nested dictionary from model parameters
             parameter_dict = {}
             for par_key, par_value in params.items():
                 dp.new(parameter_dict, par_key, par_value, separator=".")
 
+            parse = lambda x: None if x is None else float(x)
+
             # create Param instances
             parameters = []
             for param_name, param_dict in parameter_dict.items():
                 p = FloatParam(
-                    value=param_dict.get("value"),
+                    value=parse(param_dict.get("value")),
                     name=param_name,
-                    min=param_dict.get("min", None),
-                    max=param_dict.get("max", None),
-                    step=param_dict.get("step", None),
+                    min=parse(param_dict.get("min")),
+                    max=parse(param_dict.get("max")),
+                    step=parse(param_dict.get("step")),
                     prior=param_dict.get("prior", None)
                 )
                 parameters.append(p)
 
             return parameters
         except KeyError:
-            return {}
+            return []
         
             

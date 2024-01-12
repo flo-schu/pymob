@@ -18,38 +18,12 @@ class PymooBackend:
         simulation: SimulationBase,
     ):
         self.simulation = simulation
-        self.pool: mp.Pool = None
+        self.config = self.simulation.config
+        self.pool: mp.Pool = None  # type: ignore
         self.distance_function = self.distance_function_parser()
         self.transform = self.variable_parser()
         self.problem = OptimizationProblem(backend=self)
 
-    @property
-    def population_size(self):
-        return self.simulation.config.getint("inference.pymoo", "population_size", fallback=100)
-    
-    @property
-    def seed(self):
-        return self.simulation.config.getint("inference.pymoo", "seed", fallback=1)
-        
-    @property
-    def max_nr_populations(self):
-        return self.simulation.config.getint("inference.pymoo", "max_nr_populations", fallback=50)
-    
-    @property
-    def xtol(self):
-        return self.simulation.config.getfloat("inference.pymoo", "xtol", fallback=0.0005)
-    
-    @property
-    def ftol(self):
-        return self.simulation.config.getfloat("inference.pymoo", "ftol", fallback=0.005)
-    
-    @property
-    def cvtol(self):
-        return self.simulation.config.getfloat("inference.pymoo", "cvtol", fallback=1e-8)
-    
-    @property
-    def verbose(self):
-        return self.simulation.config.get("inference.pymoo", "verbose", fallback=True)
     
     def distance_function_parser(self):
         def f(x):
@@ -84,30 +58,28 @@ class PymooBackend:
 
         return transform
     
-    def store_results(self):
-        res = self.result
-
-        params = list(self.transform(X_scaled=np.array(res.X, ndmin=2)) )[0]
+    def store_results(self, results):
+        params = list(self.transform(X_scaled=np.array(results.X, ndmin=2)) )[0]
 
         res_dict = {
-            "f": res.f,
-            "cv": res.cv,
+            "f": results.f,
+            "cv": results.cv,
             "X": params
         }
         
-        with open(f"{self.simulation.output_path}/pymoo_params.json", "w") as fp:
+        with open(f"{self.config.case_study.output_path}/pymoo_params.json", "w") as fp:
             json.dump(res_dict, fp, indent=4)
 
     def run(self):
         """Implements the parallelization in pymoo"""
-        n_cores = self.simulation.n_cores
+        n_cores = self.config.multiprocessing.n_cores
         print(f"Using {n_cores} CPU cores")
 
         if n_cores == 1:
             self.optimize()
         elif n_cores > 1:
             with mp.ProcessingPool(n_cores) as pool:
-                self.pool = pool  # assign pool so it can be accessed by _evaluate
+                self.pool = pool  # type: ignore # assign pool so it can be accessed by _evaluate
                 self.optimize()
 
 
@@ -115,28 +87,28 @@ class PymooBackend:
 
         reference_directions = get_reference_directions(
             name="energy", 
-            n_dim=self.simulation.n_objectives, 
-            n_points=self.population_size,
-            seed=self.seed + 1
+            n_dim=self.config.inference.n_objectives, 
+            n_points=self.config.inference_pymoo.population_size,
+            seed=self.config.simulation.seed + 1
         )
 
         algorithm = UNSGA3(
             ref_dirs=reference_directions,
-            pop_size=self.population_size
+            pop_size=self.config.inference_pymoo.population_size
         )
 
         termination = DefaultMultiObjectiveTermination(
-            xtol=self.xtol,
-            cvtol=self.cvtol,
-            ftol=self.ftol,
-            n_max_gen=self.max_nr_populations,
+            xtol=self.config.inference_pymoo.xtol,
+            cvtol=self.config.inference_pymoo.cvtol,
+            ftol=self.config.inference_pymoo.ftol,
+            n_max_gen=self.config.inference_pymoo.max_nr_populations,
         )
 
         # prepare the algorithm to solve the specific problem (same arguments as for the minimize function)
         algorithm.setup(
             problem=self.problem, 
             termination=termination,
-            seed=self.seed, 
+            seed=self.config.simulation.seed, 
             verbose=True,
         )
 
@@ -148,7 +120,7 @@ class PymooBackend:
             pop = algorithm.ask()
 
             # evaluate the individuals using the algorithm's evaluator (necessary to count evaluations for termination)
-            algorithm.evaluator.eval(self.problem, pop)
+            algorithm.evaluator.eval(self.problem, pop) # type: ignore
 
             # returned the evaluated individuals which have been evaluated or even modified
             algorithm.tell(infills=pop)
@@ -159,8 +131,7 @@ class PymooBackend:
         res = algorithm.result()
 
         # save the results
-        self.result = res
-        self.store_results()
+        self.store_results(results=res)
 
     def post_processing(self, pop):
         F = pop.get("F")
@@ -174,7 +145,7 @@ class PymooBackend:
         # )
 
     def load_results(self):
-        with open(f"{self.simulation.output_path}/pymoo_params.json", "r") as fp:
+        with open(f"{self.config.case_study.output_path}/pymoo_params.json", "r") as fp:
             self.result = json.load(fp)
             
     def plot_predictions(
@@ -230,7 +201,7 @@ class OptimizationProblem(Problem):
         
         super().__init__(
             n_var=self.simulation.n_free_parameters, 
-            n_obj=self.simulation.n_objectives, 
+            n_obj=self.backend.config.inference.n_objectives, 
             n_ieq_constr=0, 
             xl=0.0, 
             xu=1.0,
