@@ -1,5 +1,4 @@
 from functools import partial, lru_cache
-from pymob import SimulationBase
 import numpyro
 import jax
 import jax.numpy as jnp
@@ -12,6 +11,9 @@ import xarray as xr
 import arviz as az
 from matplotlib import pyplot as plt
 
+from pymob import SimulationBase
+from pymob.utils.store_file import is_number
+
 def LogNormalTrans(loc, scale):
     return TransformedDistribution(
         Normal(0,1), 
@@ -21,29 +23,30 @@ def LogNormalTrans(loc, scale):
         ]
     )
 
+
 exp = transforms.ExpTransform
 sigmoid = transforms.SigmoidTransform
 C = transforms.ComposeTransform
-
-DISTRIBUTION_MAPPER = {
-    "lognorm": dist.LogNormal,
-    "binom": dist.Binomial,
-    "normal": dist.Normal,
-}
 
 class NumpyroBackend:
     def __init__(
         self, 
         simulation: SimulationBase
     ):
+        self.EPS = 1e-8
+        self.distribution_map = {
+            "lognorm": (LogNormalTrans, {"scale": "loc", "s": "scale"}),
+            "binom": (dist.Binomial, {"n":"total_n", "p":"probs"}),
+            "normal": dist.Normal,
+            "halfnorm": dist.HalfNormal
+        }
+        
         self.simulation = simulation
-        self.evaluator = self.model_parser()
-        self.prior = ...
-        self.distance_function = ...
+        self.evaluator = self.parse_deterministic_model()
+        self.prior = self.parse_model_priors()
+        self.error_model = self.parse_error_model()
+        self.inference_model = self.parse_probabilistic_model()
 
-        self.abc = None
-        self.history = None
-        self.posterior = None
         self.idata: az.InferenceData
 
     @property
@@ -56,7 +59,7 @@ class NumpyroBackend:
     @property
     def extra_vars(self):
         extra = self.simulation.config.getlist(
-            "inference", "extra_vars", fallback=None
+            "inference", "extra_vars", fallback=[]
         )
         return extra if isinstance(extra, list) else [extra]
     
@@ -85,7 +88,7 @@ class NumpyroBackend:
             "inference.numpyro", "warmup", fallback=self.draws
         )
 
-    def model_parser(self):
+    def parse_deterministic_model(self):
         def evaluator(theta, seed=None):
             evaluator = self.simulation.dispatch(theta=theta)
             evaluator(seed)
@@ -136,76 +139,137 @@ class NumpyroBackend:
         return y_sim, masks
 
     @staticmethod
-    def param_to_prior(par):
-        parname = par.name
-        distribution, cluttered_arguments = par.prior.split("(", 1)
+    def parse_parameter(parname, prior, distribution_map):
+        """Parses a simulation parameter (prior) and returns a tuple of a 
+        parameter name, distribution as provided by the distribution map, and
+        the mapped parameters of the distribution."""
+        distribution, cluttered_arguments = prior.split("(", 1)
         param_strings = cluttered_arguments.split(")", 1)[0].split(",")
-        params = {}
+
+        distribution_mapping = distribution_map[distribution]
+
+        if not isinstance(distribution_mapping, tuple):
+            distribution = distribution_mapping
+            distribution_mapping = (distribution, {})
+        
+        assert len(distribution_mapping) == 2, (
+            "distribution and parameter mapping must be "
+            "a tuple of length 2."
+        )
+
+        distribution, parameter_mapping = distribution_mapping
+        mapped_params = {}
         for parstr in param_strings:
             key, val = parstr.split("=")
-            params.update({key:float(val)})
-
-        return parname, distribution, params
-
-    def param(self, name):
-        return [p for p in self.simulation.free_model_parameters if p.name == name][0]
-
-    @classmethod
-    def parse_prior(cls, par):
-        name, dist, params = cls.param_to_prior(par)
-        distribution = DISTRIBUTION_MAPPER[dist]
-        
-        return numpyro.sample(name, distribution, **params)
-
-    def parse_model(self):
-        theta = {}
-        for par in self.simulation.free_model_parameters:
-            p_n, p_d, p_p = self.param_to_prior(par=par)
-            pri = numpyro.sample(p_n, dist.LogNormal(loc=p_p["scale"], scale=p_p["s"]))
             
-            theta.update({p_n: pri})
+            mapped_key = parameter_mapping.get(key, key)
 
-    @staticmethod
-    def model(solver, obs, masks):
-        EPS = 1e-8
+            parsed_val = float(val) if is_number(val) else val
+            mapped_params.update({mapped_key:parsed_val})
 
-        k_i = numpyro.sample("k_i", LogNormalTrans(loc=5, scale=1))
-        r_rt = numpyro.sample("r_rt", LogNormalTrans(loc=0.1, scale=1))
-        r_rd = numpyro.sample("r_rd", LogNormalTrans(loc=0.5, scale=1))
-        v_rt = numpyro.sample("v_rt", LogNormalTrans(loc=1.0, scale=1))
-        z_ci = numpyro.sample("z_ci", LogNormalTrans(loc=500.0, scale=1))
-        r_pt = numpyro.sample("r_pt", LogNormalTrans(loc=0.1, scale=1))
-        r_pd = numpyro.sample("r_pd", LogNormalTrans(loc=0.01, scale=1))
-        z = numpyro.sample("z", LogNormalTrans(loc=2.0, scale=1))
-        kk = numpyro.sample("kk", LogNormalTrans(loc=0.005, scale=1))
-        b_base = numpyro.sample("b_base", LogNormalTrans(loc=0.1, scale=1))
-        sigma_cint = numpyro.sample("sigma_cint", dist.HalfNormal(scale=0.1))
-        sigma_cext = numpyro.sample("sigma_cext", dist.HalfNormal(scale=0.1))
-        sigma_nrf2 = numpyro.sample("sigma_nrf2", dist.HalfNormal(scale=0.1))
-        theta = {
-            "k_i": k_i,
-            "r_rt": r_rt,
-            "r_rd": r_rd,
-            "v_rt": v_rt,
-            "z_ci": z_ci,
-            "r_pt": r_pt,
-            "r_pd": r_pd,
-            "volume_ratio": jnp.inf,
-            "z": z,
-            "kk": kk,
-            "b_base": b_base,
-        }
-        sim = solver(theta=theta)
-        cext = numpyro.deterministic("cext", sim["cext"])
-        cint = numpyro.deterministic("cint", sim["cint"])
-        nrf2 = numpyro.deterministic("nrf2", sim["nrf2"])
-        leth = numpyro.deterministic("lethality", sim["lethality"])
+        return parname, distribution, mapped_params
 
-        numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks["cext"]), obs=obs["cext"] + EPS)
-        numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks["cint"]), obs=obs["cint"] + EPS)
-        numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks["nrf2"]), obs=obs["nrf2"] + EPS)
-        numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=obs["nzfe"]).mask(masks["lethality"]), obs=obs["lethality"])
+    def parse_model_priors(self):
+        priors = {}
+        for par in self.simulation.free_model_parameters:
+            name, distribution, params = self.parse_parameter(
+                parname=par.name, 
+                prior=par.prior, 
+                distribution_map=self.distribution_map
+            )
+            parameterized_dist = distribution(**params)
+            priors.update({name: {"fn":parameterized_dist}})
+        return priors
 
+    def parse_error_model(self):
+        error_model = {}
+        for data_var, error_distribution in self.simulation.error_model.items():
+            name, distribution, parameters = self.parse_parameter(
+                parname=data_var,
+                prior=error_distribution,
+                distribution_map=self.distribution_map
+            )
+
+                
+            error_model.update({
+                data_var: {
+                    "fn": distribution, 
+                    "parameters": parameters,
+                    "error_dist": error_distribution
+                }
+            })
+        return error_model
+
+    def parse_probabilistic_model(self):
+        EPS = self.EPS
+        prior = self.prior.copy()
+        error_model = self.error_model.copy()
+
+        def lookup(val, deterministic, prior_samples, observations):
+            if val in deterministic:
+                return deterministic[val]
+            
+            elif val in prior_samples:
+                return prior_samples[val]
+            
+            elif val in observations:
+                return observations[val]
+            
+            else:
+                return val
+
+        def model(solver, obs, masks):
+            # construct priors with numpyro.sample and sample during inference
+            theta = {}
+            for prior_name, prior_kwargs in prior.items():
+                theta_i = numpyro.sample(
+                    name=prior_name,
+                    fn=prior_kwargs["fn"]
+                )
+
+                theta.update({prior_name: theta_i})
+            
+            # calculate deterministic simulation with parameter samples
+            sim_results = solver(theta=theta)
+
+            # store data_variables as deterministic model output
+            for deterministic_name, deterministic_value in sim_results.items():
+                _ = numpyro.deterministic(
+                    name=deterministic_name, 
+                    value=deterministic_value
+                )
+
+            for error_model_name, error_model_kwargs in error_model.items():
+                error_distribution = error_model_kwargs["fn"]
+                error_distribution_kwargs = {}
+                for p, val in error_model_kwargs["parameters"].items():
+                    error_distribution_param_value = lookup(
+                        val=val, 
+                        deterministic=sim_results, 
+                        prior_samples=theta,
+                        observations=obs
+                    )
+                    error_distribution_kwargs.update(
+                        {p: error_distribution_param_value}
+                    )
+                
+                if "lognorm" in error_model_kwargs["error_dist"]:
+                    error_distribution_kwargs["loc"] += EPS
+
+                _ = numpyro.sample(
+                    name=error_model_name + "_obs",
+                    fn=error_distribution(**error_distribution_kwargs).mask(masks[error_model_name]),
+                    obs=obs[error_model_name]
+                )
+
+
+            # TODO: How to add EPS
+            # DONE: add biomial n --> I think this is already done
+            # numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks["cext"]), obs=obs["cext"] + EPS)
+            # numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks["cint"]), obs=obs["cint"] + EPS)
+            # numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks["nrf2"]), obs=obs["nrf2"] + EPS)
+            # numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=obs["nzfe"]).mask(masks["lethality"]), obs=obs["lethality"])
+        return model
 
     def run(self):
         # set parameters of JAX and numpyro
@@ -221,7 +285,12 @@ class NumpyroBackend:
         obs, masks = self.observation_parser()
 
         # prepare model and print information about shapes
-        model = partial(self.model, solver=self.evaluator, obs=obs, masks=masks)    
+        model = partial(
+            self.inference_model, 
+            solver=self.evaluator, 
+            obs=obs, 
+            masks=masks
+        )    
 
         with numpyro.handlers.seed(rng_seed=1):
             trace = numpyro.handlers.trace(model).get_trace()
@@ -258,6 +327,10 @@ class NumpyroBackend:
             coords=self.posterior_coordinates,
         )
         self.idata = idata
+
+    @property
+    def posterior(self):
+        return self.idata.posterior
 
 
     @property
