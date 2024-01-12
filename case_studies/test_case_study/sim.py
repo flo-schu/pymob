@@ -17,6 +17,9 @@ class Simulation(SimulationBase):
         )
         self.model_parameters["y0"] = [40, 9]  # initial population of prey and predator
         self.observations = xr.load_dataset(input[1])
+        self.observations["wolves"] = self.observations["wolves"] + 1e-8
+        self.observations["rabbits"] = self.observations["rabbits"] + 1e-8
+
         
     @staticmethod
     def parameterize(free_parameters: dict, model_parameters):
@@ -34,6 +37,9 @@ class Simulation(SimulationBase):
         return dict(y0=y0, parameters=parameters)
 
     def set_coordinates(self, input):
+        if hasattr(self, "observations"):
+            return self.observations.time.values
+        
         # Time settings
         t_start = 0
         t_end = 200
