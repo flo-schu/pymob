@@ -531,3 +531,40 @@ class NumpyroBackend:
 
     def plot_prior_predictive(self):
         self.idata
+
+    def plot_predictions(
+            self, data_variable: str, x_dim: str, ax=None, subset={}
+        ):
+        obs = self.simulation.observations.sel(subset)
+        
+        post_pred = self.posterior_predictions(
+            n=self.n_predictions, 
+            # seed only controls the parameters samples drawn from posterior
+            seed=self.simulation.seed
+        ).sel(subset)
+
+        hdi = az.hdi(post_pred, .95)
+
+        if ax is None:
+            ax = plt.subplot(111)
+        
+        y_mean = post_pred[data_variable].mean(dim=("chain", "draw"))
+        ax.plot(
+            post_pred[x_dim].values, y_mean.values, 
+            color="black", lw=.8
+        )
+
+        ax.fill_between(
+            post_pred[x_dim].values, *hdi[data_variable].values.T, 
+            alpha=.5, color="grey"
+        )
+
+        ax.plot(
+            obs[x_dim].values, obs[data_variable].values, 
+            marker="o", ls="", ms=3
+        )
+        
+        ax.set_ylabel(data_variable)
+        ax.set_xlabel(x_dim)
+
+        return ax
