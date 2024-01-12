@@ -691,6 +691,11 @@ class SimulationBase:
         return parameters
         
     @property
+    def error_model(self):
+        em = parse_config_section(self.config["error-model"], method="strfloat")
+        return em
+
+    @property
     def evaluator_dim_order(self):
         return self.config.getlist("simulation", "evaluator_dim_order", fallback=None)
 
