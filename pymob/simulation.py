@@ -652,30 +652,43 @@ class SimulationBase:
         return int(self.config.get("simulation", "seed", fallback=1))
 
     def set_free_model_parameters(self):
-        try:
-            params = parse_config_section(self.config["model-parameters"], method="strfloat")
-            
-            # create a nested dictionary from model parameters
-            parameter_dict = {}
-            for par_key, par_value in params.items():
-                dp.new(parameter_dict, par_key, par_value, separator=".")
+        if self.config.has_section("model-parameters"):
+            warnings.warn(
+                "config section 'model-parameters' is deprecated, "
+                "use 'free-model-parameters' and 'fixed-model-parameters'", 
+                DeprecationWarning
+            )
+            params = parse_config_section(
+                self.config["model-parameters"], method="strfloat"
+            )
+        elif self.config.has_section("free-model-parameters"):
+            params = parse_config_section(
+                self.config["free-model-parameters"], method="strfloat"
+            )
+        else:
+            warnings.warn("No parameters were specified.")
+            params = {}
 
-            # create Param instances
-            parameters = []
-            for param_name, param_dict in parameter_dict.items():
-                p = FloatParam(
-                    value=param_dict.get("value"),
-                    name=param_name,
-                    min=param_dict.get("min", None),
-                    max=param_dict.get("max", None),
-                    step=param_dict.get("step", None),
-                    prior=param_dict.get("prior", None)
-                )
-                parameters.append(p)
+        
+        # create a nested dictionary from model parameters
+        parameter_dict = {}
+        for par_key, par_value in params.items():
+            dp.new(parameter_dict, par_key, par_value, separator=".")
 
-            return parameters
-        except KeyError:
-            return {}
+        # create Param instances
+        parameters = []
+        for param_name, param_dict in parameter_dict.items():
+            p = FloatParam(
+                value=param_dict.get("value", 1),
+                name=param_name,
+                min=param_dict.get("min", None),
+                max=param_dict.get("max", None),
+                step=param_dict.get("step", None),
+                prior=param_dict.get("prior", None)
+            )
+            parameters.append(p)
+
+        return parameters
         
     @property
     def evaluator_dim_order(self):
