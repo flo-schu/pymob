@@ -103,6 +103,14 @@ class NumpyroBackend:
             "inference.numpyro", "warmup", fallback=self.draws
         )
 
+    @property
+    def init_strategy(self):
+        strategy = self.simulation.config.get(
+            "inference.numpyro", "init_strategy", fallback="init_to_median"
+        )
+
+        return getattr(infer, strategy)
+
     def parse_deterministic_model(self):
         def evaluator(theta, seed=None):
             evaluator = self.simulation.dispatch(theta=theta)
@@ -340,7 +348,7 @@ class NumpyroBackend:
             adapt_step_size=True,
             max_tree_depth=10,
             target_accept_prob=0.8,
-            init_strategy=infer.init_to_median
+            init_strategy=self.init_strategy
         )
 
         mcmc = infer.MCMC(
