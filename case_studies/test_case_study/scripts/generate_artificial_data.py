@@ -10,20 +10,26 @@ rng = np.random.default_rng(871237)
 
 
 sim = Simulation(config=config)
-sim.compute()
-Y = sim.Y
+evaluator = sim.dispatch(theta=sim.model_parameter_dict)
+evaluator()
+
 X = sim.coordinates["time"]
 
-data_index = rng.choice(a=np.arange(len(X)), size=100, replace=False)
+data_index = rng.choice(a=np.arange(len(X)), size=200, replace=False)
 data_index.sort()
-Y_stochastic = rng.poisson(Y)[data_index, :]
 X_stochastic = X[data_index]
+y_noisy = evaluator.results.isel(time=data_index)
+
+nan_frac = 0.1
+rng = np.random.default_rng(seed=1)
+for i, (k, val) in enumerate(y_noisy.items()):
+    val_stoch = rng.lognormal(np.log(val) + 1e-8, sigma=0.1)
+    nans = rng.binomial(n=1, p=nan_frac, size=val_stoch.shape)
+    val.values = np.where(nans == 1, np.nan, val_stoch)
+
 
 # save noisy dataset
-noisy_dataset = sim.create_dataset_from_numpy(
-    Y_stochastic, ["rabbits", "wolves"], {"time": X_stochastic}
-)
-noisy_dataset.to_netcdf(f"{sim.data_path}/simulated_noisy_data.nc")
+y_noisy.to_netcdf(f"{sim.data_path}/simulated_noisy_data.nc")
 
-sim.results.to_netcdf(f"{sim.data_path}/simulated_data.nc")
+evaluator.results.to_netcdf(f"{sim.data_path}/simulated_data.nc")
 
