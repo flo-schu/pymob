@@ -10,9 +10,11 @@ from numpyro import infer
 import xarray as xr
 import arviz as az
 from matplotlib import pyplot as plt
+from sympy import sympify
+import sympy2jax
 
 from pymob import SimulationBase
-from pymob.utils.store_file import is_number
+
 
 def LogNormalTrans(loc, scale):
     return TransformedDistribution(
@@ -23,6 +25,18 @@ def LogNormalTrans(loc, scale):
         ]
     )
 
+
+def generate_transform(expression_str):
+    # check for parentheses in expression
+
+    # Parse the expression without knowing the symbol names in advance
+    parsed_expression = sympify(expression_str, evaluate=False)
+    free_symbols = tuple(parsed_expression.free_symbols)
+
+    # Transform expression to jax expression
+    func = sympy2jax.SymbolicModule(parsed_expression, extra_funcs=None, make_array=True)
+
+    return {"transform": func, "args": [str(s) for s in free_symbols]}
 
 exp = transforms.ExpTransform
 sigmoid = transforms.SigmoidTransform
@@ -164,7 +178,12 @@ class NumpyroBackend:
             
             mapped_key = parameter_mapping.get(key, key)
 
-            parsed_val = float(val) if is_number(val) else val
+            # if is_number(val):
+            #     parsed_val = float(val)
+            # else:
+            parsed_val = generate_transform(expression_str=val)
+
+            # parsed_val = float(val) if is_number(val) else val
             mapped_params.update({mapped_key:parsed_val})
 
         return parname, distribution, mapped_params
@@ -177,8 +196,13 @@ class NumpyroBackend:
                 prior=par.prior, 
                 distribution_map=self.distribution_map
             )
-            parameterized_dist = distribution(**params)
-            priors.update({name: {"fn":parameterized_dist}})
+            # parameterized_dist = distribution(**params)
+            priors.update({
+                name: {
+                    "fn":distribution, 
+                    "parameters": params
+                }
+            })
         return priors
 
     def parse_error_model(self):
@@ -204,6 +228,7 @@ class NumpyroBackend:
         EPS = self.EPS
         prior = self.prior.copy()
         error_model = self.error_model.copy()
+        extra = {"EPS": EPS}
 
         def lookup(val, deterministic, prior_samples, observations):
             if val in deterministic:
@@ -215,6 +240,9 @@ class NumpyroBackend:
             elif val in observations:
                 return observations[val]
             
+            elif val in extra:
+                return extra[val]
+
             else:
                 return val
 
@@ -222,9 +250,20 @@ class NumpyroBackend:
             # construct priors with numpyro.sample and sample during inference
             theta = {}
             for prior_name, prior_kwargs in prior.items():
+                
+                # apply transforms to priors. This will be handy when I use nested
+                # parameters
+                prior_distribution_parameters = {}
+                for pri_par, pri_val in prior_kwargs["parameters"].items():
+                    prior_trans_func = pri_val["transform"]
+                    prior_trans_func_kwargs = {k: lookup(k, {}, theta, obs) for k in pri_val["args"]}
+                    prior_distribution_parameters.update({
+                        pri_par: prior_trans_func(**prior_trans_func_kwargs)
+                    })
+
                 theta_i = numpyro.sample(
                     name=prior_name,
-                    fn=prior_kwargs["fn"]
+                    fn=prior_kwargs["fn"](**prior_distribution_parameters)
                 )
 
                 theta.update({prior_name: theta_i})
@@ -242,19 +281,14 @@ class NumpyroBackend:
             for error_model_name, error_model_kwargs in error_model.items():
                 error_distribution = error_model_kwargs["fn"]
                 error_distribution_kwargs = {}
-                for p, val in error_model_kwargs["parameters"].items():
-                    error_distribution_param_value = lookup(
-                        val=val, 
-                        deterministic=sim_results, 
-                        prior_samples=theta,
-                        observations=obs
-                    )
-                    error_distribution_kwargs.update(
-                        {p: error_distribution_param_value}
-                    )
-                
-                if "lognorm" in error_model_kwargs["error_dist"]:
-                    error_distribution_kwargs["loc"] += EPS
+                for errdist_par, errdist_val in error_model_kwargs["parameters"].items():
+                    errdist_trans_func = errdist_val["transform"]
+                    errdist_trans_func_kwargs = {
+                        k: lookup(k, sim_results, theta, obs) for k in errdist_val["args"]
+                    }
+                    error_distribution_kwargs.update({
+                        errdist_par: errdist_trans_func(**errdist_trans_func_kwargs)
+                    })
 
                 _ = numpyro.sample(
                     name=error_model_name + "_obs",
