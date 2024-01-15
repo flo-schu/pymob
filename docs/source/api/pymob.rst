@@ -7,6 +7,7 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
+   pymob.inference
    pymob.sim
    pymob.utils
 

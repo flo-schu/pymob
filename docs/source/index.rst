@@ -13,7 +13,8 @@ Welcome to pymob's documentation!
    case_studies
    simulation
    parameter_inference
-   api
+
+   api/pymob
 
 
 Indices and tables
