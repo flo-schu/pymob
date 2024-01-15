@@ -25,6 +25,8 @@ dependencies=[
   "toopy == 0.5.1",
   "xarray ~= 2023.11.0",
   "pathos ~= 0.3.1",
+  "sympy ~= 1.12",
+  "sympy2jax ~= 0.0.5",
 ]
 license = {file = "LICENSE"}
 classifiers = [
@@ -48,7 +50,7 @@ pymob-infer = "pymob:infer.main"
 include = ["pymob*"]
 
 [project.optional-dependencies]
-dev = ["pytest >= 7.3", "pyinstrument >= 4.5", "bumpver"]
+dev = ["pytest >= 7.3", "pyinstrument >= 4.5", "bumpver", "sphinx", "myst-parser"]
 inference = ["pyabc ~= 0.12.3"]
 optimize = ["pymoo ~= 0.6.0"]
 interactive = ["ipywidgets ~= 8.1.1", "IPython ~= 8.17.2"]
