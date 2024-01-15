@@ -15,8 +15,12 @@ release = "0.2.5"
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
+    "myst_parser",
     "sphinx.ext.duration",
-    "myst_parser"
+    'sphinx.ext.doctest',
+    'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',
+    "sphinx.ext.napoleon"  # used for building numpy style documentation
 ]
 
 templates_path = ["_templates"]
