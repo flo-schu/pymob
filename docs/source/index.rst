@@ -10,6 +10,10 @@ Welcome to pymob's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   case_studies
+   simulation
+
+
 Indices and tables
 ==================
 
