@@ -9,7 +9,7 @@ import arviz as az
 from matplotlib import pyplot as plt
 from pathos import multiprocessing as mp
 
-from pymob import SimulationBase
+from pymob.simulation import SimulationBase
 
 
 class PyabcBackend:

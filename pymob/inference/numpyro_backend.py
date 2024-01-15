@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 from sympy import sympify
 import sympy2jax
 
-from pymob import SimulationBase
+from pymob.simulation import SimulationBase
 
 
 def LogNormalTrans(loc, scale):
