@@ -16,6 +16,7 @@ release = "0.2.5"
 
 extensions = [
     "myst_parser",
+    'sphinx.ext.mathjax',
     "sphinx.ext.duration",
     'sphinx.ext.doctest',
     'sphinx.ext.autodoc',
@@ -23,13 +24,26 @@ extensions = [
     "sphinx.ext.napoleon"  # used for building numpy style documentation
 ]
 
+# https://myst-parser.readthedocs.io/en/latest/configuration.html
+myst_enable_extensions = [
+    "tasklist",
+    "dollarmath",
+    "amsmath"
+]
+
 templates_path = ["_templates"]
-exclude_patterns = []
 
-
+source_suffix = {
+    '.rst': 'restructuredtext',
+    '.txt': 'markdown',
+    '.md': 'markdown',
+}
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = "alabaster"
+html_theme = "sphinx_book_theme"
 html_static_path = ["_static"]
+
+autosummary_generate = True
+autosummary_imported_members = True
