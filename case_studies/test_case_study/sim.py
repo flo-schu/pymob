@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 from mod import lotka_volterra, solve, solve_jax
 from plot import plot_trajectory
-from pymob import SimulationBase
+from pymob.simulation import SimulationBase
 
 class Simulation(SimulationBase):
     solver = solve_jax

@@ -1,5 +1,5 @@
 import pytest
-from pymob import SimulationBase
+from pymob.simulation import SimulationBase
 
 def test_simulation():
     pytest.skip()
