@@ -26,6 +26,8 @@ class Simulation(SimulationBase):
         """Should avoid using input arg but instead take a single dictionary as 
         an input. This also then provides an harmonized IO between model and 
         parameters, which in addition is serializable to json.
+
+        model parameters is provided by `functools.partial` on model initialization
         """
         # Initial conditions and parameters
         y0 = model_parameters["y0"]
