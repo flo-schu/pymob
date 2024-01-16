@@ -50,6 +50,6 @@ class Simulation(SimulationBase):
 
         return time
     
-    def plot(self):
-        fig = plot_trajectory(self.results)
+    def plot(self, results):
+        fig = plot_trajectory(results)
         fig.savefig(f"{self.output_path}/trajectory.png")

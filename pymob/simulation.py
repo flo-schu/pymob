@@ -180,8 +180,9 @@ class SimulationBase:
             sliders.update({par.name: s})
 
         def func(theta):
-            self.Y = self.evaluate(theta)
-            self.plot()
+            evaluator = self.dispatch(theta=theta)
+            evaluator()
+            self.plot(results=evaluator.results)
 
         out = interactive_output(func=func, controls=sliders)
 

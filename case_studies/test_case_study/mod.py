@@ -13,7 +13,7 @@ from diffrax import (
     RecursiveCheckpointAdjoint
 )
 
-def solve(model, parameters, coordinates):
+def solve(model, parameters, coordinates, data_variables):
     """Initial value problems always need the same number of recurrent arguments
 
     - parameters: define the model
@@ -34,13 +34,14 @@ def solve(model, parameters, coordinates):
     """
     odeargs = mappar(model, parameters["parameters"], exclude=["t", "y"])
     t = coordinates["time"]
-    return solve_ivp(
+    results = solve_ivp(
         fun=model,
         y0=parameters["y0"],
         t_span=(t[0], t[-1]),
         t_eval=t,
         args=odeargs,
     )
+    return {data_var:y for data_var, y in zip(data_variables, results.y)}
 
 def solve_jax(model, parameters, coordinates, data_variables):
     time = jnp.array(coordinates["time"])
