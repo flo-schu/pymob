@@ -24,7 +24,7 @@ def test_diffrax_exception():
 
     badness = []
     for a in alpha:
-        eva = sim.dispatch({"alpha": 5, "beta": 0.02})
+        eva = sim.dispatch({"alpha": a, "beta": 0.02})
         eva()
 
         badness.append(n_inf(eva))

@@ -15,7 +15,7 @@ def load_test_case_study():
 
 def test_scripting_API():
     sim = load_test_case_study()
-    evalu = sim.dispatch(theta={"parameters":sim.model_parameter_dict}, foo=1)
+    evalu = sim.dispatch(theta=sim.model_parameter_dict)
     evalu()
 
     ds = evalu.results
@@ -39,4 +39,7 @@ def test_commandline_API():
 
 
 if __name__ == "__main__":
-    test_scripting_API()
+    import sys
+    import os
+    sys.path.append(os.getcwd())
+    test_interactive_mode()

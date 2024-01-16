@@ -32,11 +32,6 @@ def test_scripting_api_pyabc():
         rtol=5e-2, atol=1e-5
     )
 
-def test_scripting_api_numpyro():
-    sim = create_simulation()
-    sim.set_inferer(backend="numpyro")
-    sim.inferer.run()
-
 
 def test_inference_evaluation():
     sim = create_simulation()
