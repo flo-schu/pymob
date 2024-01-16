@@ -1,3 +1,3 @@
 from . import inference
-from .simulation import SimulationBase
-from .utils.store_file import prepare_casestudy
+from . import sim
+from . import utils

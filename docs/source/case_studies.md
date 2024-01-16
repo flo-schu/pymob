@@ -1,4 +1,4 @@
-## Case studies
+# Case studies
 
 Case studies are a principled approach to the *modelling* process. In essence, they are a simple template that contains building blocks for model and names and stores them in an intuitive and reproducible way.
 
@@ -28,10 +28,10 @@ test_case_study
 
 While it is recommended to keep data, docs, results, scripts directories in each case study to keep a comprehensive and compact structure of the project, these can reside anywhere else. 
 
-### Configuration
+## Configuration
 
 
-#### Case study settings (settings.cfg)
+### Case study settings (settings.cfg)
 
 Settings files are created as conf `.cfg` files. These files are organized into sections. E.g.:
 
@@ -44,7 +44,7 @@ output = .
 ```
 
 
-#### Simulation configuration files (config.json)
+### Simulation configuration files (config.json)
 
 Configuration options for the simulations are given as JSON files. The reason for this is that json files allow the possibility of nesting, which makes it easy to parameterize a simulation on different hierarchy levels.
 

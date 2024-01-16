@@ -1,8 +1,8 @@
-## Simulation
+# Simulation
 
 The modelling toolkit offers a variety of algorithms that can be used on a large number of models. Reckognizing that simulation, optimization/calibration, parameter inference, sensitivity analysis, validation, etc. require similar workflows and have common input and output datastreams opens the door for building a generic Simulation class, which can be reused for the listed purposes.
 
-### Simulation components
+## Simulation components
 
 Any simulation has recurring components. Facilitating transfer of information
 between those components is key to analyze a described model with different 
@@ -29,7 +29,7 @@ class Simulation(SimulationBase):
 ```
 
 
-#### The model
+### The model
 
 This is defined by the `run` method. It returns the output of a single simulation
 run and takes no arguments. Extra input to the function is specified in the
@@ -50,7 +50,7 @@ def run(self):
 The solution is returned as a `list` or `np.array`. Importantly, the shape of
 the output must follow the order of the dimensions returned in `set_coordinates`.
 
-#### Model parameters
+### Model parameters
 
 Model parameters are a critical part of the model. Changing model parameters
 changes the output of a model. Parameters are involved in many typical tasks
@@ -102,7 +102,7 @@ def parameterize(self, input):
 ```
 
 
-#### Simulation coordinates
+### Simulation coordinates
 
 The model coordinates describe the dimensions over which the model is solved.
 In a simple model only one coordinate is present. This dimension can be the
@@ -133,11 +133,11 @@ named in the same order in the `settings.cfg` file
 [simulation]
 dimensions = time sample
 ```
-#### Observations
+### Observations
 
 Observations must have the same form as the model output
 
-### Input / Output 
+## Input / Output 
 
 As a uniform exchange format `netcdf` is enforced by the package. In python `netcdf` files are handled by the `xarray` package. For convenience, data_variables of interest can be saved as a number of output formats. However, higher dimesnional datasets with more coordinates than e.g. time, must be aggregated over the remaining dimensions, before they can be processed to .csv files
 

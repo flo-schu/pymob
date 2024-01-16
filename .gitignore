@@ -20,3 +20,5 @@ config/settings.json
 *.log
 *.synctex.gz
 /*.egg-info/
+docs/build
+build

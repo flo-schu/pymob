@@ -9,7 +9,7 @@ import arviz as az
 from matplotlib import pyplot as plt
 from pathos import multiprocessing as mp
 
-from pymob import SimulationBase
+from pymob.simulation import SimulationBase
 
 
 class PyabcBackend:
@@ -85,20 +85,26 @@ class PyabcBackend:
         )
     
     @staticmethod
-    def prior_parser(free_model_parameters: list):
+    def param_to_prior(par):
+        parname = par.name
+        distribution, cluttered_arguments = par.prior.split("(", 1)
+        param_strings = cluttered_arguments.split(")", 1)[0].split(",")
+        params = {}
+        for parstr in param_strings:
+            key, val = parstr.split("=")
+            params.update({key:float(val)})
+
+        return parname, distribution, params
+
+    @classmethod
+    def prior_parser(cls, free_model_parameters: list):
 
         prior_dict = {}
         for mp in free_model_parameters:
-            parname = mp.name
-            distribution, cluttered_arguments = mp.prior.split("(", 1)
-            param_strings = cluttered_arguments.split(")", 1)[0].split(",")
-            params = {}
-            for parstr in param_strings:
-                key, val = parstr.split("=")
-                params.update({key:float(val)})
+            name, distribution, params = cls.param_to_prior(par=mp)
 
             prior = pyabc.RV(distribution, **params)
-            prior_dict.update({parname: prior})
+            prior_dict.update({name: prior})
 
         return pyabc.Distribution(**prior_dict)
 
@@ -116,13 +122,14 @@ class PyabcBackend:
 
     def model_parser(self):
         def model(theta):
-            Y = self.simulation.evaluate(theta)
-            return {"sim_results": Y}
+            evaluator = self.simulation.dispatch(theta=dict(theta))
+            evaluator()
+            return {k: np.array(v) for k, v in evaluator.Y.items()}
         return model
     
     def distance_function_parser(self):
         def distance_function(x, x0):
-            Y = x["sim_results"]
+            Y = {k: v for k, v in x.items() if k in self.simulation.data_variables}
             obj_name, obj_value = self.simulation.objective_function(results=Y)
             return obj_value
         
@@ -200,9 +207,30 @@ class PyabcBackend:
             )
         )
         
+        idata = az.from_dict(
+            posterior={key: col.values for key, col in samples.items()},
+            dims=self.posterior_data_structure,
+            coords=self.posterior_coordinates
+        )
+        self.idata = idata
         # posterior
         self.posterior = Posterior(posterior)
 
+    @property
+    def posterior_data_structure(self):
+        data_structure = self.simulation.data_structure.copy()
+        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
+        data_structure.update(data_structure_loglik)
+        return data_structure
+
+    @property
+    def posterior_coordinates(self):
+        posterior_coords = self.simulation.coordinates.copy()
+        posterior_coords.update({
+            "draw": list(range(self.population_size)), 
+            "chain": [0]
+        })
+        return posterior_coords
 
     def plot_chains(self):
 
@@ -255,7 +283,7 @@ class PyabcBackend:
         pass
    
     @lru_cache
-    def make_posterior_predictions(self, n=50, seed=1):
+    def posterior_predictions(self, n=50, seed=1):
         rng = np.random.default_rng(seed)
         post = self.posterior
         total_samples = post.samples.shape[1]
@@ -265,8 +293,9 @@ class PyabcBackend:
 
         def predict(posterior_sample_id):
             params = post.draw(i=posterior_sample_id)
-            res = self.evaluator(params.to_dict())
-            res = self.simulation.results_to_df(res["sim_results"])
+            evaluator = self.simulation.dispatch(params.to_dict())
+            evaluator()
+            res = evaluator.results
             res = res.assign_coords({"draw": posterior_sample_id, "chain": 1})
             res["params"] = params.samples
             res = res.expand_dims(("chain", "draw"))
@@ -286,7 +315,7 @@ class PyabcBackend:
         ):
         obs = self.simulation.observations.sel(subset)
         
-        post_pred = self.make_posterior_predictions(
+        post_pred = self.posterior_predictions(
             n=self.n_predictions, 
             # seed only controls the parameters samples drawn from posterior
             seed=self.simulation.seed

@@ -1,7 +1,9 @@
 import os
 import warnings
 import configparser
+from functools import partial
 import multiprocessing as mp
+from typing import Callable, Dict
 from multiprocessing.pool import ThreadPool, Pool
 
 import numpy as np
@@ -9,10 +11,11 @@ import xarray as xr
 import dpath.util as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from toopy import Param, FloatParam, IntParam
+from toopy import benchmark
 
 from pymob.utils.errors import errormsg
 from pymob.utils.store_file import scenario_file, parse_config_section
-
+from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 
 def update_parameters_dict(config, x, parnames):
     for par, val, in zip(parnames, x):
@@ -27,13 +30,14 @@ def update_parameters_dict(config, x, parnames):
 
 
 class SimulationBase:
+    model: Callable
     def __init__(
         self, 
         config: configparser.ConfigParser, 
     ) -> None:
         
         self.config = config
-        self.model_parameters: tuple = ()
+        self.model_parameters: Dict = {}
         self.observations = None
         self._objective_names = []
         self._seed_buffer_size = self.n_cores * 2
@@ -51,6 +55,7 @@ class SimulationBase:
         
         coords = self.set_coordinates(input=self.input_file_paths)
         self.coordinates = self.create_coordinates(coordinate_data=coords)
+        self.var_dim_mapper = self.create_dim_index()
         self.free_model_parameters  = self.set_free_model_parameters()
 
         if not os.path.exists(self.output_path):
@@ -58,6 +63,7 @@ class SimulationBase:
 
         self.validate()
         # TODO: set up logger
+        self.parameterize = partial(self.parameterize, model_parameters=self.model_parameters)
 
 
     def __repr__(self) -> str:
@@ -75,10 +81,68 @@ class SimulationBase:
 
         print("========================", end="\n")
 
+    def benchmark(self, n=100):
+        evaluator = self.dispatch(theta=self.model_parameter_dict)
+        evaluator() 
+
+        @benchmark
+        def run_bench():
+            for i in range(n):
+                evaluator()
+        
+        print(f"\nBenchmarking with {n} evaluations")
+        print(f"=================================")
+        run_bench()
+        print(f"=================================\n")
+        
+
+        
+    def dispatch(self, theta, **evaluator_kwargs):
+        """Dispatch an evaluator, which will compute the model at parameters
+        (theta). Evaluators are advantageous, because they are easier serialized
+        than the whole simulation object. Comparison can then happen back in 
+        the simulation.
+
+        Theoretically, this could also be used to constrain coordinates etc, 
+        before evaluating.  
+        """
+        model_parameters = self.parameterize(theta)
+        
+        # TODO: make sure the evaluator has all arguments required for solving
+        # model
+        # TODO: Check if model is bound. If yes extract
+        if hasattr(self.solver, "__func__"):
+            solver = self.solver.__func__
+        else:
+            solver = self.solver
+
+        if hasattr(self.model, "__func__"):
+            model = self.model.__func__
+        else:
+            model = self.model
+
+        stochastic = self.config.get("simulation", "modeltype", fallback=False)
+            
+        evaluator = Evaluator(
+            model=model,
+            solver=solver,
+            parameters=model_parameters,
+            dimensions=self.dimensions,
+            var_dim_mapper=self.var_dim_mapper,
+            data_structure=self.data_structure,
+            data_variables=self.data_variables,
+            coordinates=self.coordinates,
+            # TODO: pass the whole simulation settings section
+            stochastic=True if stochastic == "stochastic" else False,
+            **evaluator_kwargs
+        )
+
+        return evaluator
+
     def evaluate(self, theta):
         """Wrapper around run to modify paramters of the model.
         """
-        self.model_parameters = self.parameterize(self.input_file_paths, theta)
+        self.model_parameters = self.parameterize(theta)
         return self.run()
     
     def compute(self):
@@ -116,8 +180,9 @@ class SimulationBase:
             sliders.update({par.name: s})
 
         def func(theta):
-            self.Y = self.evaluate(theta)
-            self.plot()
+            evaluator = self.dispatch(theta=theta)
+            evaluator()
+            self.plot(results=evaluator.results)
 
         out = interactive_output(func=func, controls=sliders)
 
@@ -129,13 +194,32 @@ class SimulationBase:
 
             self.inferer = PyabcBackend(simulation=self)
 
-        if backend == "pymoo":
+        elif backend == "pymoo":
             from pymob.inference.pymoo_backend import PymooBackend
 
             self.inferer = PymooBackend(simulation=self)
 
+        elif backend == "numpyro":
+            from pymob.inference.numpyro_backend import NumpyroBackend
+
+            self.inferer = NumpyroBackend(simulation=self)
+    
+        else:
+            raise NotImplementedError(f"Backend: {backend} is not implemented.")
+
+    def check_dimensions(self, dataset):
+        """Check if dataset dimensions match the specified dimensions.
+        TODO: Name datasets for referencing them in errormessages
+        """
+        ds_dims = list(dataset.dims.keys())
+        in_dims = [k in self.dimensions for k in ds_dims]
+        assert all(in_dims), IndexError(
+            "Not all dataset dimensions, were not found in specified dimensions. "
+            f"Settings(dims={self.dimensions}) != dataset(dims={ds_dims})"
+        )
         
     def dataset_to_2Darray(self, dataset: xr.Dataset): 
+        self.check_dimensions(dataset=dataset)
         array_2D = dataset.stack(multiindex=self.dimensions)
         return array_2D.to_array().transpose("multiindex", "variable")
 
@@ -192,11 +276,25 @@ class SimulationBase:
         )
 
     def results_to_df(self, results):
-        return self.create_dataset_from_numpy(
-            Y=results, 
-            Y_names=self.data_variables, 
-            coordinates=self.coordinates
-        )
+        if isinstance(results, xr.Dataset):
+            return results
+        elif isinstance(results, dict):
+            return create_dataset_from_dict(
+                Y=results, 
+                coordinates=self.coordinates,
+                data_structure=self.data_structure,
+            )
+        elif isinstance(results, np.ndarray):
+            return create_dataset_from_numpy(
+                Y=results,
+                Y_names=self.data_variables,
+                coordinates=self.coordinates,
+            )
+        else:
+            raise NotImplementedError(
+                "Results returned by the solver must be of type Dict or np.ndarray."
+            )
+    
 
     @property
     def results_scaled(self):
@@ -253,9 +351,12 @@ class SimulationBase:
         #       - 
         pass
 
-    def parameterize(self, input: list[str], theta: list[Param]):
+    @staticmethod
+    def parameterize(free_parameters: list[Param], model_parameters) -> dict:
         """
-        Optional. Set parameters of the model. By default returns an empty tuple. 
+        Optional. Set parameters and initial values of the model. 
+        Must return a dictionary with the keys 'y0' and 'parameters'
+        
         Can be used to define parameters directly in the script or from a 
         parameter file.
 
@@ -271,7 +372,11 @@ class SimulationBase:
 
         tulpe: tuple of parameters, can have any length.
         """
-        return {p.name: p.value for p in theta}, 
+        parameters = model_parameters["parameters"]
+        y0 = model_parameters["y0"]
+
+        parameters.update({p.name: p.value for p in free_parameters})
+        return {"y0": y0, "parameters": parameters} 
 
     def run(self):
         """
@@ -304,7 +409,8 @@ class SimulationBase:
 
     def total_average(self, results):
         """objective function returning the total MSE of the entire dataset"""
-        diff = (self.scale_results(results) - self.observations_scaled).to_array()
+        
+        diff = (self.scale_(self.results_to_df(results)) - self.observations_scaled).to_array()
         return (diff ** 2).mean()
 
     def prior(self):
@@ -339,6 +445,10 @@ class SimulationBase:
 
     @staticmethod
     def create_dataset_from_numpy(Y, Y_names, coordinates):
+        warnings.warn(
+            "Use `create_dataset_from_numpy` defined in sim.evaluator",
+            category=DeprecationWarning
+        )
         n_vars = Y.shape[-1]
         n_dims = len(Y.shape)
         assert n_vars == len(Y_names), errormsg(
@@ -520,7 +630,7 @@ class SimulationBase:
         self.config.set("multiprocessing", "cores", str(value))
 
     def create_random_integers(self, n):
-        return self.RNG.integers(0, 1e18, n).tolist()
+        return self.RNG.integers(0, 1e8, n).tolist()
         
     def refill_consumed_seeds(self):
         n_seeds_left = len(self._random_integers)
@@ -531,40 +641,101 @@ class SimulationBase:
             print(f"Appended {n_new_seeds} new seeds to sim.")
         
     def draw_seed(self):
-        return None       
-        # the collowing has no multiprocessing stability
-        # self.refill_consumed_seeds()
-        # seed = self._random_integers.pop(0)
-        # return seed
+        # return None       
+        # the collowing has no multiprocessing stability when the simulation is
+        # serialized directly
+        self.refill_consumed_seeds()
+        seed = self._random_integers.pop(0)
+        return seed
 
     @property
     def seed(self):
         return int(self.config.get("simulation", "seed", fallback=1))
 
     def set_free_model_parameters(self):
-        try:
-            params = parse_config_section(self.config["model-parameters"], method="strfloat")
-            
-            # create a nested dictionary from model parameters
-            parameter_dict = {}
-            for par_key, par_value in params.items():
-                dp.new(parameter_dict, par_key, par_value, separator=".")
+        if self.config.has_section("model-parameters"):
+            warnings.warn(
+                "config section 'model-parameters' is deprecated, "
+                "use 'free-model-parameters' and 'fixed-model-parameters'", 
+                DeprecationWarning
+            )
+            params = parse_config_section(
+                self.config["model-parameters"], method="strfloat"
+            )
+        elif self.config.has_section("free-model-parameters"):
+            params = parse_config_section(
+                self.config["free-model-parameters"], method="strfloat"
+            )
+        else:
+            warnings.warn("No parameters were specified.")
+            params = {}
 
-            # create Param instances
-            parameters = []
-            for param_name, param_dict in parameter_dict.items():
-                p = FloatParam(
-                    value=param_dict.get("value"),
-                    name=param_name,
-                    min=param_dict.get("min", None),
-                    max=param_dict.get("max", None),
-                    step=param_dict.get("step", None),
-                    prior=param_dict.get("prior", None)
-                )
-                parameters.append(p)
-
-            return parameters
-        except KeyError:
-            return {}
         
-            
+        # create a nested dictionary from model parameters
+        parameter_dict = {}
+        for par_key, par_value in params.items():
+            dp.new(parameter_dict, par_key, par_value, separator=".")
+
+        # create Param instances
+        parameters = []
+        for param_name, param_dict in parameter_dict.items():
+            p = FloatParam(
+                value=param_dict.get("value", 1),
+                name=param_name,
+                min=param_dict.get("min", None),
+                max=param_dict.get("max", None),
+                step=param_dict.get("step", None),
+                prior=param_dict.get("prior", None)
+            )
+            parameters.append(p)
+
+        return parameters
+        
+    @property
+    def error_model(self):
+        em = parse_config_section(self.config["error-model"], method="strfloat")
+        return em
+
+    @property
+    def evaluator_dim_order(self):
+        return self.config.getlist("simulation", "evaluator_dim_order", fallback=None)
+
+    def create_dim_index(self):
+        # TODO: If a dimensionality config seciton is implemented this function
+        # may become superflous
+        sim_dims = self.dimensions
+        evaluator_dims = self.evaluator_dim_order
+        obs_ordered = self.observations.transpose(*sim_dims)
+
+        var_dim_mapper = {}
+        for var in self.data_variables:
+            obs_var_dims = obs_ordered[var].dims
+            var_dim_mapper.update({
+                var: [obs_var_dims.index(e_i) for e_i in evaluator_dims if e_i in obs_var_dims]
+            })
+
+        return var_dim_mapper
+    
+    @property
+    def data_structure(self):
+        # TODO: If a dimensionality config seciton is implemented this function
+        # may become superflous
+        obs_ordered = self.observations.transpose(*self.dimensions)
+
+        data_structure = {}
+        for var in self.data_variables:
+            obs_var_dims = obs_ordered[var].dims
+            data_structure.update({
+                var: list(obs_var_dims)
+            })
+
+        return data_structure
+
+    def reorder_dims(self, Y):
+        results = {}
+        for var, mapper in self.var_dim_mapper.items():
+            results.update({
+                var: Y[var][np.array(mapper)]
+            })
+    
+        return results

@@ -15,9 +15,10 @@ def load_test_case_study():
 
 def test_scripting_API():
     sim = load_test_case_study()
-    sim.compute()
+    evalu = sim.dispatch(theta=sim.model_parameter_dict)
+    evalu()
 
-    ds = sim.results
+    ds = evalu.results
     ds_ref = xr.load_dataset(f"{sim.data_path}/simulated_data.nc")
 
     np.testing.assert_allclose(
@@ -35,3 +36,10 @@ def test_commandline_API():
     
     args = "--case_study=test_case_study --scenario=test_scenario"
     result = runner.invoke(main, args.split(" "))
+
+
+if __name__ == "__main__":
+    import sys
+    import os
+    sys.path.append(os.getcwd())
+    test_interactive_mode()
