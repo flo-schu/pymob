@@ -71,3 +71,6 @@ push = true
     'current_version = "{version}"',
     'version = "{version}"'
 ]
+"pymob/__init__.py" = [
+    '__version__ = "{version}"'
+]
