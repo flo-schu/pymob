@@ -1,4 +1,5 @@
 from functools import partial, lru_cache
+from typing import Tuple, Dict, Union, Optional, Callable
 import numpyro
 import jax
 import jax.numpy as jnp
@@ -47,6 +48,13 @@ class NumpyroBackend:
         self, 
         simulation: SimulationBase
     ):
+        """Initializes the NumpyroBackend with a Simulation object.
+
+        Parameters
+        ----------
+        simulation : SimulationBase
+            An initialized simulation.
+        """
         self.EPS = 1e-8
         self.distribution_map = {
             "lognorm": (LogNormalTrans, {"scale": "loc", "s": "scale"}),
@@ -65,7 +73,7 @@ class NumpyroBackend:
         self.idata: az.InferenceData
 
     @property
-    def plot_function(self):
+    def plot_function(self) -> Optional[str]:
         return self.simulation.config.get(
             "inference", "plot_function", 
             fallback=None
@@ -73,7 +81,7 @@ class NumpyroBackend:
 
     @property
     def extra_vars(self):
-        extra = self.simulation.config.getlist(
+        extra = self.simulation.config.getlist( 
             "inference", "extra_vars", fallback=[]
         )
         return extra if isinstance(extra, list) else [extra]
@@ -111,7 +119,16 @@ class NumpyroBackend:
 
         return getattr(infer, strategy)
 
-    def parse_deterministic_model(self):
+    def parse_deterministic_model(self) -> Callable:
+        """Parses an evaluation function from the Simulation object, which 
+        takes a single argument theta and defaults to passing no seed to the
+        deterministic evaluator.
+
+        Returns
+        -------
+        callable
+            The evaluation function
+        """
         def evaluator(theta, seed=None):
             evaluator = self.simulation.dispatch(theta=theta)
             evaluator(seed)
@@ -123,7 +140,15 @@ class NumpyroBackend:
         pass
 
 
-    def observation_parser(self):
+    def observation_parser(self) -> Tuple[Dict,Dict]:
+        """Transform a xarray.Dataset into a dictionary of jnp.Arrays. Creates
+        boolean arrays of masks for nan values (missing values are tagged False)
+
+        Returns
+        -------
+        Tuple[Dict,Dict]
+            Dictionaries of observations (data) and masks (missing values)
+        """
         obs = self.simulation.observations \
             .transpose(*self.simulation.dimensions)
         data_vars = self.simulation.data_variables + self.extra_vars
@@ -136,36 +161,11 @@ class NumpyroBackend:
             observations.update({d:o})
             masks.update({d:m})
         
-        # masking
-        # m = jnp.nonzero(mask)[0]
         return observations, masks
     
-    def generate_artificial_data(self, theta, key, nan_frac=0.2):  
-        # create artificial data from Evaluator      
-        y_sim = self.evaluator(theta)
-        key, *subkeys = jax.random.split(key, 5)
-        y_sim["cext"] = dist.LogNormal(loc=jnp.log(y_sim["cext"]), scale=0.1).sample(subkeys[0])
-        y_sim["cint"] = dist.LogNormal(loc=jnp.log(y_sim["cint"]), scale=0.1).sample(subkeys[1])
-        y_sim["nrf2"] = dist.LogNormal(loc=jnp.log(y_sim["nrf2"]), scale=0.1).sample(subkeys[2])
-        y_sim["lethality"] = dist.Binomial(total_count=9, probs=y_sim["lethality"]).sample(subkeys[3]).astype(float)
-
-        # add missing data
-        masks = {}
-        key, *subkeys = jax.random.split(key, 5)
-        for i, (k, val) in enumerate(y_sim.items()):
-            nans = dist.Bernoulli(probs=nan_frac).expand(val.shape).sample(subkeys[i])
-            val = val.at[jnp.nonzero(nans)].set(jnp.nan)
-            m = jnp.where(nans==1, False, True)
-            masks.update({k: m})
-            y_sim.update({k: val})
-
-        return y_sim, masks
-
     @staticmethod
-    def parse_parameter(parname, prior, distribution_map):
-        """Parses a simulation parameter (prior) and returns a tuple of a 
-        parameter name, distribution as provided by the distribution map, and
-        the mapped parameters of the distribution."""
+    def parse_parameter(parname: str, prior: str, distribution_map: Dict[str,Tuple]) -> Tuple[str,dist.Distribution,Dict[str,Callable]]:
+
         distribution, cluttered_arguments = prior.split("(", 1)
         param_strings = cluttered_arguments.split(")", 1)[0].split(",")
 
@@ -338,7 +338,7 @@ class NumpyroBackend:
         with numpyro.handlers.seed(rng_seed=1):
             trace = numpyro.handlers.trace(model).get_trace()
         print(numpyro.util.format_shapes(trace))
-
+        
         # set up kernel, MCMC        
         kernel = infer.NUTS(
             model, 
@@ -394,7 +394,7 @@ class NumpyroBackend:
     
     def prior_predictive_checks(self, seed=1):
         key = jax.random.PRNGKey(seed)
-        model = partial(self.model, solver=self.evaluator)    
+        model = partial(self.inference_model, solver=self.evaluator)    
             
         obs, masks = self.observation_parser()
 
@@ -411,7 +411,7 @@ class NumpyroBackend:
 
         preds = self.simulation.data_variables
         priors = list(self.simulation.model_parameter_dict.keys())
-        posterior_coords = self.posterior_coords
+        posterior_coords = self.posterior_coordinates
         data_structure = self.posterior_data_structure
         
         idata = az.from_dict(
@@ -433,7 +433,7 @@ class NumpyroBackend:
 
 
     @lru_cache
-    def posterior_predictions(self, n: int=None, seed=1):
+    def posterior_predictions(self, n: Optional[int]=None, seed=1):
         # TODO: It may be necessary that the coordinates should be passed as 
         # constant data. Because if the model is compiled with them once, 
         # according to the design philosophy of JAX, the model will not 
@@ -502,32 +502,6 @@ class NumpyroBackend:
 
         plot_func = getattr(self.simulation, self.plot_function)
         plot_func()
-
-    def create_idata_from_unlabelled(self):
-        posterior = self.idata.posterior.to_dict()["data_vars"]
-        likelihood = self.idata.log_likelihood.to_dict()["data_vars"]
-        sample_stats = self.idata.sample_stats.to_dict()["data_vars"]
-        obs, masks = self.observation_parser()
-
-        posterior = {k: np.array(val["data"]) for k, val in posterior.items()}
-        likelihood = {k: np.array(val["data"]) for k, val in likelihood.items()}
-        sample_stats = {k: np.array(val["data"]) for k, val in sample_stats.items()}
-        
-        data_structure = self.simulation.data_structure.copy()
-        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
-        data_structure.update(data_structure_loglik)
-        
-        posterior_coords = self.simulation.coordinates.copy()
-        posterior_coords.update({"draw": list(range(2000)), "chain": [0]})
-        self.idata = az.from_dict(
-            observed_data=obs,
-            posterior={k: v for k, v in posterior.items() if k in priors},
-            posterior_predictive={k: v for k, v in posterior.items() if k in preds},
-            log_likelihood=likelihood,
-            sample_stats=sample_stats,
-            dims=data_structure,
-            coords=posterior_coords,
-        )
 
     def plot_prior_predictive(self):
         self.idata
