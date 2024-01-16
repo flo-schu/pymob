@@ -50,7 +50,7 @@ include = ["pymob*"]
 [project.optional-dependencies]
 dev = ["pytest >= 7.3", "pyinstrument >= 4.5", "bumpver", "sphinx", "myst-parser", "sphinx-book-theme"]
 inference = ["pyabc ~= 0.12.3"]
-numpyro = ["jax ~= 0.4.21", "jaxlib ~= 0.4.21", "sympy ~= 1.12", "sympy2jax ~= 0.0.5"]
+numpyro = ["jax ~= 0.4.21", "jaxlib ~= 0.4.21", "sympy ~= 1.12", "sympy2jax ~= 0.0.5", "numpyro ~= 0.13.2"]
 optimize = ["pymoo ~= 0.6.0"]
 interactive = ["ipywidgets ~= 8.1.1", "IPython ~= 8.17.2"]
 
