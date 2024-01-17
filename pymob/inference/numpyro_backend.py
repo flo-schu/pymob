@@ -1,4 +1,5 @@
 from functools import partial, lru_cache
+import re
 from typing import Tuple, Dict, Union, Optional, Callable
 import numpyro
 import jax
@@ -11,11 +12,16 @@ from numpyro import infer
 import xarray as xr
 import arviz as az
 from matplotlib import pyplot as plt
-from sympy import sympify
+import sympy
 import sympy2jax
 
 from pymob.simulation import SimulationBase
 
+
+sympy2jax_extra_funcs = {
+    sympy.Array: jnp.array,
+    sympy.Tuple: tuple,
+}
 
 def LogNormalTrans(loc, scale):
     return TransformedDistribution(
@@ -27,15 +33,31 @@ def LogNormalTrans(loc, scale):
     )
 
 
+def catch_patterns(expression_str):
+    # tries to match array notation [0 1 2]
+    pattern = r"\[(\d+(\.\d+)?(\s+\d+(\.\d+)?)*|\s*)\]"
+    if re.fullmatch(pattern, expression_str) is not None:
+        expression_str = expression_str.replace(" ", ",") \
+            .removeprefix("[").removesuffix("]")
+        return f"stack({expression_str})"
+
+    return expression_str
+
 def generate_transform(expression_str):
     # check for parentheses in expression
+    
+    expression_str = catch_patterns(expression_str)
 
     # Parse the expression without knowing the symbol names in advance
-    parsed_expression = sympify(expression_str, evaluate=False)
+    parsed_expression = sympy.sympify(expression_str, evaluate=False)
     free_symbols = tuple(parsed_expression.free_symbols)
 
     # Transform expression to jax expression
-    func = sympy2jax.SymbolicModule(parsed_expression, extra_funcs=None, make_array=True)
+    func = sympy2jax.SymbolicModule(
+        parsed_expression, 
+        extra_funcs=sympy2jax_extra_funcs, 
+        make_array=True
+    )
 
     return {"transform": func, "args": [str(s) for s in free_symbols]}
 
