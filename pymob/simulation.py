@@ -5,13 +5,13 @@ from functools import partial
 import multiprocessing as mp
 from typing import Callable, Dict
 from multiprocessing.pool import ThreadPool, Pool
+import re
 
 import numpy as np
 import xarray as xr
 import dpath.util as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from toopy import Param, FloatParam, IntParam
-from toopy import benchmark
+from toopy import param, benchmark
 
 from pymob.utils.errors import errormsg
 from pymob.utils.store_file import scenario_file, parse_config_section
@@ -352,7 +352,7 @@ class SimulationBase:
         pass
 
     @staticmethod
-    def parameterize(free_parameters: list[Param], model_parameters) -> dict:
+    def parameterize(free_parameters: list[param.Param], model_parameters) -> dict:
         """
         Optional. Set parameters and initial values of the model. 
         Must return a dictionary with the keys 'y0' and 'parameters'
@@ -679,14 +679,33 @@ class SimulationBase:
         # create Param instances
         parameters = []
         for param_name, param_dict in parameter_dict.items():
-            p = FloatParam(
-                value=param_dict.get("value", 1),
-                name=param_name,
-                min=param_dict.get("min", None),
-                max=param_dict.get("max", None),
-                step=param_dict.get("step", None),
-                prior=param_dict.get("prior", None)
-            )
+            value = param_dict.get("value", 1)
+            if isinstance(value, (int, float)):
+                p = param.FloatParam(
+                    value=value,
+                    name=param_name,
+                    min=param_dict.get("min", None),
+                    max=param_dict.get("max", None),
+                    step=param_dict.get("step", None),
+                    prior=param_dict.get("prior", None)
+                )
+            else:
+                # check for array notation
+                pattern = r"(\d+(\.\d+)?(\s+\d+(\.\d+)?)*|\s*)"
+                if re.fullmatch(pattern, value):
+                    value = np.array([float(v) for v in value.split(" ")])
+                    p = param.ArrayParam(
+                        value=value,
+                        name=param_name,
+                        min=param_dict.get("min", None),
+                        max=param_dict.get("max", None),
+                        step=param_dict.get("step", None),
+                        prior=param_dict.get("prior", None)
+                    )
+                else:
+                    raise NotImplementedError(
+                        f"Parameter specification '{value}' cannot be parsed."
+                    )
             parameters.append(p)
 
         return parameters
