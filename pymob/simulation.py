@@ -81,14 +81,14 @@ class SimulationBase:
 
         print("========================", end="\n")
 
-    def benchmark(self, n=100):
-        evaluator = self.dispatch(theta=self.model_parameter_dict)
-        evaluator() 
+    def benchmark(self, n=100, **kwargs):
+        evaluator = self.dispatch(theta=self.model_parameter_dict, **kwargs)
+        evaluator(seed=1) 
 
         @benchmark
         def run_bench():
             for i in range(n):
-                evaluator()
+                evaluator(seed=np.random.randint(1e6))
         
         print(f"\nBenchmarking with {n} evaluations")
         print(f"=================================")
