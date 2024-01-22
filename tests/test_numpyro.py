@@ -39,8 +39,33 @@ def test_diffrax_exception():
     assert sum(badness_for_infeasible_alpha) > 0
 
 
-def test_scripting_api():
+def test_nuts_kernel():
     sim = create_simulation()
+
+    sim.config.set("inference.numpyro", "kernel", "nuts")
+    sim.set_inferer(backend="numpyro")
+    sim.inferer.run()
+    
+    posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))[sim.model_parameter_names]
+    true_parameters = sim.model_parameter_dict
+    
+    # tests if true parameters are close to recovered parameters from simulated
+    # data
+    np.testing.assert_allclose(
+        posterior_mean.to_dataarray().values,
+        np.array(list(true_parameters.values())),
+        rtol=1e-2, atol=1e-3
+    )
+
+def test_sa_kernel():
+    sim = create_simulation()
+
+    sim.config.set("inference.numpyro", "kernel", "sample-adaptive-mcmc")
+    sim.config.set("inference.numpyro", "init_strategy", "init_to_sample")
+    sim.config.set("inference.numpyro", "warmup", "2000")
+    sim.config.set("inference.numpyro", "draws", "1000")
+    sim.config.set("inference.numpyro", "sa_adapt_state_size", "10")
+
     sim.set_inferer(backend="numpyro")
     sim.inferer.run()
     
@@ -56,15 +81,16 @@ def test_scripting_api():
     )
 
 
+
     # posterior predictions
-    # for data_var in sim.data_variables:
-    #     ax = sim.inferer.plot_predictions(
-    #         data_variable=data_var, 
-    #         x_dim="time"
-    #     )
+    for data_var in sim.data_variables:
+        ax = sim.inferer.plot_predictions(
+            data_variable=data_var, 
+            x_dim="time"
+        )
 
 if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    test_scripting_api()
+    test_sa_kernel()

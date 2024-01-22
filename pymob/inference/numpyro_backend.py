@@ -132,6 +132,25 @@ class NumpyroBackend:
         return self.simulation.config.getint(
             "inference.numpyro", "warmup", fallback=self.draws
         )
+    
+    @property
+    def thinning(self):
+        return self.simulation.config.getint(
+            "inference.numpyro", "thinning", fallback=1
+        )
+
+    @property
+    def kernel(self):
+        return self.simulation.config.get(
+            "inference.numpyro", "kernel", fallback="nuts"
+        )
+    
+
+    @property
+    def adapt_state_size(self):
+        return self.simulation.config.getint(
+            "inference.numpyro", "sa_adapt_state_size", fallback=None
+        )
 
     @property
     def init_strategy(self):
@@ -339,7 +358,6 @@ class NumpyroBackend:
     def run(self):
         # set parameters of JAX and numpyro
         # jax.config.update("jax_enable_x64", True)
-        numpyro.set_host_device_count(self.chains)
 
         # generate random keys
         key = jax.random.PRNGKey(1)
@@ -361,23 +379,32 @@ class NumpyroBackend:
             trace = numpyro.handlers.trace(model).get_trace()
         print(numpyro.util.format_shapes(trace))
         
-        # set up kernel, MCMC        
-        kernel = infer.NUTS(
-            model, 
-            dense_mass=True, 
-            step_size=0.01,
-            adapt_mass_matrix=True,
-            adapt_step_size=True,
-            max_tree_depth=10,
-            target_accept_prob=0.8,
-            init_strategy=self.init_strategy
-        )
+        if self.kernel.lower() == "sample-adaptive-mcmc":
+            kernel = infer.SA(
+                model=model,
+                dense_mass=True,
+                adapt_state_size=self.adapt_state_size,
+                init_strategy=self.init_strategy,
+            )
+
+        elif self.kernel.lower() == "nuts":
+            kernel = infer.NUTS(
+                model, 
+                dense_mass=True, 
+                step_size=0.01,
+                adapt_mass_matrix=True,
+                adapt_step_size=True,
+                max_tree_depth=10,
+                target_accept_prob=0.8,
+                init_strategy=self.init_strategy
+            )
 
         mcmc = infer.MCMC(
             sampler=kernel,
             num_warmup=self.warmup,
-            num_samples=self.draws,
+            num_samples=self.draws * self.thinning,
             num_chains=self.chains,
+            thinning=self.thinning,
             progress_bar=True,
         )
     
