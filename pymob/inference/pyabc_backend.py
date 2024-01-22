@@ -18,6 +18,8 @@ class PyabcBackend:
         self, 
         simulation: SimulationBase
     ):
+        self.parameter_map = {}
+        
         self.simulation = simulation
         self.evaluator = self.model_parser()
         self.prior = self.prior_parser(simulation.free_model_parameters)
@@ -127,18 +129,57 @@ class PyabcBackend:
 
         return parname, distribution, params
 
-    @classmethod
-    def prior_parser(cls, free_model_parameters: list):
-
+    def prior_parser(self, free_model_parameters: list):
         prior_dict = {}
         for mp in free_model_parameters:
-            name, distribution, params = cls.param_to_prior(par=mp)
+            name, distribution, params = self.param_to_prior(par=mp)
+            pmap, dist_map = self.array_param_to_1d(name, distribution, params)
 
-            prior = pyabc.RV(distribution, **params)
-            prior_dict.update({name: prior})
+            self.parameter_map.update(pmap)
+            for subpar_name, subpar_dist in dist_map.items():
+                prior = pyabc.RV(subpar_dist["dist"], **subpar_dist["params"])
+                prior_dict.update({subpar_name: prior})
 
         return pyabc.Distribution(**prior_dict)
 
+    @staticmethod
+    def map_parameters(theta, parameter_map):
+        theta_mapped = {}
+        for par_name, subpar_name in parameter_map.items():
+            if isinstance(subpar_name, list):
+                subparams = np.array([theta[p] for p in subpar_name])
+            else:
+                subparams = theta[subpar_name]
+            
+            theta_mapped.update({par_name: subparams})
+        return theta_mapped
+
+    @staticmethod
+    def array_param_to_1d(name, distribution, dist_param_dict):
+        # return a distribution if all parameters of the distribution are floats
+        # and map with name
+
+        if np.all([isinstance(v, float) for _, v in dist_param_dict.items()]):
+            return {name:name}, {name: {"dist": distribution, "params": dist_param_dict}}
+        else:
+            args_as_arrays = {k:np.array(v, ndmin=1) for k, v in dist_param_dict.items()}
+            broadcasted_args = np.broadcast_arrays(*tuple(args_as_arrays.values()))
+            # args = {k: v for k, v in zip(dist_param_dict.keys(), broadcasted_args)}
+
+            param_map = {name: []}
+            dist_map = {}
+            for i, args in enumerate(zip(*broadcasted_args)):
+                p_subname = f"{name}_{i}"
+                param_map[name].append(p_subname)
+                dist_kwargs = {
+                    "dist": distribution,
+                    "params": {k:v for k, v in zip(dist_param_dict.keys(), args)}
+                }
+                dist_map.update({p_subname: dist_kwargs})
+
+            return param_map, dist_map
+
+    
     @property
     def plot_function(self):
         return self.simulation.config.get(
@@ -156,7 +197,8 @@ class PyabcBackend:
         for extra in self.extra_vars:
             extra_kwargs.update({extra: self.simulation.observations[extra].values})
         def model(theta):
-            evaluator = self.simulation.dispatch(theta=dict(theta), **extra_kwargs)
+            theta_mapped = self.map_parameters(theta, self.parameter_map)
+            evaluator = self.simulation.dispatch(theta=theta_mapped, **extra_kwargs)
             evaluator(seed=np.random.randint(1e6))
             return {k: np.array(v) for k, v in evaluator.Y.items()}
         return model
