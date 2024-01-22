@@ -1,4 +1,5 @@
 import os
+import re
 from functools import lru_cache
 import tempfile
 
@@ -10,7 +11,7 @@ from matplotlib import pyplot as plt
 from pathos import multiprocessing as mp
 
 from pymob.simulation import SimulationBase
-
+from pymob.utils.store_file import is_number
 
 class PyabcBackend:
     def __init__(
@@ -27,6 +28,15 @@ class PyabcBackend:
         self.history = None
         self.posterior = None
 
+
+    @property
+    def extra_vars(self):
+        extra = self.simulation.config.getlist( 
+            "inference", "extra_vars", fallback=[]
+        )
+        return extra if isinstance(extra, list) else [extra]
+    
+    
     @property
     def sampler(self):
         return self.simulation.config.get("inference.pyabc", "sampler")
@@ -90,9 +100,30 @@ class PyabcBackend:
         distribution, cluttered_arguments = par.prior.split("(", 1)
         param_strings = cluttered_arguments.split(")", 1)[0].split(",")
         params = {}
+        arraypattern = r"\[(\d+(\.\d+)?(\s+\d+(\.\d+)?)*|\s*)\]"
+        
         for parstr in param_strings:
-            key, val = parstr.split("=")
-            params.update({key:float(val)})
+
+            key, expression = parstr.split("=")
+            
+            # check if val is a number
+            if is_number(expression):
+                value = float(expression)
+            
+            # check if val is an array
+            elif re.fullmatch(arraypattern, expression):
+                expression = expression.removeprefix("[").removesuffix("]")
+                value = np.array([float(v) for v in expression.split(" ")])
+
+            else:
+                raise NotImplementedError(
+                    f"Prior format {expression} is not implemented. "
+                    "Use e.g."
+                    "\n- normal(loc=1.0,scale=0.5) for 1-dimensional priors, or"
+                    "\n- normal(loc=[1.0 2.4 1],scale=0.5) for n-dimensional priors." 
+                )
+
+            params.update({key:value})
 
         return parname, distribution, params
 
@@ -121,9 +152,12 @@ class PyabcBackend:
         
 
     def model_parser(self):
+        extra_kwargs = {}
+        for extra in self.extra_vars:
+            extra_kwargs.update({extra: self.simulation.observations[extra].values})
         def model(theta):
-            evaluator = self.simulation.dispatch(theta=dict(theta))
-            evaluator()
+            evaluator = self.simulation.dispatch(theta=dict(theta), **extra_kwargs)
+            evaluator(seed=np.random.randint(1e6))
             return {k: np.array(v) for k, v in evaluator.Y.items()}
         return model
     
