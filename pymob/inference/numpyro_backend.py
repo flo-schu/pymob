@@ -441,13 +441,16 @@ class NumpyroBackend:
         })
         return posterior_coords
     
-    def prior_predictive_checks(self, seed=1):
+    @lru_cache
+    def prior_predictions(self, n=100, seed=1):
         key = jax.random.PRNGKey(seed)
         model = partial(self.inference_model, solver=self.evaluator)    
             
         obs, masks = self.observation_parser()
 
-        prior_predictive = Predictive(model, num_samples=100, batch_ndims=2)
+        prior_predictive = Predictive(
+            model, num_samples=n, batch_ndims=2
+        )
         prior_predictions = prior_predictive(key, obs=obs, masks=masks)
 
         loglik = numpyro.infer.log_likelihood(
@@ -459,21 +462,23 @@ class NumpyroBackend:
         )
 
         preds = self.simulation.data_variables
+        preds_obs = [f"{d}_obs" for d in self.simulation.data_variables]
         priors = list(self.simulation.model_parameter_dict.keys())
         posterior_coords = self.posterior_coordinates
+        posterior_coords["draw"] = list(range(n))
         data_structure = self.posterior_data_structure
         
         idata = az.from_dict(
             observed_data=obs,
             prior={k: v for k, v in prior_predictions.items() if k in priors},
-            prior_predictive={k: v for k, v in prior_predictions.items() if k in preds},
+            prior_predictive={k: v for k, v in prior_predictions.items() if k in preds+preds_obs},
             log_likelihood=loglik,
             dims=data_structure,
             coords=posterior_coords,
         )
 
-        self.idata = idata
-        self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_prior_predictions.nc")
+        return idata
+        # self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_prior_predictions.nc")
     
     @staticmethod
     def get_dict(group: xr.Dataset):
@@ -552,40 +557,122 @@ class NumpyroBackend:
         plot_func = getattr(self.simulation, self.plot_function)
         plot_func()
 
-    def plot_prior_predictive(self):
-        self.idata
-
-    def plot_predictions(
-            self, data_variable: str, x_dim: str, ax=None, subset={}
+    def plot_prior_predictions(
+            self, data_variable: str, x_dim: str, ax=None, subset={}, 
+            n=None, seed=None
         ):
-        obs = self.simulation.observations.sel(subset)
+        if n is None:
+            n = self.n_predictions
+
+        if seed is None:
+            seed = self.simulation.seed
         
-        post_pred = self.posterior_predictions(
+        idata = self.prior_predictions(
+            n=n, 
+            # seed only controls the parameters samples drawn from posterior
+            seed=seed
+        )
+        plot_func = getattr(self.simulation, self.plot_function)
+        
+        ax = self.plot_predictions(
+            observations=self.simulation.observations,
+            predictions=idata.prior_predictive,
+            data_variable=data_variable,
+            x_dim=x_dim,
+            ax=ax,
+            subset=subset,
+            mode="draws"
+        )
+
+        return ax
+
+    def plot_posterior_predictions(
+            self, data_variable: str, x_dim: str, ax=None, subset={},
+            n=None, seed=None
+        ):
+        predictions = self.posterior_predictions(
             n=self.n_predictions, 
             # seed only controls the parameters samples drawn from posterior
             seed=self.simulation.seed
-        ).sel(subset)
+        )
 
-        hdi = az.hdi(post_pred, .95)
+        ax = self.plot_predictions(
+            observations=self.simulation.observations,
+            predictions=predictions.posterior,
+            data_variable=data_variable,
+            x_dim=x_dim,
+            ax=ax,
+            subset=subset,
+        )
+
+        return ax
+
+
+
+    def plot_predictions(
+            self, 
+            observations,
+            predictions,
+            data_variable: str, 
+            x_dim: str, 
+            ax=None, 
+            subset={},
+            mode="mean+hdi"
+        ):
+        # filter subset coordinates present in data_variable
+        subset = {k: v for k, v in subset.items() if k in observations.coords}
+        
+        # select subset
+        obs = observations.sel(subset)[data_variable]
+        preds = predictions.sel(subset)[f"{data_variable}"]
+        
+        # stack all dims that are not in the time dimension
+        stack_dims = [d for d in obs.dims if d != x_dim]
+        obs = obs.stack(i=stack_dims)
+        preds = preds.stack(i=stack_dims)
+        N = len(obs.coords["i"])
+            
+        hdi = az.hdi(preds, .95)[f"{data_variable}"]
 
         if ax is None:
             ax = plt.subplot(111)
         
-        y_mean = post_pred[data_variable].mean(dim=("chain", "draw"))
-        ax.plot(
-            post_pred[x_dim].values, y_mean.values, 
-            color="black", lw=.8
-        )
+        y_mean = preds.mean(dim=("chain", "draw"))
 
-        ax.fill_between(
-            post_pred[x_dim].values, *hdi[data_variable].values.T, 
-            alpha=.5, color="grey"
-        )
+        for i in obs.i:
+            if obs.sel(i=i).isnull().all():
+                # skip plotting combinations, where all values are NaN
+                continue
+            
+            if mode == "mean+hdi":
+                ax.fill_between(
+                    preds[x_dim].values, *hdi.sel(i=i).values.T, 
+                    alpha=.1, color="black"
+                )
 
-        ax.plot(
-            obs[x_dim].values, obs[data_variable].values, 
-            marker="o", ls="", ms=3
-        )
+
+                ax.plot(
+                    preds[x_dim].values, y_mean.sel(i=i).values, 
+                    alpha=max(1/N, 0.05),
+                    lw=1, color="black"
+                )
+            elif mode == "draws":
+                ys = preds.sel(i=i).stack(sample=("chain", "draw"))
+                ax.plot(
+                    preds[x_dim].values, ys.values, 
+                    alpha=max(1/N, 0.05),
+                    lw=0.5, color="black"
+                )
+            else:
+                raise NotImplementedError(
+                    f"Mode '{mode}' not implemented. "
+                    "Choose 'mean+hdi' or 'draws'."
+                )
+
+            ax.plot(
+                obs[x_dim].values, obs.sel(i=i).values, 
+                marker="o", ls="", ms=3, color="tab:blue"
+            )
         
         ax.set_ylabel(data_variable)
         ax.set_xlabel(x_dim)
