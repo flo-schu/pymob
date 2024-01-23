@@ -355,6 +355,10 @@ class NumpyroBackend:
             # numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=obs["nzfe"]).mask(masks["lethality"]), obs=obs["lethality"])
         return model
 
+    @staticmethod
+    def preprocessing(**kwargs):
+        return kwargs
+
     def run(self):
         # set parameters of JAX and numpyro
         # jax.config.update("jax_enable_x64", True)
@@ -367,12 +371,16 @@ class NumpyroBackend:
         # parse observations and masks for missing data
         obs, masks = self.observation_parser()
 
+        model_kwargs = self.preprocessing(
+            obs=obs, 
+            masks=masks,
+        )
+
         # prepare model and print information about shapes
         model = partial(
             self.inference_model, 
             solver=self.evaluator, 
-            obs=obs, 
-            masks=masks
+            **model_kwargs
         )    
 
         with numpyro.handlers.seed(rng_seed=1):
