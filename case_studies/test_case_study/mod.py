@@ -53,6 +53,21 @@ def solve_jax(model, parameters, coordinates, data_variables):
     res_dict = {v:val for v, val in zip(data_variables, result)}
     return res_dict
 
+def solve_jax_replicated(model, parameters, coordinates, data_variables):
+    time = jnp.array(coordinates["time"])
+    params = parameters["parameters"]
+    y0 = parameters["y0"]
+    ode_args = mappar(model, params, exclude=["t", "y"])
+
+    func = jax.vmap(
+        fun=partial(odesolve, model=model, time=time, args=ode_args), 
+        in_axes=0
+    )
+    result = func(y0=jnp.array(y0, ndmin=2))
+    
+    res_dict = {v:val for v, val in zip(data_variables, result)}
+    return res_dict
+
 @partial(jax.jit, static_argnames=["model"])
 def odesolve(model, y0, time, args):
     f = lambda t, y, args: model(t, y, *args)
