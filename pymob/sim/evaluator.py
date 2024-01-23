@@ -90,7 +90,7 @@ class Evaluator:
         for a in model_args:
             if a not in self.allowed_model_signature_arguments:
                 raise ValueError(
-                    f"{a} in model signature are not attributes of the Evaluator. "
+                    f"'{a}' in model signature is not an attribute of the Evaluator. "
                     f"Use one of {self.allowed_model_signature_arguments}, "
                     f"or set as evaluator_kwargs in the call to "
                     "'SimulationBase.dispatch'" 
