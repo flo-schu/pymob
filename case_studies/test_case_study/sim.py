@@ -15,10 +15,16 @@ class Simulation(SimulationBase):
             gamma = 0.3,  # Predator reproduction rate
             delta = 0.01,  # Predator death rate
         )
-        self.model_parameters["y0"] = [40, 9]  # initial population of prey and predator
-        self.observations = xr.load_dataset(input[1])
-        self.observations["wolves"] = self.observations["wolves"] + 1e-8
-        self.observations["rabbits"] = self.observations["rabbits"] + 1e-8
+        if self.config.get("simulation", "replicated"):
+            rng = np.random.default_rng(1)
+            self.model_parameters["y0"] = rng.integers(1, 50, size=(10, 2))
+        else:
+            self.model_parameters["y0"] = np.array([40, 9])  # initial population of prey and predator
+
+        
+        # self.observations = xr.load_dataset(input[1])
+        # self.observations["wolves"] = self.observations["wolves"] + 1e-8
+        # self.observations["rabbits"] = self.observations["rabbits"] + 1e-8
 
         
     @staticmethod
@@ -53,3 +59,20 @@ class Simulation(SimulationBase):
     def plot(self, results):
         fig = plot_trajectory(results)
         fig.savefig(f"{self.output_path}/trajectory.png")
+
+# CURRENTLY UNUSABLE SEE https://github.com/flo-schu/pymob/issues/6
+class ReplicatedSimulation(Simulation):
+    def set_coordinates(self, input):
+        if self.observations is not None:
+            return self.observations.time.values
+        
+        # Time settings
+        t_start = 0
+        t_end = 200
+        t_step = 0.1
+        time = np.arange(t_start, t_end, t_step)
+
+        id = np.arange(len(self.model_parameters["y0"]))
+
+
+        return time, id
