@@ -22,7 +22,7 @@ dependencies=[
   "scipy ~= 1.10.1",
   "scikit-learn ~= 1.2.2",
   "tqdm ~= 4.65.0",
-  "toopy == 0.5.1",
+  "toopy == 0.6.0",
   "xarray ~= 2023.11.0",
   "pathos ~= 0.3.1",
 ]
