@@ -1,4 +1,5 @@
 import os
+import inspect
 import warnings
 import configparser
 from functools import partial
@@ -27,7 +28,19 @@ def update_parameters_dict(config, x, parnames):
             )
     return config
 
+def get_return_arguments(func):
+    ode_model_source = inspect.getsource(func)
+    
+    # extracts last return statement of source
+    return_statement = ode_model_source.split("\n")[-2]
 
+    # extract arguments returned by ode_func
+    return_args = return_statement.split("return")[1]
+
+    # strip whitespace and separate by comma
+    return_args = return_args.replace(" ", "").split(",")
+
+    return return_args
 
 class SimulationBase:
     model: Callable
@@ -48,6 +61,8 @@ class SimulationBase:
         # simulation
         self._random_integers = self.create_random_integers(n=self._seed_buffer_size)
 
+        self.n_ode_states = self.infer_ode_states()
+     
         self.initialize(input=self.input_file_paths)
         
         if self.observations is not None:
@@ -95,7 +110,28 @@ class SimulationBase:
         run_bench()
         print(f"=================================\n")
         
+    def infer_ode_states(self):
+        if self.n_ode_states is None:
+            try: 
+                return_args = get_return_arguments(self.model)
+                n_ode_states = len(return_args)
+                warnings.warn(
+                    "The number of ODE states was not specified in "
+                    "the config file [simulation] > 'n_ode_states = <n>'. "
+                    f"Extracted the return arguments {return_args} from the "
+                    "source code. "
+                    f"Setting 'n_ode_states={n_ode_states}."
+                )
+            except:
+                warnings.warn(
+                    "The number of ODE states was not specified in "
+                    "the config file [simulation] > 'n_ode_states = <n>' "
+                    "and could not be extracted from the return arguments."
+                )
+        else:
+            n_ode_states = self.n_ode_states
 
+        return n_ode_states
         
     def dispatch(self, theta, **evaluator_kwargs):
         """Dispatch an evaluator, which will compute the model at parameters
@@ -128,6 +164,7 @@ class SimulationBase:
             solver=solver,
             parameters=model_parameters,
             dimensions=self.dimensions,
+            n_ode_states=self.n_ode_states,
             var_dim_mapper=self.var_dim_mapper,
             data_structure=self.data_structure,
             data_variables=self.data_variables,
@@ -512,6 +549,18 @@ class SimulationBase:
     def data_variables(self):
         data_vars = self.config.getlist("simulation", "data_variables")
         return self.option_as_list(data_vars)
+
+    @property
+    def n_ode_states(self):
+        n_ode_states = self.config.getint(
+            "simulation", "n_ode_states", fallback=None
+        )
+
+        return n_ode_states
+    
+    @n_ode_states.setter
+    def n_ode_states(self, n_ode_state):
+        self.config.set("simulation", "n_ode_states", f"{n_ode_state}")
 
     @property
     def input_files(self):

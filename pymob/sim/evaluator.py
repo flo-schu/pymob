@@ -52,6 +52,7 @@ class Evaluator:
             solver: Callable,
             parameters: Dict,
             dimensions: List,
+            n_ode_states: int,
             var_dim_mapper: List,
             data_structure: Dict,
             coordinates: Dict,
@@ -63,6 +64,7 @@ class Evaluator:
         self.model = model
         self.parameters = parameters
         self.dimensions = dimensions
+        self.n_ode_states = n_ode_states
         self.var_dim_mapper = var_dim_mapper
         self.data_structure = data_structure
         self.data_variables = data_variables
