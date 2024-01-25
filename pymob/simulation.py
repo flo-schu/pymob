@@ -180,7 +180,10 @@ class SimulationBase:
             sliders.update({par.name: s})
 
         def func(theta):
-            evaluator = self.dispatch(theta=theta)
+            extra = self.config.getlist("inference", "extra_vars")
+            extra = [extra] if isinstance(extra, str) else extra
+            extra_vars = {v: self.observations[v] for v in extra}
+            evaluator = self.dispatch(theta=theta, **extra_vars)
             evaluator()
             self.plot(results=evaluator.results)
 
@@ -709,7 +712,7 @@ class SimulationBase:
             parameters.append(p)
 
         return parameters
-        
+
     @property
     def error_model(self):
         em = parse_config_section(self.config["error-model"], method="strfloat")
