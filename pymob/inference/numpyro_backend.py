@@ -140,6 +140,12 @@ class NumpyroBackend:
         )
 
     @property
+    def svi_iterations(self):
+        return self.simulation.config.getint(
+            "inference.numpyro", "svi_iterations", fallback=10_000
+        )
+    
+    @property
     def kernel(self):
         return self.simulation.config.get(
             "inference.numpyro", "kernel", fallback="nuts"
@@ -407,6 +413,21 @@ class NumpyroBackend:
                 init_strategy=self.init_strategy
             )
 
+        elif self.kernel.lower() == "svi":
+            guide = infer.autoguide.AutoMultivariateNormal(model)
+            optimizer = numpyro.optim.Adam(step_size=0.0005)
+            svi = infer.SVI(model=model, guide=guide, optim=optimizer, loss=infer.Trace_ELBO())
+            svi_result = svi.run(next(keys), self.svi_iterations)
+
+            self.svi_posterior(svi_result, model, guide, next(keys), self.draws)
+
+            # the full cov matrix
+            cov = svi_result.params['auto_scale_tril'].dot(
+                svi_result.params['auto_scale_tril'].T
+            )
+            median = guide.median(svi_result.params)
+            return
+        
         mcmc = infer.MCMC(
             sampler=kernel,
             num_warmup=self.warmup,
@@ -498,6 +519,61 @@ class NumpyroBackend:
         return idata
         # self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_prior_predictions.nc")
     
+
+    def svi_posterior(self, svi_result, model, guide, key, n=1000):
+        key, *subkeys = jax.random.split(key, 4)
+        keys = iter(subkeys)
+
+        obs, masks = self.observation_parser()
+
+        params = svi_result.params
+
+        # predictive = Predictive(
+        #     model, guide=guide, params=params, 
+        #     num_samples=n, batch_ndims=2
+        # )
+        # samples = predictive(next(keys))    
+
+        predictive = Predictive(
+            guide, params=params, 
+            num_samples=n, batch_ndims=2
+        )
+        posterior_samples = predictive(next(keys))
+
+        predictive = Predictive(
+            model, posterior_samples, params=params, 
+            num_samples=1000, batch_ndims=2
+        )
+        posterior_predictions = predictive(next(keys))
+
+
+        loglik = numpyro.infer.log_likelihood(
+            model=model, 
+            posterior_samples=posterior_samples, 
+            batch_ndims=2, 
+        )
+
+        preds = self.simulation.data_variables
+        preds_obs = [f"{d}_obs" for d in self.simulation.data_variables]
+        priors = list(self.simulation.model_parameter_dict.keys())
+        posterior_coords = self.posterior_coordinates
+        posterior_coords["draw"] = list(range(n))
+        data_structure = self.posterior_data_structure
+        
+        idata = az.from_dict(
+            observed_data=obs,
+            posterior={k: v for k, v in posterior_predictions.items() if k in priors},
+            posterior_predictive={k: v for k, v in posterior_predictions.items() if k in preds},
+            log_likelihood=loglik,
+            dims=data_structure,
+            coords=posterior_coords,
+        )
+
+        self.idata = idata
+        self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_svi_posterior.nc")
+        return idata
+    
+
     @staticmethod
     def get_dict(group: xr.Dataset):
         data_dict = group.to_dict()["data_vars"]
@@ -547,8 +623,9 @@ class NumpyroBackend:
     def store_results(self):
         self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
 
-    def load_results(self):
-        self.idata = az.from_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
+    def load_results(self, file="numpyro_posterior.nc"):
+        self.idata = az.from_netcdf(f"{self.simulation.output_path}/{file}")
+
 
     def plot(self):
         # TODO: combine prior_predictions and posterior predictions
