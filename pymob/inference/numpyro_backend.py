@@ -616,7 +616,7 @@ class NumpyroBackend:
 
         ax = self.plot_predictions(
             observations=self.simulation.observations,
-            predictions=predictions.posterior,
+            predictions=predictions,
             data_variable=data_variable,
             x_dim=x_dim,
             ax=ax,
