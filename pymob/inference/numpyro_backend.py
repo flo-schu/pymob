@@ -452,14 +452,24 @@ class NumpyroBackend:
     @lru_cache
     def prior_predictions(self, n=100, seed=1):
         key = jax.random.PRNGKey(seed)
-        model = partial(self.inference_model, solver=self.evaluator)    
-            
         obs, masks = self.observation_parser()
 
+        model_kwargs = self.preprocessing(
+            obs=obs, 
+            masks=masks,
+        )
+        
+        # prepare model
+        model = partial(
+            self.inference_model, 
+            solver=self.evaluator, 
+            **model_kwargs
+        )    
+   
         prior_predictive = Predictive(
             model, num_samples=n, batch_ndims=2
         )
-        prior_predictions = prior_predictive(key, obs=obs, masks=masks)
+        prior_predictions = prior_predictive(key)
 
         loglik = numpyro.infer.log_likelihood(
             model=model, 
