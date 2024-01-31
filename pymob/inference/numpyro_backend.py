@@ -25,12 +25,30 @@ sympy2jax_extra_funcs = {
 
 def LogNormalTrans(loc, scale):
     return TransformedDistribution(
-        Normal(0,1), 
-        [
+        base_distribution=Normal(0,1), 
+        transforms=[
             transforms.AffineTransform(loc=jnp.log(loc), scale=scale), 
             exp()
-        ]
-    )
+        ])
+
+def HalfNormalTrans(scale):
+    return TransformedDistribution(
+        base_distribution=Normal(0,1), 
+        transforms=[
+            transforms.AffineTransform(loc=0, scale=scale), 
+            transforms.AbsTransform()
+        ])
+
+
+def transform(transforms, x):
+    for part in transforms:
+        x = part(x)
+    return x
+
+def inv_transform(transforms, y):
+    for part in transforms[::-1]:
+        y = part.inv(y)
+    return y
 
 
 def catch_patterns(expression_str):
@@ -82,7 +100,7 @@ class NumpyroBackend:
             "lognorm": (LogNormalTrans, {"scale": "loc", "s": "scale"}),
             "binom": (dist.Binomial, {"n":"total_count", "p":"probs"}),
             "normal": dist.Normal,
-            "halfnorm": dist.HalfNormal,
+            "halfnorm": HalfNormalTrans,
             "poisson": (dist.Poisson, {"mu": "rate"}),
         }
         
@@ -90,7 +108,11 @@ class NumpyroBackend:
         self.evaluator = self.parse_deterministic_model()
         self.prior = self.parse_model_priors()
         self.error_model = self.parse_error_model()
-        self.inference_model = self.parse_probabilistic_model()
+        if self.gaussian_base_distribution:
+            self.inference_model = self.parse_probabilistic_model_with_gaussian_base()
+        else:
+            self.inference_model = self.parse_probabilistic_model()
+
 
         self.idata: az.InferenceData
 
@@ -107,6 +129,13 @@ class NumpyroBackend:
             "inference", "extra_vars", fallback=[]
         )
         return extra if isinstance(extra, list) else [extra]
+    
+    @property
+    def gaussian_base_distribution(self):
+        flag = self.simulation.config.getint(
+            "inference.numpyro", "gaussian_base_distribution", fallback=False
+        )
+        return bool(flag)
     
     @property
     def n_predictions(self):
@@ -361,6 +390,116 @@ class NumpyroBackend:
             # numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=obs["nzfe"]).mask(masks["lethality"]), obs=obs["lethality"])
         return model
 
+    def parse_probabilistic_model_with_gaussian_base(self):
+        EPS = self.EPS
+        prior = self.prior.copy()
+        error_model = self.error_model.copy()
+        extra = {"EPS": EPS}
+
+
+        def lookup(val, deterministic, prior_samples, observations):
+            if val in deterministic:
+                return deterministic[val]
+            
+            elif val in prior_samples:
+                return prior_samples[val]
+            
+            elif val in observations:
+                return observations[val]
+            
+            elif val in extra:
+                return extra[val]
+
+            else:
+                return val
+
+        def model(solver, obs, masks):
+            theta = {}
+            theta_base = {}
+            for prior_name, prior_kwargs in prior.items():
+
+                # apply transforms to priors. This will be handy when I use nested
+                # parameters
+                prior_distribution_parameters = {}
+                for pri_par, pri_val in prior_kwargs["parameters"].items():
+                    prior_trans_func = pri_val["transform"]
+                    prior_trans_func_kwargs = {k: lookup(k, {}, theta, obs) for k in pri_val["args"]}
+                    prior_distribution_parameters.update({
+                        pri_par: prior_trans_func(**prior_trans_func_kwargs)
+                    })
+
+                # parameterize the prior distribution and extract transforms
+                dist = prior_kwargs["fn"](**prior_distribution_parameters)
+                
+                try:
+                    transforms = getattr(dist, "transforms")
+                except:
+                    raise RuntimeError(
+                        "The specified distribution had no transforms. If setting "
+                        "the option 'inference.numpyro.gaussian_base_distribution = 1', "
+                        "you are only allowed to use parameter distribution, which can "
+                        "be specified as transformed normal distributions. "
+                        "Currently only 'lognorm' and 'halfnorm' are implemented. "
+                        "You can use the numypro.distributions.TransformedDistribution "
+                        "API to specify additional distributions with transforms."
+                        "And pass them to the inferer by updating the distribution map: "
+                        "sim.inferer.distribution_map.update({'newdist': your_new_distribution})"
+                    )
+
+                # sample from a random normal distribution
+                theta_base_i = numpyro.sample(
+                    name=f"{prior_name}_normal_base",
+                    fn=Normal(loc=0, scale=1),
+                    sample_shape=dist.shape()                    
+                )
+
+                # apply the transforms 
+                theta_i = numpyro.deterministic(
+                    name=prior_name,
+                    value=transform(transforms=transforms, x=theta_base_i)
+                )
+
+                theta_base.update({prior_name: theta_base_i})
+                theta.update({prior_name: theta_i})
+
+            # calculate deterministic simulation with parameter samples
+            sim_results = solver(theta=theta)
+
+            # store data_variables as deterministic model output
+            for deterministic_name, deterministic_value in sim_results.items():
+                _ = numpyro.deterministic(
+                    name=deterministic_name, 
+                    value=deterministic_value
+                )
+
+            for error_model_name, error_model_kwargs in error_model.items():
+                error_distribution = error_model_kwargs["fn"]
+                error_distribution_kwargs = {}
+                for errdist_par, errdist_val in error_model_kwargs["parameters"].items():
+                    errdist_trans_func = errdist_val["transform"]
+                    errdist_trans_func_kwargs = {
+                        k: lookup(k, sim_results, theta, obs) for k in errdist_val["args"]
+                    }
+                    error_distribution_kwargs.update({
+                        errdist_par: errdist_trans_func(**errdist_trans_func_kwargs)
+                    })
+
+                _ = numpyro.sample(
+                    name=error_model_name + "_obs",
+                    fn=error_distribution(**error_distribution_kwargs).mask(masks[error_model_name]),
+                    obs=obs[error_model_name]
+                )
+
+
+            # TODO: How to add EPS
+            # DONE: add biomial n --> I think this is already done
+            # numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks["cext"]), obs=obs["cext"] + EPS)
+            # numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks["cint"]), obs=obs["cint"] + EPS)
+            # numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks["nrf2"]), obs=obs["nrf2"] + EPS)
+            # numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=obs["nzfe"]).mask(masks["lethality"]), obs=obs["lethality"])
+        return model
+
+
     @staticmethod
     def preprocessing(**kwargs):
         return kwargs
@@ -414,6 +553,19 @@ class NumpyroBackend:
             )
 
         elif self.kernel.lower() == "svi":
+            # The current implementation of SVI only works with parameter distributions
+            # that can be derived from normal distributions.
+            # what SVI
+
+            if not self.gaussian_base_distribution:
+                raise RuntimeError(
+                    "SVI is only supported if parameter distributions can be "
+                    "re-parameterized as gaussians. Please set "
+                    "inference.numpyro.gaussian_base_distribution = 1 "
+                    "and if needed use distributions from the loc-scale family "
+                    "to specify the model parameters."
+                )
+
             guide = infer.autoguide.AutoMultivariateNormal(model)
             optimizer = numpyro.optim.Adam(step_size=0.0005)
             svi = infer.SVI(model=model, guide=guide, optim=optimizer, loss=infer.Trace_ELBO())
@@ -722,6 +874,15 @@ class NumpyroBackend:
         preds = predictions.sel(subset)[f"{data_variable}"]
         
         # stack all dims that are not in the time dimension
+        if len(obs.dims) == 1:
+            # add a dummy batch dimension
+            obs = obs.expand_dims("batch")
+            obs = obs.assign_coords(batch=[0])
+
+            preds = preds.expand_dims("batch")
+            preds = preds.assign_coords(batch=[0])
+
+
         stack_dims = [d for d in obs.dims if d != x_dim]
         obs = obs.stack(i=stack_dims)
         preds = preds.stack(i=stack_dims)
