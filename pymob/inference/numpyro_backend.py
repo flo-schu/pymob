@@ -571,7 +571,9 @@ class NumpyroBackend:
             svi = infer.SVI(model=model, guide=guide, optim=optimizer, loss=infer.Trace_ELBO())
             svi_result = svi.run(next(keys), self.svi_iterations)
 
-            self.svi_posterior(svi_result, model, guide, next(keys), self.draws)
+            self.idata = self.svi_posterior(
+                svi_result, model, guide, next(keys), self.draws
+            )
 
             # the full cov matrix
             cov = svi_result.params['auto_scale_tril'].dot(
@@ -721,8 +723,6 @@ class NumpyroBackend:
             coords=posterior_coords,
         )
 
-        self.idata = idata
-        self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_svi_posterior.nc")
         return idata
     
 
