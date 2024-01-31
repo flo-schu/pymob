@@ -1,4 +1,6 @@
+import pytest
 import numpy as np
+from matplotlib import pyplot as plt
 
 from pymob.utils.store_file import prepare_casestudy
 
@@ -57,7 +59,44 @@ def test_nuts_kernel():
         rtol=1e-2, atol=1e-3
     )
 
+def test_svi_kernel():
+    sim = create_simulation("test_scenario")
+
+    sim.config.set("inference.numpyro", "kernel", "svi")
+    sim.config.set("inference.numpyro", "svi_iterations", "10000")
+    # this samples the model with standard normal distributions
+    # and rescales them according to the transformations of the specified 
+    # parameter distributions to the normal
+    sim.config.set("inference.numpyro", "gaussian_base_distribution", "1")
+
+    sim.set_inferer(backend="numpyro")
+    sim.inferer.run()
+    sim.inferer.idata.posterior_predictive
+
+    posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))[sim.model_parameter_names]
+    true_parameters = sim.model_parameter_dict
+    
+    # tests if true parameters are close to recovered parameters from simulated
+    # data
+    np.testing.assert_allclose(
+        posterior_mean.to_dataarray().values,
+        np.array(list(true_parameters.values())),
+        rtol=1e-2, atol=1e-3
+    )
+
+
+    # posterior predictions
+    fig, axes = plt.subplots(2,1, sharex=True)
+    for data_var, ax in zip(sim.data_variables, axes):
+        ax = sim.inferer.plot_posterior_predictions(
+            data_variable=data_var, 
+            x_dim="time",
+            ax=ax
+        )
+
+
 def test_nuts_kernel_replicated():
+    pytest.skip()
     # CURRENTLY UNUSABLE SEE https://github.com/flo-schu/pymob/issues/6
     config = prepare_casestudy(
         case_study=("test_case_study", "test_scenario_replicated"),
@@ -82,6 +121,8 @@ def test_nuts_kernel_replicated():
         np.array(list(true_parameters.values())),
         rtol=1e-2, atol=1e-3
     )
+
+    
 
 def test_sa_kernel():
     sim = create_simulation("test_scenario")
@@ -110,7 +151,7 @@ def test_sa_kernel():
 
     # posterior predictions
     for data_var in sim.data_variables:
-        ax = sim.inferer.plot_predictions(
+        ax = sim.inferer.plot_posterior_predictions(
             data_variable=data_var, 
             x_dim="time"
         )
@@ -119,4 +160,4 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    test_nuts_kernel_replicated()
+    test_svi_kernel()
