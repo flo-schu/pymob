@@ -30,8 +30,10 @@ def main(case_study, scenario, package, inference_backend, n_cores):
     sim = Simulation(config)
 
     sim.set_inferer(backend=inference_backend)
+    sim.prior_predictive_checks()
     sim.inferer.run()
     sim.inferer.store_results()
+    sim.posterior_predictive_checks()
     sim.inferer.plot()
 
     max_ram_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000
