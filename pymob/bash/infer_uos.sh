@@ -42,10 +42,12 @@ echo "Simulation(case_study=$CASE, scenario=$SCENARIO, backend=$BACKEND)"
 source activate damage-proxy
 
 # this launches inference
-srun tp-infer \
+srun pymob-infer \
     --case_study $CASE \
     --scenario $SCENARIO \
     --inference_backend $BACKEND \
     --n_cores $SLURM_CPUS_PER_TASK
 
+
 echo "Finished inference."
+slogs -n $SLURM_JOB_NAME -i $SLURM_JOBID > work/case_studies/$CASE/results/$SCENARIO/log
