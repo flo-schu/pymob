@@ -41,6 +41,27 @@ def test_diffrax_exception():
     assert sum(badness_for_infeasible_alpha) > 0
 
 
+def test_user_defined_probability_model():
+    sim = create_simulation("test_scenario")
+
+    sim.config.set("inference.numpyro", "kernel", "nuts")
+    sim.config.set("inference.numpyro", "user_defined_probability_model", "parameter_only_model")
+    sim.config.set("inference.numpyro", "user_defined_preprocessing", "dummy_preprocessing")
+
+    sim.set_inferer(backend="numpyro")
+    sim.inferer.run()
+    
+    posterior_median = sim.inferer.idata.posterior.median(("chain", "draw"))[["beta", "alpha"]]
+    
+    # tests if true parameters are close to recovered parameters from simulated
+    # data
+    np.testing.assert_allclose(
+        posterior_median.to_dataarray().values,
+        np.array([0.02, 0.5]),
+        rtol=1e-1, atol=1e-3
+    )
+
+
 def test_nuts_kernel():
     sim = create_simulation("test_scenario")
 
@@ -160,4 +181,4 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    test_svi_kernel()
+    test_user_defined_probability_model()

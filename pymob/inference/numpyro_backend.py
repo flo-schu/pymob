@@ -108,7 +108,21 @@ class NumpyroBackend:
         self.evaluator = self.parse_deterministic_model()
         self.prior = self.parse_model_priors()
         self.error_model = self.parse_error_model()
-        if self.gaussian_base_distribution:
+
+        # parse preprocessing
+        if self.user_defined_preprocessing is not None:
+            self.preprocessing = getattr(
+                self.simulation.prob,
+                self.user_defined_preprocessing
+            )
+
+        # parse the probability model
+        if self.user_defined_probability_model is not None:
+            self.inference_model = getattr(
+                self.simulation.prob, 
+                self.user_defined_probability_model
+            )
+        elif self.gaussian_base_distribution:
             self.inference_model = self.parse_probabilistic_model_with_gaussian_base()
         else:
             self.inference_model = self.parse_probabilistic_model()
@@ -130,6 +144,19 @@ class NumpyroBackend:
         )
         return extra if isinstance(extra, list) else [extra]
     
+
+    @property
+    def user_defined_probability_model(self):
+        return self.simulation.config.get(
+            "inference.numpyro", "user_defined_probability_model", fallback=None
+        )
+    
+    @property
+    def user_defined_preprocessing(self):
+        return self.simulation.config.get(
+            "inference.numpyro", "user_defined_preprocessing", fallback=None
+        )
+
     @property
     def gaussian_base_distribution(self):
         flag = self.simulation.config.getint(

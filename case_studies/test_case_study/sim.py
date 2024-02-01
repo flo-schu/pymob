@@ -3,10 +3,12 @@ import xarray as xr
 from mod import lotka_volterra, solve, solve_jax
 from plot import plot_trajectory
 from pymob.simulation import SimulationBase
+import prob
 
 class Simulation(SimulationBase):
     solver = solve_jax
     model = lotka_volterra
+    prob = prob
 
     def initialize(self, input):
         self.model_parameters["parameters"] =  dict(
