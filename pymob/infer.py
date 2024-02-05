@@ -3,6 +3,7 @@ import resource
 
 from pymob.utils import help
 from pymob.utils.store_file import prepare_casestudy, import_package
+from pymob.simulation import SimulationBase
 
 @click.command()
 @click.option("-c", "--case_study", type=str, default="test_case_study", 
@@ -26,7 +27,8 @@ def main(case_study, scenario, package, inference_backend, n_cores):
     
     # import package        
     pkg = import_package(package_path=config["case-study"]["package"])
-    Simulation = pkg.sim.Simulation
+    Simulation: SimulationBase = getattr(
+        pkg.sim, config["case-study"].get("simulation", fallback="Simulation"))
     sim = Simulation(config)
 
     sim.set_inferer(backend=inference_backend)
