@@ -27,7 +27,7 @@ def create_dataset_from_numpy(Y, Y_names, coordinates):
 def create_dataset_from_dict(Y: dict, data_structure, coordinates):
     arrays = {}
     for k, v in Y.items():
-        dims = data_structure[k]
+        dims = data_structure.get(k, tuple(coordinates.keys()))
         coords = {d: coordinates[d] for d in dims}
         da = xr.DataArray(v, coords=coords, dims=dims)
         arrays.update({k: da})
