@@ -70,6 +70,3 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    test_scripting_api_pyabc()
-    test_inference_evaluation()
-    # test_commandline_API_infer()

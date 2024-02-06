@@ -97,14 +97,6 @@ class PyabcBackend:
             "inference.pyabc", "eval.n_predictions", fallback=50
         )
     
-    @property
-    def objective_function(self):
-        obj_fun_str = self.simulation.config.get(
-            "inference", "objective_function", fallback="objective_average"
-        )
-
-        return getattr(self.simulation, obj_fun_str)
-
     @staticmethod
     def param_to_prior(par):
         parname = par.name
@@ -206,7 +198,7 @@ class PyabcBackend:
         for extra in self.extra_vars:
             extra_kwargs.update({extra: self.simulation.observations[extra].values})
 
-        obj_func_signature = inspect.signature(self.objective_function)
+        obj_func_signature = inspect.signature(self.simulation.objective_function)
         obj_func_params = list(obj_func_signature.parameters.keys())
     
         def model(theta):
@@ -219,14 +211,14 @@ class PyabcBackend:
         return model
     
     def distance_function_parser(self):
-        obj_func_signature = inspect.signature(self.objective_function)
+        obj_func_signature = inspect.signature(self.simulation.objective_function)
         obj_func_params = list(obj_func_signature.parameters.keys())
             
         def distance_function(x, x0):
             Y = {k: v for k, v in x.items() if k in self.simulation.data_variables}
             
             theta_obj_func = {p: x[p] for p in obj_func_params if p in x}
-            obj_name, obj_value = self.objective_function(
+            obj_name, obj_value = self.simulation.objective_function(
                 results=Y, **theta_obj_func 
             )
             return obj_value

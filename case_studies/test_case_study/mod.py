@@ -43,7 +43,7 @@ def solve(model, parameters, coordinates, data_variables):
     )
     return {data_var:y for data_var, y in zip(data_variables, results.y)}
 
-def solve_jax(model, parameters, coordinates, data_variables):
+def solve_jax(model, parameters, coordinates, data_variables, seed=None):
     time = jnp.array(coordinates["time"])
     params = parameters["parameters"]
     y0 = parameters["y0"]
