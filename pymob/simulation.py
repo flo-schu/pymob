@@ -225,7 +225,7 @@ class SimulationBase:
             sliders.update({par.name: s})
 
         def func(theta):
-            extra = self.config.getlist("inference", "extra_vars")
+            extra = self.config.getlist("inference", "extra_vars", fallback=[])
             extra = [extra] if isinstance(extra, str) else extra
             extra_vars = {v: self.observations[v] for v in extra}
             evaluator = self.dispatch(theta=theta, **extra_vars)
