@@ -61,9 +61,9 @@ class SimulationBase:
         # simulation
         self._random_integers = self.create_random_integers(n=self._seed_buffer_size)
 
-        self.n_ode_states = self.infer_ode_states()
      
         self.initialize(input=self.input_file_paths)
+        self.n_ode_states = self.infer_ode_states()
         
         if self.observations is not None:
             self.create_data_scaler()
