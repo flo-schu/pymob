@@ -450,6 +450,7 @@ class NumpyroBackend:
                 prior_distribution_parameters = {}
                 for pri_par, pri_val in prior_kwargs["parameters"].items():
                     prior_trans_func = pri_val["transform"]
+                    # TODO could be replaced by utils.config.lookup and lookup args
                     prior_trans_func_kwargs = {k: lookup(k, {}, theta, obs) for k in pri_val["args"]}
                     prior_distribution_parameters.update({
                         pri_par: prior_trans_func(**prior_trans_func_kwargs)
