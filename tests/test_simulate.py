@@ -1,4 +1,4 @@
-import subprocess
+import pytest
 import xarray as xr
 import numpy as np
 from click.testing import CliRunner
@@ -25,6 +25,9 @@ def test_scripting_API():
         (ds - ds_ref).to_array().values,
         0
     )
+
+def test_indexing_simulation():
+    pytest.fail()
 
 def test_interactive_mode():
     sim = load_test_case_study()
