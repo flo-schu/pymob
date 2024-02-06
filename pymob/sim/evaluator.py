@@ -58,6 +58,7 @@ class Evaluator:
             coordinates: Dict,
             data_variables: List,
             stochastic: bool,
+            indices: Optional[Dict] = {},
             post_processing: Optional[Callable] = None,
             **kwargs
         ) -> None:
@@ -71,6 +72,7 @@ class Evaluator:
         self.data_variables = data_variables
         self.coordinates = coordinates
         self.is_stochastic = stochastic
+        self.indices = indices
         
         if post_processing is None:
             self.post_processing = lambda x: x

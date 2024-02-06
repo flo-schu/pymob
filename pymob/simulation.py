@@ -54,7 +54,8 @@ class SimulationBase:
         self.observations = None
         self._objective_names = []
         self._seed_buffer_size = self.n_cores * 2
-        
+        self.indices = {}
+
         # seed gloabal RNG
         self.RNG = np.random.default_rng(self.seed)
         # draw a selection of 1e8 integers for using those throughout the
@@ -176,6 +177,7 @@ class SimulationBase:
             coordinates=self.coordinates,
             # TODO: pass the whole simulation settings section
             stochastic=True if stochastic == "stochastic" else False,
+            indices=self.indices,
             post_processing=post_processing,
             **evaluator_kwargs
         )
