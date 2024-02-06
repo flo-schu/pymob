@@ -156,6 +156,11 @@ class SimulationBase:
             model = self.model.__func__
         else:
             model = self.model
+        
+        if self.solver_post_processing is not None:
+            post_processing = getattr(self.mod, self.solver_post_processing)
+        else:
+            post_processing = None
 
         stochastic = self.config.get("simulation", "modeltype", fallback=False)
             
@@ -171,6 +176,7 @@ class SimulationBase:
             coordinates=self.coordinates,
             # TODO: pass the whole simulation settings section
             stochastic=True if stochastic == "stochastic" else False,
+            post_processing=post_processing,
             **evaluator_kwargs
         )
 
@@ -561,6 +567,10 @@ class SimulationBase:
     @n_ode_states.setter
     def n_ode_states(self, n_ode_state):
         self.config.set("simulation", "n_ode_states", f"{n_ode_state}")
+
+    @property
+    def solver_post_processing(self):
+        return self.config["simulation"].get("solver_post_processing", fallback=None)
 
     @property
     def input_files(self):

@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional
 import inspect
 import xarray as xr
 import numpy as np
@@ -58,6 +58,7 @@ class Evaluator:
             coordinates: Dict,
             data_variables: List,
             stochastic: bool,
+            post_processing: Optional[Callable] = None,
             **kwargs
         ) -> None:
         
@@ -70,6 +71,11 @@ class Evaluator:
         self.data_variables = data_variables
         self.coordinates = coordinates
         self.is_stochastic = stochastic
+        
+        if post_processing is None:
+            self.post_processing = lambda x: x
+        else: 
+            self.post_processing = post_processing
                 
         # set additional arguments of evaluator
         _ = [setattr(self, key, val) for key, val in kwargs.items()]
@@ -111,7 +117,9 @@ class Evaluator:
         if seed is not None:
             self._signature.update({"seed": seed})
 
-        self.Y = self._solver(**self._signature)
+        Y_ = self._solver(**self._signature)
+        Y_ = self.post_processing(Y_)
+        self.Y = Y_
 
     @property
     def dimensionality(self):
