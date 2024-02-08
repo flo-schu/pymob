@@ -2,6 +2,7 @@ from typing import Callable, Dict, List, Optional
 import inspect
 import xarray as xr
 import numpy as np
+from pymob.sim.solvetools import mappar
 
 def create_dataset_from_numpy(Y, Y_names, coordinates):
     n_vars = Y.shape[-1]
@@ -75,7 +76,7 @@ class Evaluator:
         self.indices = indices
         
         if post_processing is None:
-            self.post_processing = lambda x: x
+            self.post_processing = lambda results: results
         else: 
             self.post_processing = post_processing
                 
@@ -120,7 +121,16 @@ class Evaluator:
             self._signature.update({"seed": seed})
 
         Y_ = self._solver(**self._signature)
-        Y_ = self.post_processing(Y_)
+        
+        # TODO: Consider which elements may be abstracted from the solve methods 
+        # implemented in mod.py below is an unsuccessful approach
+        # params = self._signature["parameters"]["parameters"]
+        # time = self._signature["coordinates"]["time"]
+        
+        # s_dim, s_idx = self._signature["indices"]["substance"]
+        # pp_args = mappar(self.post_processing, params, exclude=["t", "results"])
+        # pp_args = [np.array(a, ndmin=1)[s_idx] for a in pp_args]
+        # Y_ = self.post_processing(Y_, time, *pp_args)
         self.Y = Y_
 
     @property
