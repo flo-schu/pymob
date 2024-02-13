@@ -167,7 +167,7 @@ class NumpyroBackend:
     @property
     def n_predictions(self):
         return self.simulation.config.getint(
-            "inference", "n_predictions", fallback=None
+            "inference", "n_predictions", fallback=100
         )
     
 
