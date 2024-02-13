@@ -556,6 +556,12 @@ class NumpyroBackend:
             **model_kwargs
         )    
 
+        graph = numpyro.render_model(model)
+        graph.render(
+            filename=f"{self.simulation.output_path}/probability_model",
+            view=False, cleanup=True, format="png"
+        ) 
+
         with numpyro.handlers.seed(rng_seed=1):
             trace = numpyro.handlers.trace(model).get_trace()
         print(numpyro.util.format_shapes(trace))
