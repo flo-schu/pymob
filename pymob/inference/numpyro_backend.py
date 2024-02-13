@@ -748,6 +748,9 @@ class NumpyroBackend:
         posterior_coords = self.posterior_coordinates
         posterior_coords["draw"] = list(range(n))
         data_structure = self.posterior_data_structure
+
+        # TODO add prior data structure. Address this when a proper coordinate
+        # dimensionality backend is implemented (config module)
         
         idata = az.from_dict(
             observed_data=obs,
