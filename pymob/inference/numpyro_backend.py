@@ -617,6 +617,27 @@ class NumpyroBackend:
             median = guide.median(svi_result.params)
             return
         
+        elif self.kernel.lower() == "map":
+            # while this API is very convenient. I would prefer to roll out my
+            # own inference scheme and use scipy's optimizers to minimize 
+            # the negative log likelihood for maximum likelihood and to minimize
+            # the log-prior and log-likelihood for the map estimate.
+            # for initializing this, see the log_density function from above
+            # but before i do something like this. Remember, that I then need
+            # to deal with passing the right parameter structure to the function
+            # so maybe this is something for pymc
+            # TODO: It may be worth investing a little bit of extra work in
+            # constraining the optimizer
+            guide = numpyro.infer.autoguide.AutoDelta(model)
+            optimizer = numpyro.optim.Adam(step_size=0.01)
+            svi = infer.SVI(model=model, guide=guide, optim=optimizer, loss=infer.Trace_ELBO())
+            svi_result = svi.run(next(keys), num_steps=1000)
+            self.idata = self.svi_posterior(
+                svi_result, model, guide, next(keys), n=1
+            )
+            az.summary(self.idata)
+            return
+
         mcmc = infer.MCMC(
             sampler=kernel,
             num_warmup=self.warmup,
