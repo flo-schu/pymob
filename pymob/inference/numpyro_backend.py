@@ -608,6 +608,7 @@ class NumpyroBackend:
             self.idata = self.svi_posterior(
                 svi_result, model, guide, next(keys), self.draws
             )
+            az.summary(self.idata)
 
             # the full cov matrix
             cov = svi_result.params['auto_scale_tril'].dot(
