@@ -875,12 +875,18 @@ class NumpyroBackend:
             self, data_variable: str, x_dim: str, ax=None, subset={},
             n=None, seed=None
         ):
+        if n is None:
+            n = self.n_predictions
+        
+        if seed is None:
+            seed = self.simulation.seed
+        
         predictions = self.posterior_predictions(
-            n=self.n_predictions, 
+            n=n, 
             # seed only controls the parameters samples drawn from posterior
-            seed=self.simulation.seed
+            seed=seed
         )
-
+        
         ax = self.plot_predictions(
             observations=self.simulation.observations,
             predictions=predictions,
