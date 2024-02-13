@@ -537,7 +537,7 @@ class NumpyroBackend:
         # jax.config.update("jax_enable_x64", True)
 
         # generate random keys
-        key = jax.random.PRNGKey(1)
+        key = jax.random.PRNGKey(self.simulation.seed)
         key, *subkeys = jax.random.split(key, 20)
         keys = iter(subkeys)
 
