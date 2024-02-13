@@ -731,7 +731,7 @@ class NumpyroBackend:
 
         predictive = Predictive(
             model, posterior_samples, params=params, 
-            num_samples=1000, batch_ndims=2
+            num_samples=n, batch_ndims=2
         )
         posterior_predictions = predictive(next(keys))
 
