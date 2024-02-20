@@ -202,6 +202,12 @@ class NumpyroBackend:
         )
     
     @property
+    def svi_learning_rate(self):
+        return self.simulation.config.getfloat(
+            "inference.numpyro", "svi_learning_rate", fallback=0.0001
+        )
+    
+    @property
     def kernel(self):
         return self.simulation.config.get(
             "inference.numpyro", "kernel", fallback="nuts"
@@ -601,7 +607,7 @@ class NumpyroBackend:
                 )
 
             guide = infer.autoguide.AutoMultivariateNormal(model)
-            optimizer = numpyro.optim.Adam(step_size=0.0005)
+            optimizer = numpyro.optim.ClippedAdam(step_size=self.svi_learning_rate, clip_norm=10)
             svi = infer.SVI(model=model, guide=guide, optim=optimizer, loss=infer.Trace_ELBO())
             svi_result = svi.run(next(keys), self.svi_iterations)
 
@@ -629,9 +635,9 @@ class NumpyroBackend:
             # TODO: It may be worth investing a little bit of extra work in
             # constraining the optimizer
             guide = numpyro.infer.autoguide.AutoDelta(model)
-            optimizer = numpyro.optim.Adam(step_size=0.01)
+            optimizer = numpyro.optim.ClippedAdam(step_size=self.svi_learning_rate, clip_norm=10)
             svi = infer.SVI(model=model, guide=guide, optim=optimizer, loss=infer.Trace_ELBO())
-            svi_result = svi.run(next(keys), num_steps=1000)
+            svi_result = svi.run(next(keys), num_steps=self.svi_iterations)
             self.idata = self.svi_posterior(
                 svi_result, model, guide, next(keys), n=1
             )
