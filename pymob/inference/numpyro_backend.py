@@ -571,7 +571,33 @@ class NumpyroBackend:
         with numpyro.handlers.seed(rng_seed=1):
             trace = numpyro.handlers.trace(model).get_trace()
         print(numpyro.util.format_shapes(trace))
+            
+        def log_density(theta: Dict):   
+            """see https://num.pyro.ai/en/stable/tutorials/bayesian_regression.html#Posterior-Predictive-Density
+            to just directl use the log-likelihood function and use it in other contexts
+
+            'Note that NumPyro provides the log_likelihood utility function that
+            can be used directly for computing log likelihood as in the first 
+            function for any general model. In this tutorial, we would like to
+            emphasize that there is nothing magical about such utility functions,
+            and you can roll out your own inference utilities using NumPyros
+            effect handling stack.
         
+            https://num.pyro.ai/en/stable/utilities.html#find-valid-initial-params
+                --> for obtaineing the gradients
+
+                or value_and_grad(potential_fn)(params)
+                from jax import device_get, jacfwd, lax, random, value_and_grad
+            """ 
+            with numpyro.handlers.seed(rng_seed=1):
+                log_joint, trace = numpyro.infer.util.log_density(
+                    model, (), {}, theta
+                )
+        
+            return log_joint
+            
+        self.log_density = log_density
+                
         if self.kernel.lower() == "sample-adaptive-mcmc":
             kernel = infer.SA(
                 model=model,
