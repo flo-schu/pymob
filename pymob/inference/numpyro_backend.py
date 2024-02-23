@@ -928,6 +928,7 @@ class NumpyroBackend:
             self, data_variable: str, x_dim: str, ax=None, subset={},
             n=None, seed=None
         ):
+        # TODO: This method should be trashed. It is not really useful
         if n is None:
             n = self.n_predictions
         
