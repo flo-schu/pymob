@@ -962,7 +962,8 @@ class NumpyroBackend:
             x_dim: str, 
             ax=None, 
             subset={},
-            mode="mean+hdi"
+            mode="mean+hdi",
+            plot_options={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
         ):
         # filter subset coordinates present in data_variable
         subset = {k: v for k, v in subset.items() if k in observations.coords}
@@ -999,23 +1000,26 @@ class NumpyroBackend:
                 continue
             
             if mode == "mean+hdi":
+                kwargs_hdi = dict(color="black", alpha=0.1)
+                kwargs_hdi.update(plot_options.get("pred_hdi", {}))
                 ax.fill_between(
                     preds[x_dim].values, *hdi.sel(i=i).values.T, 
-                    alpha=.1, color="black"
+                    **kwargs_hdi
                 )
 
-
+                kwargs_mean = dict(color="black", lw=1, alpha=max(1/N, 0.05))
+                kwargs_mean.update(plot_options.get("pred_mean", {}))
                 ax.plot(
                     preds[x_dim].values, y_mean.sel(i=i).values, 
-                    alpha=max(1/N, 0.05),
-                    lw=1, color="black"
+                    **kwargs_mean
                 )
             elif mode == "draws":
+                kwargs_draws = dict(color="black", lw=0.5, alpha=max(1/N, 0.05))
+                kwargs_draws.update(plot_options.get("pred_draws", {}))
                 ys = preds.sel(i=i).stack(sample=("chain", "draw"))
                 ax.plot(
                     preds[x_dim].values, ys.values, 
-                    alpha=max(1/N, 0.05),
-                    lw=0.5, color="black"
+                    **kwargs_draws
                 )
             else:
                 raise NotImplementedError(
@@ -1023,9 +1027,11 @@ class NumpyroBackend:
                     "Choose 'mean+hdi' or 'draws'."
                 )
 
+            kwargs_obs = dict(marker="o", ls="", ms=3, color="tab:blue")
+            kwargs_obs.update(plot_options.get("obs", {}))
             ax.plot(
                 obs[x_dim].values, obs.sel(i=i).values, 
-                marker="o", ls="", ms=3, color="tab:blue"
+                **kwargs_obs
             )
         
         ax.set_ylabel(data_variable)
