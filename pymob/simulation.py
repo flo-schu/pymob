@@ -159,6 +159,7 @@ class SimulationBase:
             model = self.model
         
         if self.solver_post_processing is not None:
+            # TODO: Handle similar to solver and model
             post_processing = getattr(self.mod, self.solver_post_processing)
         else:
             post_processing = None
@@ -594,6 +595,15 @@ class SimulationBase:
     @property
     def scenario(self):
         return self.config.get("case-study", "scenario")
+
+    @property
+    def scenario_path(self):
+        return os.path.join(
+            self.root_path, 
+            self.case_study_path, 
+            "scenarios", 
+            self.scenario
+        )
 
     @property
     def model_parameter_values(self):
