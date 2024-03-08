@@ -538,7 +538,7 @@ class NumpyroBackend:
     def preprocessing(**kwargs):
         return kwargs
 
-    def run(self):
+    def run(self, print_debug=True):
         # set parameters of JAX and numpyro
         # jax.config.update("jax_enable_x64", True)
 
@@ -568,9 +568,10 @@ class NumpyroBackend:
             view=False, cleanup=True, format="png"
         ) 
 
-        with numpyro.handlers.seed(rng_seed=1):
-            trace = numpyro.handlers.trace(model).get_trace()
-        print(numpyro.util.format_shapes(trace))
+        if print_debug:
+            with numpyro.handlers.seed(rng_seed=1):
+                trace = numpyro.handlers.trace(model).get_trace()
+            print(numpyro.util.format_shapes(trace))
             
         def log_density(theta: Dict):   
             """see https://num.pyro.ai/en/stable/tutorials/bayesian_regression.html#Posterior-Predictive-Density
@@ -745,6 +746,9 @@ class NumpyroBackend:
         preds = self.simulation.data_variables
         preds_obs = [f"{d}_obs" for d in self.simulation.data_variables]
         priors = list(self.simulation.model_parameter_dict.keys())
+        # TODO: This causes priors to be dropped that are not part of the 
+        #       config file. Makes interactive model development more difficult
+        #       This should be derived from the model directly.
         posterior_coords = self.posterior_coordinates
         posterior_coords["draw"] = list(range(n))
         data_structure = self.posterior_data_structure
