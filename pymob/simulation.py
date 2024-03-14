@@ -785,6 +785,23 @@ class SimulationBase:
         return parameters
 
     @property
+    def fixed_model_parameters(self):
+        fixed_parameters = {}
+        params = parse_config_section(self.config["fixed-model-parameters"])
+        for k, v in params.items():
+            vlist = v.split(" ")
+            floatlist = [float(v) for v in vlist]
+            if len(vlist) == 1:
+                v_ = floatlist[0]
+
+            else: 
+                v_ = np.array(floatlist)
+
+            fixed_parameters.update({k: v_})
+
+        return fixed_parameters
+
+    @property
     def error_model(self):
         em = parse_config_section(self.config["error-model"], method="strfloat")
         return em
