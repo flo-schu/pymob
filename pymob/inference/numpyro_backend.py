@@ -1,5 +1,6 @@
 from functools import partial, lru_cache
 import re
+import warnings
 from typing import Tuple, Dict, Union, Optional, Callable
 import numpyro
 import jax
@@ -573,32 +574,6 @@ class NumpyroBackend:
                 trace = numpyro.handlers.trace(model).get_trace()
             print(numpyro.util.format_shapes(trace))
             
-        def log_density(theta: Dict):   
-            """see https://num.pyro.ai/en/stable/tutorials/bayesian_regression.html#Posterior-Predictive-Density
-            to just directl use the log-likelihood function and use it in other contexts
-
-            'Note that NumPyro provides the log_likelihood utility function that
-            can be used directly for computing log likelihood as in the first 
-            function for any general model. In this tutorial, we would like to
-            emphasize that there is nothing magical about such utility functions,
-            and you can roll out your own inference utilities using NumPyros
-            effect handling stack.
-        
-            https://num.pyro.ai/en/stable/utilities.html#find-valid-initial-params
-                --> for obtaineing the gradients
-
-                or value_and_grad(potential_fn)(params)
-                from jax import device_get, jacfwd, lax, random, value_and_grad
-            """ 
-            with numpyro.handlers.seed(rng_seed=1):
-                log_joint, trace = numpyro.infer.util.log_density(
-                    model, (), {}, theta
-                )
-        
-            return log_joint
-            
-        self.log_density = log_density
-                
         if self.kernel.lower() == "sample-adaptive-mcmc":
             kernel = infer.SA(
                 model=model,
@@ -713,6 +688,140 @@ class NumpyroBackend:
         })
         return posterior_coords
     
+
+    def create_log_likelihood(self, seed=1):
+        key = jax.random.PRNGKey(seed)
+        obs, masks = self.observation_parser()
+
+        model_kwargs = self.preprocessing(
+            obs=obs, 
+            masks=masks,
+        )
+        
+        # prepare model
+        model = partial(
+            self.inference_model, 
+            solver=self.evaluator, 
+            **model_kwargs
+        )    
+   
+        def log_density(theta, return_type="summed-by-site", check=True):
+            """Log density relies heavily on the substitute utility
+            
+            The log density is synonymous for log-likelihood (it is the log 
+            probability density of the model). 
+
+            The general method is actually quite simple. Values of all SAMPLE
+            sites are replaced according to the key: value pairs in `theta`.
+
+            Then the model is calculated and the trace is obtained. Everything
+            else is then just post-processing of the sites. Here the log_prob
+            function of the sites in the trace are used and the values of the
+            sites are inserted. 
+
+            Note that the log-density can randomly fluctuate, if not all
+            sites are replaced.
+
+            Note that the data-loglik can be used to calculate a maximum-likelihood
+            estimate. Because it is independent of the prior
+
+            Parameters
+            ----------
+
+            theta : Dict
+                Dictionary of priors (sites) which should be deterministically 
+                fixed (substituted).
+
+            return_type : str
+                The information which should be returned. With increasing level
+                of computation:
+                
+                joint-log-likelihood: returns a single value, the entire log
+                    likelihood of the model, given the values in theta
+                full: joint-log, loglik-prior of each site and value, 
+                    loglik-data of each site and value 
+                summed-by-site: joint-loglik, loglik-prior of sites, 
+                    loglik-data of sites
+                summed-by-prior-data:
+                    joint-loglik, prior-loglik, data-loglik
+
+            """
+            
+            # TODO: For speeding this up, get inspired by
+            # https://num.pyro.ai/en/stable/_modules/numpyro/infer/util.html#log_likelihood
+
+        
+            joint_log_density, trace = numpyro.infer.util.log_density(
+                model=numpyro.handlers.seed(model, key),
+                model_args=(),
+                model_kwargs={},
+                params=theta
+            )
+
+            joint_log_density = float(joint_log_density)
+
+            if check:
+                sites_in_theta = {
+                    name: True 
+                    if name in theta
+                    else False
+                    for name, site in {
+                        name: site for name, site in trace.items() 
+                        if site["type"] == "sample" 
+                        and not site["is_observed"]
+                    }.items()
+                }
+
+                if not all(list(sites_in_theta.values())):
+                    missing_sites = [name for name, in_theta in sites_in_theta.items() if not in_theta]
+                    warnings.warn(
+                        f"Sites: {missing_sites} were not specified in theta. "
+                        "Log-likelihood will not be fully defined by theta."
+                        "Results should be independent of the given seed"
+                    )
+
+
+            if return_type == "joint-log-likelihood":
+                return joint_log_density
+            
+            
+            prior_loglik = {
+                name: site["fn"].log_prob(site["value"])
+                for name, site in trace.items()
+                if site["type"] == "sample" and not site["is_observed"]
+            }
+
+            data_loglik = {
+                name: site["fn"].log_prob(site["value"])
+                for name, site in trace.items()
+                if site["type"] == "sample" and site["is_observed"]
+            }
+
+            if return_type == "full":
+                return joint_log_density, prior_loglik, data_loglik
+
+            prior_loglik_sum = {
+                key: np.sum(value) for key, value in prior_loglik.items()
+            }
+
+            data_loglik_sum = {
+                key: np.sum(value) for key, value in data_loglik.items()
+            }
+
+            if return_type == "summed-by-site":
+                return joint_log_density, prior_loglik_sum, data_loglik_sum
+
+            prior_loglik_total = np.sum(list(prior_loglik_sum.values()))
+            data_loglik_total = np.sum(list(data_loglik_sum.values()))
+            
+            if return_type == "summed-by-prior-data":
+                return joint_log_density, prior_loglik_total, data_loglik_total
+            
+            raise NotImplementedError(f"return_type flag: {return_type} is not implemented")
+
+
+        return log_density
+
     @lru_cache
     def prior_predictions(self, n=100, seed=1):
         key = jax.random.PRNGKey(seed)
