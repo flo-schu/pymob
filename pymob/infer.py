@@ -12,10 +12,14 @@ from pymob.simulation import SimulationBase
               help=help.scenario)
 @click.option("-p", "--package", type=str, default="case_studies", 
               help=help.package)
-@click.option("-n", "--n_cores", type=int, default=2, 
+@click.option("-o", "--output", type=str, default=None, 
+              help="Set `case-study.output` directory")
+@click.option("-r", "--random_seed", type=int, default=None, 
+              help="Set `simulation.seed`")
+@click.option("-n", "--n_cores", type=int, default=None, 
               help="The number of cores to be used for multiprocessing")
 @click.option("--inference_backend", type=str, default="pymoo")
-def main(case_study, scenario, package, inference_backend, n_cores):
+def main(case_study, scenario, package, output, random_seed, n_cores, inference_backend):
     
     config = prepare_casestudy(
         case_study=(case_study, scenario), 
@@ -24,6 +28,8 @@ def main(case_study, scenario, package, inference_backend, n_cores):
     )
 
     if n_cores is not None: config.set("multiprocessing", "cores", str(n_cores))
+    if random_seed is not None: config.set("simulation", "seed", str(random_seed))
+    if output is not None: config.set("case-study", "output", output)
     
     # import package        
     pkg = import_package(package_path=config["case-study"]["package"])
