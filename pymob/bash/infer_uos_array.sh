@@ -15,7 +15,7 @@
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 1;}
 [ $# -eq 0 ] && usage
 
-while getopts ":c:s:b" o; do
+while getopts ":c:s:b:" o; do
     case "${o}" in
         c) # case-study
             CASE=${OPTARG}
@@ -35,13 +35,13 @@ done
 
 # specify output directory
 PADDED_TASK_ID=$(printf "%05d" $SLURM_ARRAY_TASK_ID)
-OUTPUT="/home/staff/f/fschunck/projects/damage-proxy
-    work/case_studies/$CASE/results/$SCENARIO/chains/$SLURM_ARRAY_TASK_ID"
+OUTPUT="/home/staff/f/fschunck/projects/damage-proxy/work/case_studies/$CASE/results/$SCENARIO/chains/$SLURM_ARRAY_TASK_ID"
 
 echo "Running Array JOB: $PADDED_TASK_ID"
 echo "Requested $SLURM_CPUS_PER_TASK cores."
 echo "Starting inference..."
 echo "Simulation(case_study=$CASE, scenario=$SCENARIO, backend=$BACKEND)"
+echo "Output-dir: $OUTPUT"
 
 # activate conda environment
 source activate damage-proxy
