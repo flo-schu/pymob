@@ -11,7 +11,7 @@ def plot_loghist(x, name="", bins=10, ax=None, hdi=False, decorate=True,
     if hdi:
         assert hasattr(x, "chain"), "chain must be in coordinates, if hdi=True"
         assert hasattr(x, "draw"), "draw must be in coordinates, if hdi=True"
-        lq, uq = az.hdi(x.unstack(), hdi_prob=.95).x.values
+        lq, uq = az.hdi(x.unstack(), hdi_prob=.95).to_array().isel(variable=0).values
     else:
         lq, uq = np.quantile(x, [0.025, 0.975])
     logbins = np.logspace(np.log10(bins[0]), np.log10(bins[-1]), len(bins))
