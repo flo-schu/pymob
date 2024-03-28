@@ -1185,7 +1185,7 @@ class NumpyroBackend:
         # iterate over the posterior files with a progress bar (depending on the
         # size and number of posteriors this op needs time and memory)
         tqdm_iterator = tqdm(
-            enumerate(pseudo_chains), 
+            enumerate(pseudo_chains, start=1), 
             total=len(pseudo_chains),
             desc="Concatenating posteriors"
         )
