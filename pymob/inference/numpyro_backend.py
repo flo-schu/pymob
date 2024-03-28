@@ -1159,7 +1159,17 @@ class NumpyroBackend:
         return ax
 
     # This is a separate script!    
-    def combine_chains(self, chain_location="chains_svi"):
+    def combine_chains(self, chain_location="chains"):
+        """Combine chains if chains were computed in a fully parallelized manner
+        (on different machines, jobs, etc.). 
+
+        Parameters
+        ----------
+        chain_location : str, optional
+            location of the chains, relative to the simulation.output_path, this
+            parameter is simulteneously the string appended to the saved 
+            posterior. By default "chains"
+        """
         sim = self.simulation
         pseudo_chains = glob.glob(
             f"{sim.output_path}/{chain_location}/*/numpyro_posterior.nc"
