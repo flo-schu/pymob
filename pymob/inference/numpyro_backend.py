@@ -1220,5 +1220,5 @@ class NumpyroBackend:
         )
 
         idata_multichain.to_netcdf(
-            f"{sim.output_path}/posterior_{chain_location}.nc"
+            f"{sim.output_path}/numpyro_posterior_{chain_location}.nc"
         )
