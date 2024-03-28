@@ -3,6 +3,7 @@ import glob
 import re
 import warnings
 from typing import Tuple, Dict, Union, Optional, Callable
+from tqdm import tqdm
 import numpyro
 import jax
 import jax.numpy as jnp
@@ -1181,7 +1182,14 @@ class NumpyroBackend:
         posterior = idata.posterior
         log_likelihood = idata.log_likelihood
 
-        for i, f in enumerate(pseudo_chains[1:], start=1):
+        # iterate over the posterior files with a progress bar (depending on the
+        # size and number of posteriors this op needs time and memory)
+        tqdm_iterator = tqdm(
+            enumerate(pseudo_chains), 
+            total=len(pseudo_chains),
+            desc="Concatenating posteriors"
+        )
+        for i, f in tqdm_iterator:
             idata = az.from_netcdf(f)
             ccord = {"chain": np.array([i])}
             
