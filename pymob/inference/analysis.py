@@ -47,13 +47,20 @@ def cluster_chains(posterior, deviation="std"):
 
 
 def rename_extra_dims(df, extra_dim_suffix="_dim_0", new_dim="new_dim", new_coords=None):
+    # TODO: COuld be used for numypro backend for fixing posterior indexes
     df_ = df.copy()
     data_vars = list(df_.data_vars.keys())
 
     # swap dimension names for all dims that have the suffix 
-    df_ = df_.swap_dims({
-        f"{dv}{extra_dim_suffix}": new_dim for dv in data_vars
-    })
+    new_dims = {}
+    for dv in data_vars:
+        old_dim = f"{dv}{extra_dim_suffix}"
+        if df_.dims[old_dim] == 1:
+            df_[dv] = df_[dv].squeeze(old_dim)
+        else:
+            new_dims.update({old_dim: new_dim})
+
+    df_ = df_.swap_dims(new_dims)
 
     # assign coords to new dimension
     df_ = df_.assign_coords({new_dim: new_coords})

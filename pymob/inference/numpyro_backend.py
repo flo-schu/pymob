@@ -1,4 +1,5 @@
 from functools import partial, lru_cache
+import glob
 import re
 import warnings
 from typing import Tuple, Dict, Union, Optional, Callable
@@ -17,7 +18,7 @@ import sympy
 import sympy2jax
 
 from pymob.simulation import SimulationBase
-
+from inference.analysis import rename_extra_dims
 
 sympy2jax_extra_funcs = {
     sympy.Array: jnp.array,
@@ -978,8 +979,11 @@ class NumpyroBackend:
 
         return xr.combine_by_coords(preds)
 
-    def store_results(self):
-        self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
+    def store_results(self, output=None):
+        if output is not None:
+            self.idata.to_netcdf(output)
+        else:
+            self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
 
     def load_results(self, file="numpyro_posterior.nc"):
         self.idata = az.from_netcdf(f"{self.simulation.output_path}/{file}")
@@ -1153,3 +1157,50 @@ class NumpyroBackend:
         ax.set_xlabel(x_dim)
 
         return ax
+
+    # This is a separate script!    
+    def combine_chains(self, chain_location="chains_svi"):
+        sim = self.simulation
+        pseudo_chains = glob.glob(
+            f"{sim.output_path}/{chain_location}/*/numpyro_posterior.nc"
+        )
+
+        # just be aware that in the case of MAP this is not an acutal posterior.
+        # But it can behave like one with multiple chains (1 for each start)
+        idata = az.from_netcdf(pseudo_chains[0])
+        posterior = idata.posterior
+        log_likelihood = idata.log_likelihood
+
+        for i, f in enumerate(pseudo_chains[1:], start=1):
+            idata = az.from_netcdf(f)
+            ccord = {"chain": np.array([i])}
+            
+            # add chain coordinate to posterior and likelihood
+            idata.posterior = idata.posterior.assign_coords(ccord)
+            idata.log_likelihood = idata.log_likelihood.assign_coords(ccord)
+
+            # concatenate chains
+            posterior = xr.concat([posterior, idata.posterior], dim="chain")
+            log_likelihood = xr.concat(
+                [log_likelihood, idata.log_likelihood], 
+                dim="chain"
+            )
+
+
+        posterior = rename_extra_dims(
+            posterior, 
+            new_dim="substance", 
+            new_coords=sim.observations.attrs["substance"]
+        )
+
+        # store mutlichain inferencedata to the main output directory
+        # this is also a slim posterior that only contains the necessary information
+        # posterior and likelihood and has therefore a small file size
+        idata_multichain = az.InferenceData(
+            posterior=posterior, 
+            log_likelihood=log_likelihood
+        )
+
+        idata_multichain.to_netcdf(
+            f"{sim.output_path}/posterior_{chain_location}.nc"
+        )
