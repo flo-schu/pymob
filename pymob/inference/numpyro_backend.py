@@ -19,7 +19,7 @@ import sympy
 import sympy2jax
 
 from pymob.simulation import SimulationBase
-from inference.analysis import rename_extra_dims
+from pymob.inference.analysis import rename_extra_dims
 
 sympy2jax_extra_funcs = {
     sympy.Array: jnp.array,
