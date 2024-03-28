@@ -73,7 +73,7 @@ def rename_extra_dims(df, extra_dim_suffix="_dim_0", new_dim="new_dim", new_coor
 
 
 # plot loghist
-def plot_posterior_samples(posterior, col_dim=None, log=True):
+def plot_posterior_samples(posterior, col_dim=None, log=True, hist_kwargs={}):
     if log:
         hist = plot_loghist
     else:
@@ -86,7 +86,6 @@ def plot_posterior_samples(posterior, col_dim=None, log=True):
     fig.subplots_adjust(right=.95, top=.95, hspace=.25)
 
     gs = fig.add_gridspec(len(parameters), 1)
-    hist_kwargs = dict(hdi=True)
 
     for i, key in enumerate(parameters):
         postpar = samples[key]
