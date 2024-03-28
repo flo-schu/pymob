@@ -704,6 +704,8 @@ class NumpyroBackend:
             solver=self.evaluator, 
             **model_kwargs
         )    
+
+        seeded_model = numpyro.handlers.seed(model, key)
    
         def log_density(theta, return_type="summed-by-site", check=True):
             """Log density relies heavily on the substitute utility
@@ -752,7 +754,7 @@ class NumpyroBackend:
 
         
             joint_log_density, trace = numpyro.infer.util.log_density(
-                model=numpyro.handlers.seed(model, key),
+                model=seeded_model,
                 model_args=(),
                 model_kwargs={},
                 params=theta
