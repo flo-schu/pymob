@@ -85,6 +85,7 @@ def test_svi_kernel():
 
     sim.config.set("inference.numpyro", "kernel", "svi")
     sim.config.set("inference.numpyro", "svi_iterations", "10000")
+    sim.config.set("inference.numpyro", "svi_learning_rate", "0.01")
     # this samples the model with standard normal distributions
     # and rescales them according to the transformations of the specified 
     # parameter distributions to the normal
@@ -148,7 +149,7 @@ def test_nuts_kernel_replicated():
 def test_sa_kernel():
     sim = create_simulation("test_scenario")
 
-    sim.config.set("inference.numpyro", "kernel", "sample-adaptive-mcmc")
+    sim.config.set("inference.numpyro", "kernel", "sa")
     sim.config.set("inference.numpyro", "init_strategy", "init_to_sample")
     sim.config.set("inference.numpyro", "warmup", "2000")
     sim.config.set("inference.numpyro", "draws", "1000")
@@ -181,4 +182,4 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    test_user_defined_probability_model()
+    # test_user_defined_probability_model()

@@ -45,4 +45,4 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    test_interactive_mode()
+    # test_interactive_mode()
