@@ -576,16 +576,71 @@ class NumpyroBackend:
                 trace = numpyro.handlers.trace(model).get_trace()
             print(numpyro.util.format_shapes(trace))
             
-        if self.kernel.lower() == "sample-adaptive-mcmc":
-            kernel = infer.SA(
+        # run inference
+        if self.kernel.lower() == "sa" or self.kernel.lower() == "nuts":
+            sampler, mcmc = self.run_mcmc(
+                model=model,
+                keys=keys,
+                kernel=self.kernel.lower()
+            )
+
+            # create arviz idata
+            self.idata = az.from_numpyro(
+                mcmc, 
+                dims=self.posterior_data_structure,
+                coords=self.posterior_coordinates,
+            )
+
+        elif self.kernel.lower() == "svi" or self.kernel.lower() == "map":
+            if not self.gaussian_base_distribution:
+                raise RuntimeError(
+                    "SVI is only supported if parameter distributions can be "
+                    "re-parameterized as gaussians. Please set "
+                    "inference.numpyro.gaussian_base_distribution = 1 "
+                    "and if needed use distributions from the loc-scale family "
+                    "to specify the model parameters."
+                )
+            
+            svi, guide, svi_result = self.run_svi(
+                model=model,
+                keys=keys,
+                kernel=self.kernel.lower(),
+                learning_rate=self.svi_learning_rate,
+                iterations=self.svi_iterations,
+            )
+
+            # plot loss curve
+            fig, ax = plt.subplots(1, 1)
+            ax.plot(svi_result.losses)
+            ax.set_yscale("log")
+            ax.set_ylabel("Loss")
+            ax.set_xlabel("Iteration")
+            fig.savefig(f"{self.simulation.output_path}/svi_loss_curve.png")
+
+            # save idata and print summary
+            draws = 1 if self.kernel.lower() == "map" else self.draws
+            self.idata = self.svi_posterior(
+                svi_result, model, guide, next(keys), draws
+            )
+            print(az.summary(self.idata))
+
+        else:
+            raise NotImplementedError(
+                f"Kernel {self.kernel} is not implemented. "
+                "Use one of nuts, sa, svi, map"
+            )
+        
+    def run_mcmc(self, model, keys, kernel):
+        if kernel == "sa":
+            sampler = infer.SA(
                 model=model,
                 dense_mass=True,
                 adapt_state_size=self.adapt_state_size,
                 init_strategy=self.init_strategy,
             )
 
-        elif self.kernel.lower() == "nuts":
-            kernel = infer.NUTS(
+        elif kernel == "nuts":
+            sampler = infer.NUTS(
                 model, 
                 dense_mass=True, 
                 step_size=0.01,
@@ -595,61 +650,14 @@ class NumpyroBackend:
                 target_accept_prob=0.8,
                 init_strategy=self.init_strategy
             )
-
-        elif self.kernel.lower() == "svi":
-            # The current implementation of SVI only works with parameter distributions
-            # that can be derived from normal distributions.
-            # what SVI
-
-            if not self.gaussian_base_distribution:
-                raise RuntimeError(
-                    "SVI is only supported if parameter distributions can be "
-                    "re-parameterized as gaussians. Please set "
-                    "inference.numpyro.gaussian_base_distribution = 1 "
-                    "and if needed use distributions from the loc-scale family "
-                    "to specify the model parameters."
-                )
-
-            guide = infer.autoguide.AutoMultivariateNormal(model)
-            optimizer = numpyro.optim.ClippedAdam(step_size=self.svi_learning_rate, clip_norm=10)
-            svi = infer.SVI(model=model, guide=guide, optim=optimizer, loss=infer.Trace_ELBO())
-            svi_result = svi.run(next(keys), self.svi_iterations)
-
-            self.idata = self.svi_posterior(
-                svi_result, model, guide, next(keys), self.draws
+        else:
+            raise NotImplementedError(
+                f"MCMC kernel {kernel} not implemented. Use one of 'sa', 'nuts'"
             )
-            az.summary(self.idata)
 
-            # the full cov matrix
-            cov = svi_result.params['auto_scale_tril'].dot(
-                svi_result.params['auto_scale_tril'].T
-            )
-            median = guide.median(svi_result.params)
-            return
-        
-        elif self.kernel.lower() == "map":
-            # while this API is very convenient. I would prefer to roll out my
-            # own inference scheme and use scipy's optimizers to minimize 
-            # the negative log likelihood for maximum likelihood and to minimize
-            # the log-prior and log-likelihood for the map estimate.
-            # for initializing this, see the log_density function from above
-            # but before i do something like this. Remember, that I then need
-            # to deal with passing the right parameter structure to the function
-            # so maybe this is something for pymc
-            # TODO: It may be worth investing a little bit of extra work in
-            # constraining the optimizer
-            guide = numpyro.infer.autoguide.AutoDelta(model)
-            optimizer = numpyro.optim.ClippedAdam(step_size=self.svi_learning_rate, clip_norm=10)
-            svi = infer.SVI(model=model, guide=guide, optim=optimizer, loss=infer.Trace_ELBO())
-            svi_result = svi.run(next(keys), num_steps=self.svi_iterations)
-            self.idata = self.svi_posterior(
-                svi_result, model, guide, next(keys), n=1
-            )
-            az.summary(self.idata)
-            return
 
         mcmc = infer.MCMC(
-            sampler=kernel,
+            sampler=sampler,
             num_warmup=self.warmup,
             num_samples=self.draws * self.thinning,
             num_chains=self.chains,
@@ -661,13 +669,33 @@ class NumpyroBackend:
         mcmc.run(next(keys))
         mcmc.print_summary()
 
-        # create arviz idata
-        idata = az.from_numpyro(
-            mcmc, 
-            dims=self.posterior_data_structure,
-            coords=self.posterior_coordinates,
-        )
-        self.idata = idata
+        return sampler, mcmc
+
+    @staticmethod
+    def run_svi(model, keys, learning_rate, iterations, kernel):
+
+        init_fn = partial(infer.init_to_uniform, radius=1)
+        if kernel == "svi":
+            guide = infer.autoguide.AutoMultivariateNormal(model, init_loc_fn=init_fn)
+        elif kernel == "map":
+            guide = numpyro.infer.autoguide.AutoDelta(model, init_loc_fn=init_fn)
+        else:
+            raise NotImplementedError(
+                f"SVI kernel {kernel} is not implemented. "
+                "Use one of 'map', 'svi'"
+            )
+
+        optimizer = numpyro.optim.ClippedAdam(step_size=learning_rate, clip_norm=10)
+        svi = infer.SVI(model=model, guide=guide, optim=optimizer, loss=infer.Trace_ELBO())
+        svi_result = svi.run(next(keys), iterations)
+
+        if kernel == "svi":
+            cov = svi_result.params['auto_scale_tril'].dot(
+                svi_result.params['auto_scale_tril'].T
+            )
+            median = guide.median(svi_result.params)
+
+        return svi, guide, svi_result
 
     @property
     def posterior(self):
@@ -879,7 +907,7 @@ class NumpyroBackend:
         # self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_prior_predictions.nc")
     
 
-    def svi_posterior(self, svi_result, model, guide, key, n=1000):
+    def svi_posterior(self, svi_result, model, guide, key, n=1000, only_parameters=False):
         key, *subkeys = jax.random.split(key, 4)
         keys = iter(subkeys)
 
@@ -922,6 +950,11 @@ class NumpyroBackend:
         # TODO add prior data structure. Address this when a proper coordinate
         # dimensionality backend is implemented (config module)
         
+        # TODO add option to only return parameters (posterior) without
+        # predictions [SHOULD BE EXPOSED ON STORING THE POSTERIOR]. 
+        # Do keep calculating the predictions. They can be used
+        # for quick and dirty AND STANDARDIZED diagnoses
+
         idata = az.from_dict(
             observed_data=obs,
             posterior={k: v for k, v in posterior_predictions.items() if k in priors},
