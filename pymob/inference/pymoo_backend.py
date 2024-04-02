@@ -230,28 +230,28 @@ class PymooBackend:
 
         return ax
 
+if pymoo is not None:
+    class OptimizationProblem(Problem):
+        def __init__(self, backend: PymooBackend, **kwargs):
+            self.backend = backend
+            self.simulation = backend.simulation
+            
+            super().__init__(
+                n_var=self.simulation.n_free_parameters, 
+                n_obj=self.simulation.n_objectives, 
+                n_ieq_constr=0, 
+                xl=0.0, 
+                xu=1.0,
+                elementwise_evaluation=False,
+                **kwargs
+            )
 
-class OptimizationProblem(Problem):
-    def __init__(self, backend: PymooBackend, **kwargs):
-        self.backend = backend
-        self.simulation = backend.simulation
-        
-        super().__init__(
-            n_var=self.simulation.n_free_parameters, 
-            n_obj=self.simulation.n_objectives, 
-            n_ieq_constr=0, 
-            xl=0.0, 
-            xu=1.0,
-            elementwise_evaluation=False,
-            **kwargs
-        )
+        def _evaluate(self, X, out, *args, **kwargs):
+            X_original_scale = self.backend.transform(X_scaled=X)       
 
-    def _evaluate(self, X, out, *args, **kwargs):
-        X_original_scale = self.backend.transform(X_scaled=X)       
+            if self.backend.pool is None:
+                F = list(map(self.backend.distance_function, X_original_scale))
+            else:
+                F = self.backend.pool.map(self.backend.distance_function, X_original_scale)
 
-        if self.backend.pool is None:
-            F = list(map(self.backend.distance_function, X_original_scale))
-        else:
-            F = self.backend.pool.map(self.backend.distance_function, X_original_scale)
-
-        out["F"] = np.array(F)
+            out["F"] = np.array(F)
