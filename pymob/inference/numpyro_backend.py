@@ -687,7 +687,7 @@ class NumpyroBackend:
 
         optimizer = numpyro.optim.ClippedAdam(step_size=learning_rate, clip_norm=10)
         svi = infer.SVI(model=model, guide=guide, optim=optimizer, loss=infer.Trace_ELBO())
-        svi_result = svi.run(next(keys), iterations)
+        svi_result = svi.run(next(keys), iterations, stable_update=True)
 
         if kernel == "svi":
             cov = svi_result.params['auto_scale_tril'].dot(
