@@ -1160,9 +1160,13 @@ class NumpyroBackend:
         return ax
 
     # This is a separate script!    
-    def combine_chains(self, chain_location="chains"):
+    def combine_chains(self, chain_location="chains", drop_extra_vars=[]):
         """Combine chains if chains were computed in a fully parallelized manner
         (on different machines, jobs, etc.). 
+
+        In addition, the method drops all data variables and *_norm priors 
+        (i.e. helper priors with a normal base). This is done, in order to
+        create slim data objects for storage.
 
         Parameters
         ----------
@@ -1170,6 +1174,8 @@ class NumpyroBackend:
             location of the chains, relative to the simulation.output_path, this
             parameter is simulteneously the string appended to the saved 
             posterior. By default "chains"
+        drop_extra_vars : List, optional
+            any additional variables to drop from the posterior
         """
         sim = self.simulation
         pseudo_chains = glob.glob(
@@ -1204,6 +1210,13 @@ class NumpyroBackend:
                 dim="chain"
             )
 
+        # drop extra variables if they are included in the posterior
+        drop_vars = [k for k in list(posterior.data_vars.keys()) if "_norm" in k]
+        drop_vars = drop_vars + sim.data_variables + drop_extra_vars
+        drop_vars = [v for v in drop_vars if v in posterior]
+        drop_coords = [c for c in list(posterior.coords.keys()) if c.split("_dim_")[0] in drop_vars]
+        posterior = posterior.drop(drop_vars)
+        posterior = posterior.drop(drop_coords)
 
         posterior = rename_extra_dims(
             posterior, 
