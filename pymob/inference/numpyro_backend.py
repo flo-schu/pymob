@@ -565,11 +565,20 @@ class NumpyroBackend:
             **model_kwargs
         )    
 
-        graph = numpyro.render_model(model)
-        graph.render(
-            filename=f"{self.simulation.output_path}/probability_model",
-            view=False, cleanup=True, format="png"
-        ) 
+        try:
+            import graphviz
+            graph = numpyro.render_model(model)
+            graph.render(
+                filename=f"{self.simulation.output_path}/probability_model",
+                view=False, cleanup=True, format="png"
+            ) 
+        except graphviz.backend.ExecutableNotFound:
+            warnings.warn(
+                "Model is not rendered, because the graphviz executable is "
+                "not found. Try search for 'graphviz executables not found'"
+                "and the used OS. This should be an easy fix :-)"
+            )
+
 
         if print_debug:
             with numpyro.handlers.seed(rng_seed=1):
