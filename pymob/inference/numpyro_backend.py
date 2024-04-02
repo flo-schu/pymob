@@ -1191,8 +1191,8 @@ class NumpyroBackend:
         # iterate over the posterior files with a progress bar (depending on the
         # size and number of posteriors this op needs time and memory)
         tqdm_iterator = tqdm(
-            enumerate(pseudo_chains, start=1), 
-            total=len(pseudo_chains),
+            enumerate(pseudo_chains[1:], start=1), 
+            total=len(pseudo_chains)-1,
             desc="Concatenating posteriors"
         )
         for i, f in tqdm_iterator:
@@ -1201,6 +1201,7 @@ class NumpyroBackend:
             
             # add chain coordinate to posterior and likelihood
             idata.posterior = self.drop_vars_from_posterior(idata.posterior, drop_extra_vars)
+            idata.posterior = idata.posterior.assign_coords(ccord)
             idata.log_likelihood = idata.log_likelihood.assign_coords(ccord)
 
             # concatenate chains
