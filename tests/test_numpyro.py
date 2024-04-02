@@ -117,6 +117,34 @@ def test_svi_kernel():
         )
 
 
+def test_map_kernel():
+    sim = create_simulation("test_scenario")
+
+    sim.config.set("inference.numpyro", "kernel", "map")
+    sim.config.set("inference.numpyro", "svi_iterations", "2000")
+    sim.config.set("inference.numpyro", "svi_learning_rate", "0.01")
+    # this samples the model with standard normal distributions
+    # and rescales them according to the transformations of the specified 
+    # parameter distributions to the normal
+    sim.config.set("inference.numpyro", "gaussian_base_distribution", "1")
+
+    sim.set_inferer(backend="numpyro")
+    sim.inferer.run()
+    sim.inferer.idata.posterior_predictive
+
+    posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))[sim.model_parameter_names]
+    true_parameters = sim.model_parameter_dict
+    
+    # tests if true parameters are close to recovered parameters from simulated
+    # data
+    np.testing.assert_allclose(
+        posterior_mean.to_dataarray().values,
+        np.array(list(true_parameters.values())),
+        rtol=1e-2, atol=1e-3
+    )
+
+
+
 def test_nuts_kernel_replicated():
     pytest.skip()
     # CURRENTLY UNUSABLE SEE https://github.com/flo-schu/pymob/issues/6
