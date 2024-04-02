@@ -1185,7 +1185,7 @@ class NumpyroBackend:
         # just be aware that in the case of MAP this is not an acutal posterior.
         # But it can behave like one with multiple chains (1 for each start)
         idata = az.from_netcdf(pseudo_chains[0])
-        posterior = idata.posterior
+        posterior = self.drop_vars_from_posterior(idata.posterior, drop_extra_vars)
         log_likelihood = idata.log_likelihood
 
         # iterate over the posterior files with a progress bar (depending on the
@@ -1200,7 +1200,7 @@ class NumpyroBackend:
             ccord = {"chain": np.array([i])}
             
             # add chain coordinate to posterior and likelihood
-            idata.posterior = idata.posterior.assign_coords(ccord)
+            idata.posterior = self.drop_vars_from_posterior(idata.posterior, drop_extra_vars)
             idata.log_likelihood = idata.log_likelihood.assign_coords(ccord)
 
             # concatenate chains
@@ -1209,14 +1209,6 @@ class NumpyroBackend:
                 [log_likelihood, idata.log_likelihood], 
                 dim="chain"
             )
-
-        # drop extra variables if they are included in the posterior
-        drop_vars = [k for k in list(posterior.data_vars.keys()) if "_norm" in k]
-        drop_vars = drop_vars + sim.data_variables + drop_extra_vars
-        drop_vars = [v for v in drop_vars if v in posterior]
-        drop_coords = [c for c in list(posterior.coords.keys()) if c.split("_dim_")[0] in drop_vars]
-        posterior = posterior.drop(drop_vars)
-        posterior = posterior.drop(drop_coords)
 
         posterior = rename_extra_dims(
             posterior, 
@@ -1235,3 +1227,16 @@ class NumpyroBackend:
         idata_multichain.to_netcdf(
             f"{sim.output_path}/numpyro_posterior_{chain_location}.nc"
         )
+
+    def drop_vars_from_posterior(self, posterior, drop_extra_vars):
+        """drops extra variables if they are included in the posterior
+        """
+        drop_vars = [k for k in list(posterior.data_vars.keys()) if "_norm" in k]
+        drop_vars = drop_vars + self.simulation.data_variables + drop_extra_vars
+        drop_vars = [v for v in drop_vars if v in posterior]
+        drop_coords = [c for c in list(posterior.coords.keys()) if c.split("_dim_")[0] in drop_vars]
+
+        posterior = posterior.drop(drop_vars)
+        posterior = posterior.drop(drop_coords)
+
+        return posterior
