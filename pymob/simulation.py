@@ -14,7 +14,7 @@ import dpath.util as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from toopy import param, benchmark
 
-from pymob.utils.errors import errormsg
+from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 
@@ -199,8 +199,12 @@ class SimulationBase:
         self.Y = self.evaluate(theta=self.model_parameter_dict)
 
     def interactive(self):
-        import ipywidgets as widgets
-        from IPython.display import display, clear_output
+        # optional imports
+        extra = "'interactive' dependencies can be installed with pip install pymob[interactive]"
+        widgets = import_optional_dependency("ipywidgets", errors="raise", extra=extra)
+        if widgets is not None:
+            import ipywidgets as widgets
+            from IPython.display import display, clear_output
         
         def interactive_output(func, controls):
             out = widgets.Output(layout={'border': '1px solid black'})

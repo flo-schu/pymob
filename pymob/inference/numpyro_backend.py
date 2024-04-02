@@ -3,26 +3,32 @@ import glob
 import re
 import warnings
 from typing import Tuple, Dict, Union, Optional, Callable
+
 from tqdm import tqdm
-import numpyro
-import jax
-import jax.numpy as jnp
 import numpy as np
-from numpyro import distributions as dist
-from numpyro.infer import Predictive
-from numpyro.distributions import Normal, transforms, TransformedDistribution
-from numpyro import infer
 import xarray as xr
 import arviz as az
 from matplotlib import pyplot as plt
 import sympy
-import sympy2jax
 
 from pymob.simulation import SimulationBase
 from pymob.inference.analysis import (
     cluster_chains, rename_extra_dims, plot_posterior_samples,
     add_cluster_coordinates
 )
+from pymob.utils.errors import import_optional_dependency
+
+extra = "'numpyro' dependencies can be installed with pip install pymob[numpyro]"
+numpyro = import_optional_dependency("numpyro", errors="warn", extra=extra)
+if numpyro is not None:
+    import numpyro
+    from numpyro import distributions as dist
+    from numpyro.infer import Predictive
+    from numpyro.distributions import Normal, transforms, TransformedDistribution
+    from numpyro import infer
+    import jax
+    import jax.numpy as jnp
+    import sympy2jax
 
 sympy2jax_extra_funcs = {
     sympy.Array: jnp.array,

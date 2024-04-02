@@ -1,15 +1,20 @@
 import json
-import numpy as np
 
-import pathos.multiprocessing as mp
-from pymoo.algorithms.moo.unsga3 import UNSGA3
-from pymoo.core.problem import ElementwiseProblem, Problem
-from pymoo.util.ref_dirs import get_reference_directions
-from pymoo.termination.default import DefaultMultiObjectiveTermination
+import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from matplotlib import pyplot as plt
 
 from pymob.simulation import SimulationBase
+from pymob.utils.errors import import_optional_dependency
+
+extra = "'pymoo' dependencies can be installed with pip install pymob[pymoo]"
+pymoo = import_optional_dependency("pymoo", errors="warn", extra=extra)
+if pymoo is not None:
+    import pathos.multiprocessing as mp
+    from pymoo.algorithms.moo.unsga3 import UNSGA3
+    from pymoo.core.problem import ElementwiseProblem, Problem
+    from pymoo.util.ref_dirs import get_reference_directions
+    from pymoo.termination.default import DefaultMultiObjectiveTermination
 
 
 class PymooBackend:

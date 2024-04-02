@@ -5,14 +5,19 @@ import tempfile
 import inspect
 
 import numpy as np
-import pyabc
 import xarray as xr
 import arviz as az
 from matplotlib import pyplot as plt
-from pathos import multiprocessing as mp
 
 from pymob.simulation import SimulationBase
 from pymob.utils.store_file import is_number
+from pymob.utils.errors import import_optional_dependency
+
+extra = "'pyabc' dependencies can be installed with pip install pymob[pyabc]"
+pyabc = import_optional_dependency("pyabc", errors="warn", extra=extra)
+if pyabc is not None:
+    import pyabc
+    from pathos import multiprocessing as mp
 
 class PyabcBackend:
     def __init__(
