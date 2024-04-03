@@ -994,27 +994,35 @@ class NumpyroBackend:
         # coordinates as an input argument, maybe I'm okay. This should be
         # tested.
         posterior = self.idata.posterior
-        stacked_posterior = posterior.stack(sample=("chain", "draw"))
-        n_samples = len(stacked_posterior.sample)
+        n_samples = posterior.sizes["chain"] * posterior.sizes["draw"]
     
         if n is not None:
             key = jax.random.PRNGKey(seed)
-            selection = jax.random.choice(key=key, a=jnp.array((range(n_samples))), replace=False, shape=(n, ))
-            stacked_posterior = stacked_posterior.isel(sample=selection)
+
+            n_draws = int(n / posterior.sizes["chain"])
+            # the same selection of draws will be applied to all chains. This
+            # any other form will result in an array, where a lot of nans 
+            # are present of the size n * chains, while we want size n
+            selection = jax.random.choice(
+                key=key, 
+                a=posterior.draw.values, 
+                replace=False, 
+                shape=(n_draws, )
+            )
+            posterior = posterior.isel(draw=selection)
 
 
         preds = []
-        for i in stacked_posterior.sample:
-            sample = i.values.tolist()
-            chain, draw = sample
-            theta = stacked_posterior.sel(sample=sample)
-            evaluator = self.simulation.dispatch(theta=self.get_dict(theta))
-            evaluator()
-            ds = evaluator.results
+        for chain in posterior.chain:
+            for draw in posterior.draw:
+                theta = posterior.sel(draw=draw, chain=chain)
+                evaluator = self.simulation.dispatch(theta=self.get_dict(theta))
+                evaluator()
+                ds = evaluator.results
 
-            ds = ds.assign_coords({"chain": chain, "draw": draw})
-            ds = ds.expand_dims(("chain", "draw"))
-            preds.append(ds)
+                ds = ds.assign_coords({"chain": chain, "draw": draw})
+                ds = ds.expand_dims(("chain", "draw"))
+                preds.append(ds)
 
 
         # key = jax.random.PRNGKey(seed)
@@ -1273,7 +1281,7 @@ class NumpyroBackend:
 
         idata_multichain = add_cluster_coordinates(idata_multichain, cluster_deviation)
         print("Clusters:", idata_multichain.posterior.cluster)
-        
+
         return idata_multichain            
 
     def drop_vars_from_posterior(self, posterior, drop_extra_vars):
