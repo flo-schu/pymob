@@ -1272,7 +1272,8 @@ class NumpyroBackend:
         )
 
         idata_multichain = add_cluster_coordinates(idata_multichain, cluster_deviation)
-
+        print("Clusters:", idata_multichain.posterior.cluster)
+        
         return idata_multichain            
 
     def drop_vars_from_posterior(self, posterior, drop_extra_vars):
