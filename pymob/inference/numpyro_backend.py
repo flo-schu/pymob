@@ -19,7 +19,10 @@ import sympy
 import sympy2jax
 
 from pymob.simulation import SimulationBase
-from pymob.inference.analysis import rename_extra_dims
+from pymob.inference.analysis import (
+    cluster_chains, rename_extra_dims, plot_posterior_samples,
+    add_cluster_coordinates
+)
 
 sympy2jax_extra_funcs = {
     sympy.Array: jnp.array,
@@ -1202,7 +1205,7 @@ class NumpyroBackend:
         return ax
 
     # This is a separate script!    
-    def combine_chains(self, chain_location="chains", drop_extra_vars=[]):
+    def combine_chains(self, chain_location="chains", drop_extra_vars=[], cluster_deviation="std"):
         """Combine chains if chains were computed in a fully parallelized manner
         (on different machines, jobs, etc.). 
 
@@ -1264,9 +1267,12 @@ class NumpyroBackend:
         # posterior and likelihood and has therefore a small file size
         idata_multichain = az.InferenceData(
             posterior=posterior, 
-            log_likelihood=log_likelihood
+            log_likelihood=log_likelihood,
+            observed_data=idata.observed_data,
         )
 
+        idata_multichain = add_cluster_coordinates(idata_multichain, cluster_deviation)
+            
         idata_multichain.to_netcdf(
             f"{sim.output_path}/numpyro_posterior_{chain_location}.nc"
         )

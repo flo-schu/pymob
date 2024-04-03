@@ -1,4 +1,6 @@
+import numpy as np
 import xarray as xr
+import arviz as az
 from matplotlib import pyplot as plt
 
 from pymob.utils.plot_helpers import plot_hist, plot_loghist
@@ -115,3 +117,32 @@ def plot_posterior_samples(posterior, col_dim=None, log=True, hist_kwargs={}):
 
 
     return fig
+
+
+def bic(idata: az.InferenceData):
+    """calculate the BIC for az.InferenceData. The function will average over
+    all samples from the markov chain
+    """
+    log_likelihood = idata.log_likelihood.mean(("chain", "draw")).sum().to_array().sum()
+    k = idata.posterior.mean(("chain", "draw")).count().to_array().sum()
+
+    vars = [i.split("_")[0] for i in list(idata.log_likelihood.data_vars.keys())]
+    n = (~idata.observed_data[vars].isnull()).sum().to_array().sum()
+
+    bic = float(k * np.log(n) - 2 * log_likelihood)
+    msg = str(
+        "Bayesian Information Criterion (BIC)"
+        "\n===================================="
+        f"\nParameters: {int(k)}"
+        f"\nData points: {int(n)}"
+        f"\nLog-likelihood: {float(log_likelihood)}"
+        f"\nBIC: {bic}"
+    )
+
+    return msg, bic
+
+
+def add_cluster_coordinates(idata, deviation="std"):
+    cluster = cluster_chains(idata.posterior, deviation=deviation)
+    idata = idata.assign_coords(cluster=("chain", cluster))
+    return idata
