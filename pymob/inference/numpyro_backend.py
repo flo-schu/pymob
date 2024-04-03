@@ -1272,10 +1272,8 @@ class NumpyroBackend:
         )
 
         idata_multichain = add_cluster_coordinates(idata_multichain, cluster_deviation)
-            
-        idata_multichain.to_netcdf(
-            f"{sim.output_path}/numpyro_posterior_{chain_location}.nc"
-        )
+
+        return idata_multichain            
 
     def drop_vars_from_posterior(self, posterior, drop_extra_vars):
         """drops extra variables if they are included in the posterior
