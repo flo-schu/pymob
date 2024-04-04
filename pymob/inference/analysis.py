@@ -127,7 +127,16 @@ def bic(idata: az.InferenceData):
     k = idata.posterior.mean(("chain", "draw")).count().to_array().sum()
 
     vars = [i.split("_")[0] for i in list(idata.log_likelihood.data_vars.keys())]
-    n = (~idata.observed_data[vars].isnull()).sum().to_array().sum()
+    n = 0
+    for v in vars:
+        if v in idata.observed_data:
+            n += (~idata.observed_data[v].isnull()).sum()
+        elif v + "_obs" in idata.observed_data:
+            n += (~idata.observed_data[v + "_obs"].isnull()).sum()
+        else:
+            raise IndexError(f"Variable {v} or {v+'_obs'} not in idata")
+
+    # n = (~idata.observed_data[vars].isnull()).sum().to_array().sum()
 
     bic = float(k * np.log(n) - 2 * log_likelihood)
     msg = str(
