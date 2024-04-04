@@ -1013,17 +1013,21 @@ class NumpyroBackend:
 
 
         preds = []
-        for chain in posterior.chain:
-            for draw in posterior.draw:
-                theta = posterior.sel(draw=draw, chain=chain)
-                evaluator = self.simulation.dispatch(theta=self.get_dict(theta))
-                evaluator()
-                ds = evaluator.results
+        with tqdm(
+            total=posterior.sizes["chain"] * posterior.sizes["draw"],
+            desc="Posterior predictions"
+        ) as pbar:
+            for chain in posterior.chain:
+                for draw in posterior.draw:
+                    theta = posterior.sel(draw=draw, chain=chain)
+                    evaluator = self.simulation.dispatch(theta=self.get_dict(theta))
+                    evaluator()
+                    ds = evaluator.results
 
-                ds = ds.assign_coords({"chain": chain, "draw": draw})
-                ds = ds.expand_dims(("chain", "draw"))
-                preds.append(ds)
-
+                    ds = ds.assign_coords({"chain": chain, "draw": draw})
+                    ds = ds.expand_dims(("chain", "draw"))
+                    preds.append(ds)
+                    pbar.update(1)
 
         # key = jax.random.PRNGKey(seed)
         # model = partial(self.model, solver=self.evaluator)    
