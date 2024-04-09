@@ -76,7 +76,7 @@ class Evaluator:
         self.indices = indices
         
         if post_processing is None:
-            self.post_processing = lambda results: results
+            self.post_processing = lambda results, time: results
         else: 
             self.post_processing = post_processing
                 
