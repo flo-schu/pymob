@@ -242,18 +242,36 @@ class SimulationBase:
         display(widgets.HBox([widgets.VBox([s for _, s in sliders.items()]), out]))
     
     def set_inferer(self, backend):
-        if backend == "pyabc":
-            from pymob.inference.pyabc_backend import PyabcBackend
+        extra = (
+            "set_inferer(backend='{0}') was not executed successfully, because "
+            "'{0}' dependencies were not found. They can be installed with "
+            "pip install pymob[{0}]. Alternatively:"
+        )
 
+        if backend == "pyabc":
+            pyabc = import_optional_dependency(
+                "pyabc", errors="raise", extra=extra.format("pyabc")
+            )
+            if pyabc is not None:
+                from pymob.inference.pyabc_backend import PyabcBackend
+            
             self.inferer = PyabcBackend(simulation=self)
 
         elif backend == "pymoo":
-            from pymob.inference.pymoo_backend import PymooBackend
+            pymoo = import_optional_dependency(
+                "pymoo", errors="raise", extra=extra.format("pymoo2")
+            )
+            if pymoo is not None:
+                from pymob.inference.pymoo_backend import PymooBackend
 
             self.inferer = PymooBackend(simulation=self)
 
         elif backend == "numpyro":
-            from pymob.inference.numpyro_backend import NumpyroBackend
+            numpyro = import_optional_dependency(
+                "numpyro", errors="raise", extra=extra.format("numpyro")
+            )
+            if numpyro is not None:
+                from pymob.inference.numpyro_backend import NumpyroBackend
 
             self.inferer = NumpyroBackend(simulation=self)
     

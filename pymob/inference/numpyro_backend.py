@@ -16,19 +16,15 @@ from pymob.inference.analysis import (
     cluster_chains, rename_extra_dims, plot_posterior_samples,
     add_cluster_coordinates
 )
-from pymob.utils.errors import import_optional_dependency
 
-extra = "'numpyro' dependencies can be installed with pip install pymob[numpyro]"
-numpyro = import_optional_dependency("numpyro", errors="warn", extra=extra)
-if numpyro is not None:
-    import numpyro
-    from numpyro import distributions as dist
-    from numpyro.infer import Predictive
-    from numpyro.distributions import Normal, transforms, TransformedDistribution
-    from numpyro import infer
-    import jax
-    import jax.numpy as jnp
-    import sympy2jax
+import numpyro
+from numpyro import distributions as dist
+from numpyro.infer import Predictive
+from numpyro.distributions import Normal, transforms, TransformedDistribution
+from numpyro import infer
+import jax
+import jax.numpy as jnp
+import sympy2jax
 
 sympy2jax_extra_funcs = {
     sympy.Array: jnp.array,
