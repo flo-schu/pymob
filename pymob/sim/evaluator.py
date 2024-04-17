@@ -5,6 +5,13 @@ import numpy as np
 from pymob.sim.solvetools import mappar
 
 def create_dataset_from_numpy(Y, Y_names, coordinates):
+    DeprecationWarning(
+        "This method will be discontinued in future relases. "
+        "Use 'create_dataset_from_dict' instead and return a dictionary from "
+        "the solver or post processing respectively. The needed variable names "
+        "to create the dictionary can be obtained from the data_variables "
+        "argument in the solver signature. "
+    )
     n_vars = Y.shape[-1]
     n_dims = len(Y.shape)
     assert n_vars == len(Y_names), (
