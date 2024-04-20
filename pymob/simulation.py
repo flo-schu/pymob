@@ -14,9 +14,63 @@ import dpath.util as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from toopy import param, benchmark
 
+from pymob.utils.config import lambdify_expression, lookup_args
 from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
+from pymob.sim.base import stack_variables
+
+def is_iterable(x):
+    try:
+        iter(x)
+        return True
+    except TypeError:
+        return False
+
+
+@staticmethod
+def flatten_parameter_dict(model_parameter_dict, exclude_params=[]):
+    """Takes a dictionary of key value pairs where the values may be
+    floats or arrays. It flattens the arrays and adds indexes to the keys.
+    In addition a function is returned that back-transforms the flattened
+    parameters."""
+    parameters = model_parameter_dict
+
+    flat_params = {}
+    empty_map = {}
+    for par, value in parameters.items():
+        if par in exclude_params:
+            continue
+        if is_iterable(value):
+            empty_map.update({par: np.full_like(value, fill_value=np.nan)})
+            for i, subvalue in enumerate(value):
+                subpar = f"{par}___{i}"
+                flat_params.update({subpar: subvalue})
+
+        else:
+            flat_params.update({par: value})
+
+        if par not in empty_map:
+            empty_map.update({par: np.nan})
+
+
+    def reverse_mapper(parameters):
+        param_dict = empty_map.copy()
+
+        for subpar, value in parameters.items():
+            subpar_list = subpar.split("___")
+
+            if len(subpar_list) > 1:
+                par, par_index = subpar_list
+                param_dict[par][int(par_index)] = value
+            elif len(subpar_list) == 1:
+                par, = subpar_list
+                param_dict[par] = value
+
+        return param_dict
+    
+    return flat_params, reverse_mapper
+
 
 def update_parameters_dict(config, x, parnames):
     for par, val, in zip(parnames, x):
@@ -184,6 +238,143 @@ class SimulationBase:
         )
 
         return evaluator
+
+    def parse_input(self, data=None, input=None, drop_dims=["time"]):
+        """Parses a config string e.g. y=Array([0]) or a=b to a numpy array 
+        and looks up symbols in the elements of data, where data items are
+        key:value pairs of a dictionary, xarray items or anything of this form
+
+        The values are broadcasted along the remaining dimensions in the obser-
+        vations that have not been dropped. Input refers to the argument in
+        the config file. 
+
+        This method is useful to prepare y0s from observations or to broadcast
+        starting values along batch dimensions.
+        """
+        # parse dims and coords
+        input_dims = {k:v for k, v in self.observations.dims.items() if k not in drop_dims}
+        input_coords = {k:v for k, v in self.observations.coords.items() if k in input_dims}
+        
+        input_list = self.config["simulation"].getlist(input, fallback=[])
+        if isinstance(input_list, str):
+            input_list = [input_list]
+
+        input_dataset = xr.Dataset()
+        for input_expression in input_list:
+            key, expr = input_expression.split("=")
+            
+            func, args = lambdify_expression(expr)
+
+            kwargs = lookup_args(args, data)
+
+            value = func(**kwargs)
+
+            if not isinstance(value, xr.DataArray):
+                value.shape != tuple(input_dims.values())
+                value = np.broadcast_to(value, tuple(input_dims.values()))
+                value = xr.DataArray(value, coords=input_coords)
+
+            else:
+                value = xr.DataArray(value.values, coords=input_coords)
+
+            input_dataset[key] = value
+
+
+        return input_dataset
+
+
+    def reshape_observations(self, observations, reduce_dim):
+        """This method reduces the dimensionality of the observations. 
+        Compiling xarray datasets from multiple experiments with different 
+        IDs and different endpoints, lead to blown up datasets where 
+        all combinations (even though they were not tested) are filled with
+        NaNs. Reducing such artificial dimensions by flattening the arrays
+        is the aim of this method. 
+
+        TODO: There should be tests, whether the method is applicable (this
+        may be already caught with the assertion)
+
+        TODO: The method should be generally applicable
+        """
+
+        raise NotImplementedError(
+            "reshape_observations is an experimental method. "
+            "Using this method may have unexpected results."
+        )
+        
+        # currently the method is still based on the damage-proxy project
+        substances = observations.attrs[reduce_dim]
+
+        stacked_obs = stack_variables(
+            ds=observations.copy(),
+            variables=["cext_nom", "cext", "cint"],
+            new_coordinates=substances,
+            new_dim="substance",
+            pattern=lambda var, coord: f"{var}_{coord}"
+        ).transpose(*self.dimensions, reduce_dim)
+
+        # reduce cext_obs
+        cext_nom = stacked_obs["cext_nom"]
+        assert np.all(
+            (cext_nom == 0).sum(dim=reduce_dim) == len(substances) - 1
+        ), "There are mixture treatments in the SingleSubstanceSim."
+
+
+        # VECTORIZED INDEXING IS THE KEY
+        # https://docs.xarray.dev/en/stable/user-guide/indexing.html#vectorized-indexing
+
+        # Defining a function to reduce the "reduce_dim" dimension to length 1
+        def index(array, axis=None, **kwargs):
+            # Check that there is exactly one non-zero value in 'substance'
+            non_zero_count = (array != 0).sum(axis=axis)
+            
+            if not (non_zero_count == 1).all():
+                raise ValueError(f"Invalid '{reduce_dim}' dimension. It should have exactly one non-zero value.")
+            
+            return np.where(array != 0)[axis]
+
+
+        # Applying the reduction function using groupby and reduce
+        red_data = stacked_obs.cext_nom
+        new_dims = [d for d in red_data.dims if d != reduce_dim]
+
+        reduce_dim_idx = red_data\
+            .groupby(*new_dims)\
+            .reduce(index, dim=reduce_dim)\
+            .rename(f"{reduce_dim}_index")
+        
+        if stacked_obs.dims[reduce_dim] == 1:
+            reduce_dim_idx = reduce_dim_idx.squeeze()
+        
+        reduce_dim_id_mapping = stacked_obs[reduce_dim]\
+            .isel({reduce_dim: reduce_dim_idx})\
+            .drop(reduce_dim)\
+            .rename(f"{reduce_dim}_id_mapping")
+        
+        reduce_dim_idx = reduce_dim_idx.assign_coords({
+            f"{reduce_dim}": reduce_dim_id_mapping
+        })
+
+        # this works because XARRAY is amazing :)
+        stacked_obs["cext_nom"] = stacked_obs["cext_nom"].sel({reduce_dim: reduce_dim_id_mapping})
+        stacked_obs["cext"] = stacked_obs["cext"].sel({reduce_dim: reduce_dim_id_mapping})
+        stacked_obs["cint"] = stacked_obs["cint"].sel({reduce_dim: reduce_dim_id_mapping})
+        
+        # drop old dimension and add dimension as inexed dimension
+        # this is necessary, as the reduced dimension needs to disappear from
+        # the coordinates.
+        stacked_obs = stacked_obs.drop_dims(reduce_dim)
+        stacked_obs = stacked_obs.assign_coords({
+            f"{reduce_dim}": reduce_dim_id_mapping,
+            f"{reduce_dim}_index": reduce_dim_idx,
+        })
+        
+        indices = {
+            reduce_dim: reduce_dim_idx
+        }
+
+        return stacked_obs, indices
+
 
     def evaluate(self, theta):
         """Wrapper around run to modify paramters of the model.
