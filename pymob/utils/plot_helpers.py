@@ -5,7 +5,8 @@ from pymob.utils.misc import Date2Delta
 import arviz as az
 
 def plot_loghist(x, name="", bins=10, ax=None, hdi=False, decorate=True, 
-                 color="tab:blue", alpha=1, legend=None):
+                 color="tab:blue", alpha=1, legend=None, orientation="vertical",
+                 **hist_kwargs):
     _, bins = np.histogram(x, bins=bins)
     median = np.median(x)
     if hdi:
@@ -17,7 +18,10 @@ def plot_loghist(x, name="", bins=10, ax=None, hdi=False, decorate=True,
     logbins = np.logspace(np.log10(bins[0]), np.log10(bins[-1]), len(bins))
     if ax is None:
         ax = plt.subplot(111)
-    lhist, lbins, _ = ax.hist(x, bins=logbins, color=color, alpha=alpha, label=legend)
+    lhist, lbins, _ = ax.hist(x, bins=logbins, color=color, alpha=alpha, label=legend, 
+                              orientation=orientation, **hist_kwargs)
+
+    # turn of labels for minot ticks
 
     if decorate:
         plot_kwargs = dict(rotation=90, va="bottom", ha="center")
@@ -29,8 +33,16 @@ def plot_loghist(x, name="", bins=10, ax=None, hdi=False, decorate=True,
         ax.text(median, np.max(lhist)*0.3, f"{median:.1e}", bbox=bbox, **plot_kwargs)
         ax.text(0.05, 0.95, name, transform=ax.transAxes, ha="left", va="top")
 
-    ax.set_xscale("log")
-    ax.set_ylim(0, np.max(lhist)*1.1)
+    if orientation=="vertical":
+        ax.set_xscale("log")
+        ax.set_ylim(0, np.max(lhist)*1.1)
+        ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+    elif orientation=="horizontal":
+        ax.set_xlim(0, np.max(lhist)*1.1)
+        ax.set_yscale("log")
+        ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+    else:
+        raise RuntimeError("Choose orientation = 'vertical' or 'horizontal'")
     return ax
     # plt.savefig("work/case_studies/core_daphnia/results/expo_control_3/plots/test.png")
 
