@@ -28,7 +28,6 @@ def is_iterable(x):
         return False
 
 
-@staticmethod
 def flatten_parameter_dict(model_parameter_dict, exclude_params=[]):
     """Takes a dictionary of key value pairs where the values may be
     floats or arrays. It flattens the arrays and adds indexes to the keys.
@@ -138,6 +137,15 @@ class SimulationBase:
 
     def __repr__(self) -> str:
         return f"Simulation(case_study={self.case_study}, scenario={self.scenario})"
+
+    def load_functions(self):
+        _model = self.config["simulation"].get("model", fallback=None)
+        if _model is not None:
+            self.model = getattr(self.mod, _model)
+
+        _solver = self.config["simulation"].get("solver", fallback=None)
+        if _solver is not None:
+            self.solver = getattr(self.mod, _solver)
 
     def print_config(self):
         print("Simulation configuration", end="\n")
