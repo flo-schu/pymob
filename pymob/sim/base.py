@@ -93,3 +93,24 @@ def stack_variables(
             ds = ds.set_coords(v)
 
     return ds
+
+
+def unlist_attrs(ds: xr.Dataset|xr.DataArray):
+    """Transforms lists of variables to a comma separated string to 
+    work around errors when storing the dataset or dataarray to disk"""
+    for key, value in ds.attrs.items():
+        if isinstance(value, list):
+            ds.attrs[key] = ", ".join(value)
+
+    return ds
+
+
+def enlist_attr(ds: xr.Dataset|xr.DataArray, attr: str):
+    """Transforms a string representation of a metadata attribute of an
+    xarray dataset or datarray to a list"""
+    attr_string = ds.attrs[attr]
+    assert isinstance(attr_string, str)
+    
+    ds.attrs[attr] = attr_string.split(", ")
+
+    return ds
