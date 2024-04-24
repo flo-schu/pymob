@@ -99,9 +99,20 @@ def unixify_path(path):
     return unix_path
 
 def scenario_file(file, case_study, scenario, pkg_dir="case_studies"):
-    file = os.path.join(pkg_dir, case_study, "scenarios", scenario, file)
-    assert os.path.exists(file), f"{file} was not found"
-    return file
+    file_path = os.path.join(pkg_dir, case_study, "scenarios", scenario, file)
+    if not os.path.exists(file_path):
+        cwd = os.getcwd()
+        raise FileNotFoundError(
+            f"The scenario config file ({file}) was not found in this location: "
+            f"'{file_path}'; your working directory is '{cwd}'. "
+            "If your working directory is inside the location of your case_study, "
+            "try navigating a few levels down the directory tree with "
+            "`pkg_dir='..'` or `pkg_dir='../..'`. If your working directory is "
+            "outside of the location of your case studies try `pkg_dir='case_studies'`. "
+            "If nothing helps, simply provide the absolute path to the parent "
+            "directory where your case study is located."
+        )
+    return file_path
 
 def case_study_output(case_study, scenario, pkg_dir="case_studies"):
     study_name = os.path.basename(case_study)
