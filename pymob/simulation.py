@@ -191,6 +191,7 @@ class SimulationBase:
                     "the config file [simulation] > 'n_ode_states = <n>' "
                     "and could not be extracted from the return arguments."
                 )
+                n_ode_states = None
         else:
             n_ode_states = self.n_ode_states
 
