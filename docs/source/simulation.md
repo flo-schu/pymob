@@ -1,54 +1,185 @@
 # Simulation
 
-The modelling toolkit offers a variety of algorithms that can be used on a large number of models. Reckognizing that simulation, optimization/calibration, parameter inference, sensitivity analysis, validation, etc. require similar workflows and have common input and output datastreams opens the door for building a generic Simulation class, which can be reused for the listed purposes.
+The modelling toolkit offers a variety of algorithms that can be used on a large number of models. Recognizing that simulation, optimization/calibration, parameter inference, sensitivity analysis, validation, etc. require similar workflows and have common input and output datastreams allows the abstraction of shared processes into a generic Simulation class, which can be reused for the listed purposes.
 
 ## Simulation components
 
-Any simulation has recurring components. Facilitating transfer of information
-between those components is key to analyze a described model with different 
-tools. In this framework, simulations are defined as classes which require
-the definition of methods that define the simulation.
+Any simulation has recurring components. Facilitating the transfer of information between those components is key to analyze a described model with different tools. In this framework, simulations are defined as classes which require the definition of methods that define the simulation.
 
 ```python
+# sim.py
+
 from timepath import SimulationBase
+from mod import lotka_volterra, solve_jax
+import plot  # imports the plot module which contains plotting functions
+import prob  # imports custom probability models for bayesian inference
+
 
 class Simulation(SimulationBase):
-    def parameterize(self, input):
+    solver: Callable = solve_jax  # a function f(t, x, θ) = y
+    model: Callable = lotka_volterra  # an ODE term df/dt = ... to be used with the solver
+
+    # import extra modules with outsourced code to keep the Simulation class
+    # compact
+    prob = prob   # probability models that go beyond automatically generated models
+    mplot = plot  # plot methods can now be referenced with 
+                  # self.mplot.my_beautiful_plot(self, ...)
+
+    
+    def initialize(self, input: List):
+        # define the model parameters (can of course be also loaded from an 
+        # input file)
+        self.model_parameters["parameters"] = dict(
+            alpha = 0.1,  # Prey birth rate
+            beta = 0.02,  # Rate at which predators decrease prey population
+            gamma = 0.3,  # Predator reproduction rate
+            delta = 0.01,  # Predator death rate
+        )
+
+        # define the initial populations
+        self.model_parameters["y0"] = np.array([40, 9])  # initial population of prey and predator
+
+        # used to define observations and any other information needed by the solver
+        self.observations = xr.load_dataset(input[1])
+        self.observations["wolves"] = self.observations["wolves"] + 1e-8
+        self.observations["rabbits"] = self.observations["rabbits"] + 1e-8
+
+    @staticmethod
+    def parameterize(free_parameters: Dict, model_parameters: Dict):
+        # receives a dictionary of free_parameters from a simulation evaluation
+        # and uses the free parameters to update the model_parameters dictionary,
+        # which can contain additional information passed to the solver
+        # can be used to modify parameters, before they are passed to the 
+        # solver
+
         # Initial conditions and parameters
+        y0 = model_parameters["y0"]
+        parameters = model_parameters["parameters"]
+
+        # mapping of parameters *theta* to the model parameters accessed by
+        # the solver. This task is necessary for any model 
+        parameters.update(free_parameters)
+        
+        return dict(y0=y0, parameters=parameters)
+
+
 
     def set_coordinates(self, input):
         # the model is integrated over the dimension time
 
-    def observations(self, input):
-        # (optional) Defines the observations of the model
-        # Needed for calibration, inference and validation tasks
+        # e.g.
+        t_start = 0
+        t_end = 200
+        t_step = 0.1
+        time = np.arange(t_start, t_end, t_step)
 
-    def run(self):
-        # describe the model, solve it and return the solution
+        return time
+    
 
+    def plot(self, results):
+        # while plot methods are not required to simply run a simulation they
+        # are very helpful for using the interactive backend. These plots
+        # are always updated when parameters of the plots are changed.
+        # If a JAX based solver is used (compiled to highly efficient code)
+        # then the updates can be in real time depending on the model complexity
+        fig = self.mplot.plot_trajectory(results)
+        fig.savefig(f"{self.output_path}/trajectory.png")
 ```
 
+The `Simulation` class is not restricted to these methods, any number of methods can be added that customize the behavior, add plot methods, or any other function. 
 
-### The model
-
-This is defined by the `run` method. It returns the output of a single simulation
-run and takes no arguments. Extra input to the function is specified in the
-`initialize` method and can then be accessed as a class attribute.
+Before the entire architecture and the different methods of the `Simulation` are explained one by one in greater detail, let's take a look at how to run a simulation and get started!
 
 ```python
-def run(self):
-    y0 = self.y0
-    params = self.model_parameters
-    t = self.coordinates["time"]
+from pymob.utils.store_file import prepare_casestudy
 
-    model = ...  # describe the model
+# load the configuration file of the case study by providing the name of the 
+# case study directory and the name of the scenario directory. This assumes that
+# all case studies are contained in a directory "case_studies". 
+#
+# In this example we have the following directory tree:
+# project_directory (working directory)
+#  ├─ case_studies
+#  │   ├─ test_case_study
+#  │   │   ├─ scenarios
+#  │   │   │   ├─ test_scenario
+#  │   │   │   │   └─ settings.cfg
+#  │   ├─ sim.py
+#
+config = prepare_casestudy(
+    case_study=("test_case_study", "test_scenario"), 
+    config_file="settings.cfg",
+    pkg_dir="case_studies"
+)
 
-    solution = ...  # Solve the model
-    return solution
+# loads the defined Simulation class from sim.py at the root of the case-study
+# directory
+from sim import Simulation
+
+# create a Simulation object by passing the configuration file to the Simulation
+# class defined in sim.py
+sim = Simulation(config)
+
+# execute a simulation with a 
+func = sim.dispatch(theta={"alpha": 0.5})  # initiate the simulation
+func()  # run the simulation (takes more time for the first run)
+func.results  # obtain the results
+
+# plot the results with the plotting function defined in the Simulation class
+sim.plot(results=f.results)
+
 ```
 
-The solution is returned as a `list` or `np.array`. Importantly, the shape of
-the output must follow the order of the dimensions returned in `set_coordinates`.
+
+### Model and the solver. Information flow in the Simulation class when using the dispatch API
+
+The moment a simulation is dispatched, an instance of the `Evaluator` class is assembled with the specified parameters $\theta$. Next to the model, solver, and parameters, the `Evaluator` obtains a number additional attributes from the Simulation instance. These are:
+
++ `dimensions`: A list of the dimensions of the simulations
++ `n_ode_states`: The number of ODE states tracked
++ `var_dim_mapper`: A list of variables and their associated dimensions. This is relevant for simulations, where not all data variables have the same dimensional structure
++ `data_structure`: Similar to the var_dim_mapper, but additionally contains the coordinates
++ `coordinates`: The coordinates of each dimension in a dict
++ `data_variables`: The data variables of the simulation
++ `stochastic`: Whether the model is a stochastic or a deterministic model
++ `indices`: Indices, which should be used to map potentially nested parameters to a flat array for batch processing the simulations, by default {}
++ `post_processing`: A function that takes a dictionary of simulation results and  parameters as an input and adds new variables to the results,  by default None, meaning that no post processing of the ODE solution is performed
+
+These additional input can be *magically* picked up by the solver if the terms
+are used as function arguments of the solver function.
+
+```python
+def solver(model, parameters, coordinates, indices):
+    ...
+```
+
+if extra arguments are provided to the solve function, then they must be passed to the dispatch call of the Evaluator.
+
+```python
+def solver(model, parameters, my_extra_argument):
+    ...
+
+...
+
+evaluator = sim.dispatch(theta=..., my_extra_argument="foo")
+```
+
+Note that theoretically no ODE model is needed. If you have a deterministic solution to your problem, or you have an entirely different model (e.g. a numeric individual based model), than you can ignore the model and specify all you need for solving a problem in the solver
+
+```python
+def solver(parameters, coordinates):
+    x = coordinates["x"]
+    a = parameters["a"]
+    b = parameters["b"]
+
+    y = a * x + b
+
+    return {"y": y}
+```
+
+Back to the `Evaluator` instance. It has a `__call__` method, which is invoked, when the evaluator instance is called `evaluator()`. This runs the solve method with all specified arguments and stores the raw results to an attribute `Y`. When `evaluator.results` is accessed, the results dictionary returned by the solver is reshaped to an `xarray.Dataset`, which maps 1:1 to the observations with respect to the dimensionality of the output.
+
+Note that the coordinates may differ, unless the coordinates of the observations are used as simulation coordinates.
 
 ### Model parameters
 
@@ -64,43 +195,46 @@ In addition to the model parameters, the `parameterize` method also returns
 the initial conditions of the simulation. 
 
 ```python
-def parameterize(self, input):
+@staticmethod
+def parameterize(free_parameters, model_parameters):
     # Initial conditions and parameters
-    y0 = ...
-    parameters = ...
-    return y0, parameters
+
+    y0 = model_parameters["y0"]
+    parameters = model_parameters["parameters"]
+
+    # mapping of parameters *theta* to the model parameters accessed by
+    # the solver. This task is necessary for any model 
+    parameters.update(free_parameters)
+
+    return dict(y0=y0, parameters=parameters)
 ```
 
-The input argument contains a list of file-paths. If any files were provided
-in the simulation `settings.cfg` configuration file. These files can then be 
-read and parameter names and values imported. This is particularly useful if
-parameters are provided in parallelization environments on computing clusters.
-For storing parameters, the use of `JSON` files is recommended. Those can be
-directly parsed as python dictionaries, which is the preferred format for 
-parameters, since they can be easily forwarded as keyword arguments in 
-functions. For this, a convenience function is included.
-
-```json
-{
-    "y0": {
-        "salad": 10, 
-        "rabbits": 2},
-    "parameters": {
-        "eating_speed": 0.2,
-        "growth_rate": 0.3,
-    }
-}
-```
+When the simulation is initialized, `model_parameters` may be pre-specified.
+like this 
 
 ```python
-from timepath.store_file import read_config
-def parameterize(self, input):
-    parameters = read_config(input[0])
-    y0 = parameters["y0"]
-    params = parameters["parameters"]
-    return y0, parameters
+def initialize(self, input):
+    ...
+    self.model_paramaters["y0"] = ...
+    self.model_parameters["parameters"] = dict(fixed_param=2.34)
+    ...
 ```
 
+This attribute `model_parameters` is then locked to the parameterize method by
+using the python functools function `partial`
+
+```py
+def __init__(self, ...):
+    ...
+    self.parameterize = partial(self.parameterize, model_parameters=self.model_parameters)
+```
+
+This means in the `initialize` function of your simulation you can set fixed
+parameters to the model. Free parameters specified in the dispatch call 
+`sim.dispatch(theta=dict(...)) will then arrive as free_parameters in the 
+parameterize call. If this API seems a bit complicated, it is probably true.
+At the time of writing this, it seemed like a good and easy option. This will
+be re-evaluated in the future and the API might change.
 
 ### Simulation coordinates
 
@@ -140,5 +274,3 @@ Observations must have the same form as the model output
 ## Input / Output 
 
 As a uniform exchange format `netcdf` is enforced by the package. In python `netcdf` files are handled by the `xarray` package. For convenience, data_variables of interest can be saved as a number of output formats. However, higher dimesnional datasets with more coordinates than e.g. time, must be aggregated over the remaining dimensions, before they can be processed to .csv files
-
-TODO: make sure this works

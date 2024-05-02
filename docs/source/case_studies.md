@@ -6,10 +6,10 @@ Each case study consists of the following components:
 
 ```
 test_case_study
-  mod.py               # the model
-  sim.py               # the solver (forward simulation)
-  data.py              # (opt) data input
-  plot.py              # (opt) vizualizations
+  sim.py               # sets up the simulation
+  mod.py               # (opt) outsources solver and model definitions
+  data.py              # (opt) outsources data input
+  plot.py              # (opt) outsources vizualizations
 
   scenarios
     scenario_A         # the scenario of the "test_case_study" 
