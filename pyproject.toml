@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pymob"
-version = "0.2.5"
+version = "0.3.0a5"
 authors = [
   { name="Florian Schunck", email="fluncki@protonmail.com" },
 ]
@@ -22,9 +22,9 @@ dependencies=[
   "scipy ~= 1.10.1",
   "scikit-learn ~= 1.2.2",
   "tqdm ~= 4.65.0",
-  "toopy == 0.5.1",
+  "toopy == 0.6.0",
   "xarray ~= 2023.11.0",
-  "pathos ~= 0.3.1",
+  "sympy ~= 1.12",
 ]
 license = {file = "LICENSE"}
 classifiers = [
@@ -48,14 +48,15 @@ pymob-infer = "pymob:infer.main"
 include = ["pymob*"]
 
 [project.optional-dependencies]
-dev = ["pytest >= 7.3", "pyinstrument >= 4.5", "bumpver"]
-inference = ["pyabc ~= 0.12.3"]
-optimize = ["pymoo ~= 0.6.0"]
+dev = ["pytest >= 7.3", "pyinstrument >= 4.5", "bumpver", "sphinx", "myst-parser", "sphinx-book-theme"]
+pyabc = ["pyabc ~= 0.12.3", "pathos ~= 0.3.1"]
+numpyro = ["jax == 0.4.21", "jaxlib == 0.4.21", "sympy == 1.12", "sympy2jax == 0.0.5", "numpyro == 0.13.2", "diffrax == 0.4.1", "graphviz"]
+pymoo = ["pymoo ~= 0.6.0", "pathos ~= 0.3.1"]
 interactive = ["ipywidgets ~= 8.1.1", "IPython ~= 8.17.2"]
 
 [tool.bumpver]
-current_version = "0.2.5"
-version_pattern = "MAJOR.MINOR.PATCH"
+current_version = "0.3.0a5"
+version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
 commit_message = "bump version {old_version} -> {new_version}"
 tag_message = "{new_version}"
 tag_scope = "default"
@@ -69,4 +70,7 @@ push = true
 "pyproject.toml" = [
     'current_version = "{version}"',
     'version = "{version}"'
+]
+"pymob/__init__.py" = [
+    '__version__ = "{version}"'
 ]

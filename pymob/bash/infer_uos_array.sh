@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=infer                                # name of job
-#SBATCH --time=0-8:00:00                                # maximum time until job is cancelled
+#SBATCH --time=0-1:00:00                                # maximum time until job is cancelled
 #SBATCH --ntasks=1                                      # number of tasks
-#SBATCH --cpus-per-task=128                             # number of cpus requested
-#SBATCH --mem-per-cpu=4G                                # memory per cpu requested
+#SBATCH --cpus-per-task=1                               # number of cpus requested
+#SBATCH --mem-per-cpu=8G                                # memory per cpu requested
 #SBATCH --mail-type=begin                               # send mail when job begins
 #SBATCH --mail-type=end                                 # send mail when job ends
 #SBATCH --mail-type=fail                                # send mail if job fails
 #SBATCH --mail-user=florian.schunck@uos.de              # email of user
-#SBATCH --output=/home/staff/f/fschunck/logs/job-%x-%j.out    # output file of stdout messages
-#SBATCH --error=/home/staff/f/fschunck/logs/job-%x-%j.err     # output file of stderr messages
+#SBATCH --output=/home/staff/f/fschunck/logs/job-%x-%A-%a.out    # output file of stdout messages
+#SBATCH --error=/home/staff/f/fschunck/logs/job-%x-%A-%a.err     # output file of stderr messages
 
 
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 1;}
@@ -33,10 +33,15 @@ while getopts ":c:s:b:" o; do
     esac
 done
 
+# specify output directory
+PADDED_TASK_ID=$(printf "%05d" $SLURM_ARRAY_TASK_ID)
+OUTPUT="/home/staff/f/fschunck/projects/damage-proxy/work/case_studies/$CASE/results/$SCENARIO/chains/$SLURM_ARRAY_TASK_ID"
 
+echo "Running Array JOB: $PADDED_TASK_ID"
 echo "Requested $SLURM_CPUS_PER_TASK cores."
 echo "Starting inference..."
 echo "Simulation(case_study=$CASE, scenario=$SCENARIO, backend=$BACKEND)"
+echo "Output-dir: $OUTPUT"
 
 # activate conda environment
 source activate damage-proxy
@@ -45,9 +50,7 @@ source activate damage-proxy
 srun pymob-infer \
     --case_study $CASE \
     --scenario $SCENARIO \
-    --inference_backend $BACKEND \
-    --n_cores $SLURM_CPUS_PER_TASK
-
-
-echo "Finished inference."
-slogs -n $SLURM_JOB_NAME -i $SLURM_JOBID > work/case_studies/$CASE/results/$SCENARIO/log
+    --output $OUTPUT \
+    --random_seed $SLURM_ARRAY_TASK_ID \
+    --n_cores $SLURM_CPUS_PER_TASK \
+    --inference_backend $BACKEND 
