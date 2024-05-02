@@ -70,6 +70,42 @@ class Evaluator:
             post_processing: Optional[Callable] = None,
             **kwargs
         ) -> None:
+        """_summary_
+
+        Parameters
+        ----------
+        model : Callable
+            the ODE model to be solved by the evaluator
+        solver : Callable
+            a function to solve the ODE model with
+        parameters : Dict
+            A dictionary of model and post_processing parameters. Do not have
+            to be in any particular order
+        dimensions : List
+            A list of the dimensions of the simulations
+        n_ode_states : int
+            The number of ODE states tracked
+        var_dim_mapper : List
+            A list of variables and their associated dimensions. This is relevant
+            for simulations, where not all data variables have the same dimensional
+            structure
+        data_structure : Dict
+            Similar to the var_dim_mapper, but additionally contains the coordinates
+        coordinates : Dict
+            The coordinates of each dimension in a dict
+        data_variables : List
+            The data variables of the simulation
+        stochastic : bool
+            Whether the model is a stochastic or a deterministic model
+        indices : Optional[Dict], optional
+            Indices, which should be used to map potentially nested parameters
+            to a flat array for batch processing the simulations, by default {}
+        post_processing : Optional[Callable], optional
+            A function that takes a dictionary of simulation results and 
+            parameters as an input and adds new variables to the results, 
+            by default None, meaning that no post processing of the ODE solution
+            is performed
+        """
         
         self.model = model
         self.parameters = parameters
