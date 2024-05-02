@@ -74,3 +74,6 @@ push = true
 "pymob/__init__.py" = [
     '__version__ = "{version}"'
 ]
+"docs/source/conf.py" = [
+    'release = "{version}"'
+]
