@@ -1,4 +1,4 @@
-import subprocess
+import pytest
 import xarray as xr
 import numpy as np
 from click.testing import CliRunner
@@ -15,15 +15,19 @@ def load_test_case_study():
 
 def test_scripting_API():
     sim = load_test_case_study()
-    sim.compute()
+    evalu = sim.dispatch(theta=sim.model_parameter_dict)
+    evalu()
 
-    ds = sim.results
+    ds = evalu.results
     ds_ref = xr.load_dataset(f"{sim.data_path}/simulated_data.nc")
 
     np.testing.assert_allclose(
         (ds - ds_ref).to_array().values,
         0
     )
+
+def test_indexing_simulation():
+    pytest.skip()
 
 def test_interactive_mode():
     sim = load_test_case_study()
@@ -35,3 +39,10 @@ def test_commandline_API():
     
     args = "--case_study=test_case_study --scenario=test_scenario"
     result = runner.invoke(main, args.split(" "))
+
+
+if __name__ == "__main__":
+    import sys
+    import os
+    sys.path.append(os.getcwd())
+    # test_interactive_mode()

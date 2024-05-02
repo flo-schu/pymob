@@ -1,15 +1,20 @@
 import json
-import numpy as np
 
-import pathos.multiprocessing as mp
-from pymoo.algorithms.moo.unsga3 import UNSGA3
-from pymoo.core.problem import ElementwiseProblem, Problem
-from pymoo.util.ref_dirs import get_reference_directions
-from pymoo.termination.default import DefaultMultiObjectiveTermination
+import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from matplotlib import pyplot as plt
 
-from pymob import SimulationBase
+from pymob.simulation import SimulationBase
+from pymob.utils.errors import import_optional_dependency
+
+extra = "'pymoo' dependencies can be installed with pip install pymob[pymoo]"
+pymoo = import_optional_dependency("pymoo", errors="warn", extra=extra)
+if pymoo is not None:
+    import pathos.multiprocessing as mp
+    from pymoo.algorithms.moo.unsga3 import UNSGA3
+    from pymoo.core.problem import ElementwiseProblem, Problem
+    from pymoo.util.ref_dirs import get_reference_directions
+    from pymoo.termination.default import DefaultMultiObjectiveTermination
 
 
 class PymooBackend:
@@ -95,8 +100,11 @@ class PymooBackend:
             "X": params
         }
         
-        with open(f"{self.simulation.output_path}/pymoo_params.json", "w") as fp:
+        file = f"{self.simulation.output_path}/pymoo_params.json"
+        with open(file, "w") as fp:
             json.dump(res_dict, fp, indent=4)
+
+        print(f"written results to {file}")
 
     def run(self):
         """Implements the parallelization in pymoo"""
@@ -222,28 +230,28 @@ class PymooBackend:
 
         return ax
 
+if pymoo is not None:
+    class OptimizationProblem(Problem):
+        def __init__(self, backend: PymooBackend, **kwargs):
+            self.backend = backend
+            self.simulation = backend.simulation
+            
+            super().__init__(
+                n_var=self.simulation.n_free_parameters, 
+                n_obj=self.simulation.n_objectives, 
+                n_ieq_constr=0, 
+                xl=0.0, 
+                xu=1.0,
+                elementwise_evaluation=False,
+                **kwargs
+            )
 
-class OptimizationProblem(Problem):
-    def __init__(self, backend: PymooBackend, **kwargs):
-        self.backend = backend
-        self.simulation = backend.simulation
-        
-        super().__init__(
-            n_var=self.simulation.n_free_parameters, 
-            n_obj=self.simulation.n_objectives, 
-            n_ieq_constr=0, 
-            xl=0.0, 
-            xu=1.0,
-            elementwise_evaluation=False,
-            **kwargs
-        )
+        def _evaluate(self, X, out, *args, **kwargs):
+            X_original_scale = self.backend.transform(X_scaled=X)       
 
-    def _evaluate(self, X, out, *args, **kwargs):
-        X_original_scale = self.backend.transform(X_scaled=X)       
+            if self.backend.pool is None:
+                F = list(map(self.backend.distance_function, X_original_scale))
+            else:
+                F = self.backend.pool.map(self.backend.distance_function, X_original_scale)
 
-        if self.backend.pool is None:
-            F = list(map(self.backend.distance_function, X_original_scale))
-        else:
-            F = self.backend.pool.map(self.backend.distance_function, X_original_scale)
-
-        out["F"] = np.array(F)
+            out["F"] = np.array(F)

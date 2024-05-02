@@ -1,21 +1,31 @@
 import os
+import re
+from functools import lru_cache
 import tempfile
-import click
+import inspect
+
 import numpy as np
-import pyabc
 import xarray as xr
 import arviz as az
 from matplotlib import pyplot as plt
 
-from pymob.utils.store_file import prepare_casestudy, import_package, opt
-from pymob import SimulationBase
+from pymob.simulation import SimulationBase
+from pymob.utils.store_file import is_number
+from pymob.utils.errors import import_optional_dependency
 
+extra = "'pyabc' dependencies can be installed with pip install pymob[pyabc]"
+pyabc = import_optional_dependency("pyabc", errors="warn", extra=extra)
+if pyabc is not None:
+    import pyabc
+    from pathos import multiprocessing as mp
 
 class PyabcBackend:
     def __init__(
         self, 
         simulation: SimulationBase
     ):
+        self.parameter_map = {}
+        
         self.simulation = simulation
         self.evaluator = self.model_parser()
         self.prior = self.prior_parser(simulation.free_model_parameters)
@@ -26,6 +36,15 @@ class PyabcBackend:
         self.history = None
         self.posterior = None
 
+
+    @property
+    def extra_vars(self):
+        extra = self.simulation.config.getlist( 
+            "inference", "extra_vars", fallback=[]
+        )
+        return extra if isinstance(extra, list) else [extra]
+    
+    
     @property
     def sampler(self):
         return self.simulation.config.get("inference.pyabc", "sampler")
@@ -84,23 +103,89 @@ class PyabcBackend:
         )
     
     @staticmethod
-    def prior_parser(free_model_parameters: list):
+    def param_to_prior(par):
+        parname = par.name
+        distribution, cluttered_arguments = par.prior.split("(", 1)
+        param_strings = cluttered_arguments.split(")", 1)[0].split(",")
+        params = {}
+        arraypattern = r"\[(\d+(\.\d+)?(\s+\d+(\.\d+)?)*|\s*)\]"
+        
+        for parstr in param_strings:
 
+            key, expression = parstr.split("=")
+            
+            # check if val is a number
+            if is_number(expression):
+                value = float(expression)
+            
+            # check if val is an array
+            elif re.fullmatch(arraypattern, expression):
+                expression = expression.removeprefix("[").removesuffix("]")
+                value = np.array([float(v) for v in expression.split(" ")])
+
+            else:
+                raise NotImplementedError(
+                    f"Prior format {expression} is not implemented. "
+                    "Use e.g."
+                    "\n- normal(loc=1.0,scale=0.5) for 1-dimensional priors, or"
+                    "\n- normal(loc=[1.0 2.4 1],scale=0.5) for n-dimensional priors." 
+                )
+
+            params.update({key:value})
+
+        return parname, distribution, params
+
+    def prior_parser(self, free_model_parameters: list):
         prior_dict = {}
         for mp in free_model_parameters:
-            parname = mp.name
-            distribution, cluttered_arguments = mp.prior.split("(", 1)
-            param_strings = cluttered_arguments.split(")", 1)[0].split(",")
-            params = {}
-            for parstr in param_strings:
-                key, val = parstr.split("=")
-                params.update({key:float(val)})
+            name, distribution, params = self.param_to_prior(par=mp)
+            pmap, dist_map = self.array_param_to_1d(name, distribution, params)
 
-            prior = pyabc.RV(distribution, **params)
-            prior_dict.update({parname: prior})
+            self.parameter_map.update(pmap)
+            for subpar_name, subpar_dist in dist_map.items():
+                prior = pyabc.RV(subpar_dist["dist"], **subpar_dist["params"])
+                prior_dict.update({subpar_name: prior})
 
         return pyabc.Distribution(**prior_dict)
 
+    @staticmethod
+    def map_parameters(theta, parameter_map):
+        theta_mapped = {}
+        for par_name, subpar_name in parameter_map.items():
+            if isinstance(subpar_name, list):
+                subparams = np.array([theta[p] for p in subpar_name])
+            else:
+                subparams = theta[subpar_name]
+            
+            theta_mapped.update({par_name: subparams})
+        return theta_mapped
+
+    @staticmethod
+    def array_param_to_1d(name, distribution, dist_param_dict):
+        # return a distribution if all parameters of the distribution are floats
+        # and map with name
+
+        if np.all([isinstance(v, float) for _, v in dist_param_dict.items()]):
+            return {name:name}, {name: {"dist": distribution, "params": dist_param_dict}}
+        else:
+            args_as_arrays = {k:np.array(v, ndmin=1) for k, v in dist_param_dict.items()}
+            broadcasted_args = np.broadcast_arrays(*tuple(args_as_arrays.values()))
+            # args = {k: v for k, v in zip(dist_param_dict.keys(), broadcasted_args)}
+
+            param_map = {name: []}
+            dist_map = {}
+            for i, args in enumerate(zip(*broadcasted_args)):
+                p_subname = f"{name}_{i}"
+                param_map[name].append(p_subname)
+                dist_kwargs = {
+                    "dist": distribution,
+                    "params": {k:v for k, v in zip(dist_param_dict.keys(), args)}
+                }
+                dist_map.update({p_subname: dist_kwargs})
+
+            return param_map, dist_map
+
+    
     @property
     def plot_function(self):
         return self.simulation.config.get(
@@ -114,15 +199,33 @@ class PyabcBackend:
         
 
     def model_parser(self):
+        extra_kwargs = {}
+        for extra in self.extra_vars:
+            extra_kwargs.update({extra: self.simulation.observations[extra].values})
+
+        obj_func_signature = inspect.signature(self.simulation.objective_function)
+        obj_func_params = list(obj_func_signature.parameters.keys())
+    
         def model(theta):
-            Y = self.simulation.evaluate(theta)
-            return {"sim_results": Y}
+            theta_mapped = self.map_parameters(theta, self.parameter_map)
+            evaluator = self.simulation.dispatch(theta=theta_mapped, **extra_kwargs)
+            evaluator(seed=np.random.randint(1e6))
+            res = {k: np.array(v) for k, v in evaluator.Y.items()}
+            res.update({p: theta_mapped[p] for p in obj_func_params if p in theta_mapped})
+            return res
         return model
     
     def distance_function_parser(self):
+        obj_func_signature = inspect.signature(self.simulation.objective_function)
+        obj_func_params = list(obj_func_signature.parameters.keys())
+            
         def distance_function(x, x0):
-            Y = x["sim_results"]
-            obj_name, obj_value = self.simulation.objective_function(results=Y)
+            Y = {k: v for k, v in x.items() if k in self.simulation.data_variables}
+            
+            theta_obj_func = {p: x[p] for p in obj_func_params if p in x}
+            obj_name, obj_value = self.simulation.objective_function(
+                results=Y, **theta_obj_func 
+            )
             return obj_value
         
         return distance_function
@@ -199,9 +302,30 @@ class PyabcBackend:
             )
         )
         
+        idata = az.from_dict(
+            posterior={key: col.values for key, col in samples.items()},
+            dims=self.posterior_data_structure,
+            coords=self.posterior_coordinates
+        )
+        self.idata = idata
         # posterior
         self.posterior = Posterior(posterior)
 
+    @property
+    def posterior_data_structure(self):
+        data_structure = self.simulation.data_structure.copy()
+        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
+        data_structure.update(data_structure_loglik)
+        return data_structure
+
+    @property
+    def posterior_coordinates(self):
+        posterior_coords = self.simulation.coordinates.copy()
+        posterior_coords.update({
+            "draw": list(range(self.population_size)), 
+            "chain": [0]
+        })
+        return posterior_coords
 
     def plot_chains(self):
 
@@ -252,24 +376,45 @@ class PyabcBackend:
     def store_results(self):
         """results are stored by default in database"""
         pass
+   
+    @lru_cache
+    def posterior_predictions(self, n=50, seed=1):
+        rng = np.random.default_rng(seed)
+        post = self.posterior
+        total_samples = post.samples.shape[1]
+
+        # draw samples from posterior
+        posterior_samples = rng.choice(post.samples.draw, size=n, replace=False)
+
+        def predict(posterior_sample_id):
+            params = post.draw(i=posterior_sample_id)
+            evaluator = self.simulation.dispatch(params.to_dict())
+            evaluator()
+            res = evaluator.results
+            res = res.assign_coords({"draw": posterior_sample_id, "chain": 1})
+            res["params"] = params.samples
+            res = res.expand_dims(("chain", "draw"))
+            return res
+        
+        print(f"Using {self.simulation.n_cores} CPUs")
+        if self.simulation.n_cores == 1:
+            results = list(map(predict, posterior_samples))
+        else:
+            with mp.ProcessingPool(self.simulation.n_cores) as pool:        
+                results = pool.map(predict, posterior_samples)
+            
+        return xr.combine_by_coords(results)
 
     def plot_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={}
         ):
         obs = self.simulation.observations.sel(subset)
         
-        results = []
-        for i in range(self.n_predictions):
-            res = self.evaluator(self.posterior.draw(i).to_dict())
-            self.simulation.Y = res["sim_results"]
-            # sim_normalized = np.array(res["sim_normalized"][0])
-            # sim = scalers[0].inverse_transform(sim_normalized)
-            res = self.simulation.results
-            res = res.assign_coords({"draw": i, "chain": 1})
-            res = res.expand_dims(("chain", "draw"))
-            results.append(res)
-
-        post_pred = xr.combine_by_coords(results).sel(subset)
+        post_pred = self.posterior_predictions(
+            n=self.n_predictions, 
+            # seed only controls the parameters samples drawn from posterior
+            seed=self.simulation.seed
+        ).sel(subset)
 
         hdi = az.hdi(post_pred, .95)
 

@@ -99,9 +99,20 @@ def unixify_path(path):
     return unix_path
 
 def scenario_file(file, case_study, scenario, pkg_dir="case_studies"):
-    file = os.path.join(pkg_dir, case_study, "scenarios", scenario, file)
-    assert os.path.exists(file), f"{file} was not found"
-    return file
+    file_path = os.path.join(pkg_dir, case_study, "scenarios", scenario, file)
+    if not os.path.exists(file_path):
+        cwd = os.getcwd()
+        raise FileNotFoundError(
+            f"The scenario config file ({file}) was not found in this location: "
+            f"'{file_path}'; your working directory is '{cwd}'. "
+            "If your working directory is inside the location of your case_study, "
+            "try navigating a few levels up the directory tree with "
+            "`pkg_dir='..'` or `pkg_dir='../..'`. If your working directory is "
+            "outside of the location of your case studies try `pkg_dir='case_studies'`. "
+            "If nothing helps, simply provide the absolute path to the parent "
+            "directory where your case study is located."
+        )
+    return file_path
 
 def case_study_output(case_study, scenario, pkg_dir="case_studies"):
     study_name = os.path.basename(case_study)
@@ -128,7 +139,74 @@ def reroute_output_to_base(output):
         settings[f"output_base"], 
         unixify_path(output)))
 
-def prepare_casestudy(case_study, config_file, pkg_dir="case_studies"):
+def prepare_casestudy(
+    case_study: tuple[str,str], 
+    config_file: str="settings.cfg", 
+    pkg_dir="case_studies"
+) -> configparser.ConfigParser:
+    """Loads the configuration file of the case study by providing the name of 
+    the case study directory, the name of the scenario directory, and the name
+    of the configuration file. 
+    Also adds the case_study directory to `sys.path` so that all modules in the
+    root of the case_study directory can be imported (e.g. import sim, 
+    import mod, ...)
+    
+    By default the function assumes that you have the following directory 
+    structure:
+    
+    ```kotlin
+    project_directory (working directory)
+      ├─ case_studies
+      │   ├─ case_study_1
+      │   │   ├─ scenarios
+      │   │   │   ├─ scenario_1
+      │   │   │   │   └─ settings.cfg
+      │   │   │   ├─ scenario_2
+      │   │   │   │   └─ settings.cfg
+      │   │   └─ results
+      │   ├─ sim.py
+      │   ├─ mod.py
+      │   ├─ data.py
+      │   ├─ plot.py
+      │   └─ ...
+      └─ other_directory
+    ```
+      
+    Parameters
+    ----------
+    case_study : tuple[str,str]
+        A tuple of the case_study direcory and the scenario directory
+    config_file : str, optional
+        The name of the configuration file contained in the scenario directory.
+        Default is 'settings.cfg'
+    pkg_dir : str, optional
+        The name of the folder, where all case studies are located. Can also be
+        a relative or an absolute file path. By default "case_studies"
+
+    Returns
+    -------
+    ConfigParser
+        The configuration file of the case-study-scenario combination.
+
+    Example
+    -------
+    This example demonstrates how to use the prepare_casestudy function:
+
+    ```python
+    from my_module import prepare_casestudy
+
+    # Example usage of prepare_casestudy function
+    config = prepare_casestudy(("test_case_study", "test_scenario"), "settings.cfg")
+
+    # Now you can access configuration settings
+    print(config.get("case-study", "name"))
+    print(config.get("case-study", "scenario"))
+
+    # And use the config file to initialize a Simulation object
+    from sim import Simulation
+    sim = Simulation(config)
+    ```
+    """
     # read sbi-config, sim-config and settings
     assert len(case_study) == 2, "case_study must be a list with first entry <case_study_directory> and 2nd entry the scenario name"
     config = read_config(scenario_file(config_file, *case_study, pkg_dir=pkg_dir))
