@@ -36,6 +36,12 @@ E.g. `pip install pymob==0.3.0a5` which is the 5th alpha release of a project br
 
 ::warning:: It may be possible that different projects release on the same minor version. In this case the release notes (https://github.com/flo-schu/pymob/releases) should be reviewed to see which project it refers to.
 
+
+## Documentation
+
+The documentation is available on https://pymob.readthedocs.io/en/latest/
+
+
 ## Roadmap
 
 `pymob` is a work in progress. As it is actively used in more projects the package will be maturing and delivering a smoother user experience. The design principle of pymob is that it will incorporate features that are repeatedly needed in research projects in order to keep the API lean and focus on providing code that matters and helps.
