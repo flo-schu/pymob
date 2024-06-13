@@ -368,11 +368,14 @@ def unnest(d, flat, parent_key="", sep="."):
     return flat
 
 
-def go_to_case_studies(case_study_dir="case_studies"):
+def go_to_case_studies(case_study_dir="case_studies", stop_inside_case_studies=True):
     """A convenience method to find the case studies directory from a directory
     within the case study. And change the working directory respectively"""
     cwd = os.getcwd()
     while not os.path.exists(os.path.join(os.getcwd(), case_study_dir)):
+        if os.path.basename(os.getcwd()) == case_study_dir and stop_inside_case_studies:
+            break
+
         os.chdir("..")  # navigate one level up
 
         if os.getcwd() == "/":
