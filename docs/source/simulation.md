@@ -104,7 +104,9 @@ from pymob.utils.store_file import prepare_casestudy
 #  │   │   ├─ scenarios
 #  │   │   │   ├─ test_scenario
 #  │   │   │   │   └─ settings.cfg
-#  │   ├─ sim.py
+#  │   |   |   └─ test_scenario_2
+#  │   │   │   │   └─ settings.cfg
+#  |   |   ├─ sim.py
 #
 config = prepare_casestudy(
     case_study=("test_case_study", "test_scenario"), 
