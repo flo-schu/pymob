@@ -2,7 +2,7 @@ import os
 import configparser
 import warnings
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Union, Dict, Any, Literal
 from typing_extensions import Annotated
 import tempfile
 
@@ -18,7 +18,9 @@ def string_to_list(option: Union[List, str]) -> List:
     if isinstance(option, (list, tuple)):
         return list(option)
     
-    if " " not in option:
+    if len(option) == 0:
+        return []
+    elif " " not in option:
         return [option] 
     else:
         return [i.strip() for i in option.split(" ")]
@@ -70,7 +72,7 @@ class Casestudy(BaseModel):
     logging: str = "DEBUG"
     observations: OptionListStr = []
     package: str = "case_studies"
-    root: Optional[str] = os.getcwd()
+    root: str = os.getcwd()
     settings_path: Optional[str] = Field(default=None, exclude=True)
 
     @computed_field
@@ -116,12 +118,23 @@ class Casestudy(BaseModel):
 class Simulation(BaseModel):
     model_config = {"validate_assignment" : True, "extra": "allow"}
 
+    model: Optional[str] = Field(default=None, validate_default=True, description="The deterministic model")
+    solver: Optional[str] = Field(default=None, validate_default=True)
+    
+    y0: OptionListStr = []
+    x_in: OptionListStr = []
+
     input_files: OptionListStr = []
     dimensions: OptionListStr = []
     data_variables: OptionListStr = []
+    n_ode_states: int = -1
+    replicated: bool = False
+    modeltype: Literal["stochastic", "deterministic"] = "stochastic"
+    solver_post_processing: Optional[str] = Field(default=None, validate_default=True)
     seed: Annotated[int, to_str] = 1
     data_variables_min: Optional[OptionListFloat] = Field(default=None, validate_default=True)
     data_variables_max: Optional[OptionListFloat] = Field(default=None, validate_default=True)
+    evaluator_dim_order: OptionListStr = []
 
     @model_validator(mode='after')
     def post_update(self):
@@ -163,6 +176,7 @@ class Inference(BaseModel):
     n_objectives: Annotated[int, to_str] = 1
     objective_names: OptionListStr = []
     backend: Optional[str] = None
+    extra_vars: OptionListStr = []
 
 class Multiprocessing(BaseModel):
     _name = "multiprocessing"
@@ -282,6 +296,15 @@ class Config(BaseModel):
             paths_input_files.append(fp)
 
         return paths_input_files
+
+    @property
+    def scenario_path(self):
+        return os.path.join(
+            self.case_study.root, 
+            self.case_study.package, 
+            "scenarios", 
+            self.case_study.scenario
+        )
 
     def print(self):
         print("Simulation configuration", end="\n")

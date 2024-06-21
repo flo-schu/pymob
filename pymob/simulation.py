@@ -1,7 +1,8 @@
 import os
 import inspect
 import warnings
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Literal
+from types import ModuleType
 import configparser
 from functools import partial
 import multiprocessing as mp
@@ -101,6 +102,12 @@ def get_return_arguments(func):
 
 class SimulationBase:
     model: Callable
+    solver: Callable
+    mod: ModuleType
+    mprob: ModuleType
+    mdata: ModuleType
+    mplot: ModuleType
+
     def __init__(
         self, 
         config: Optional[Union[str,configparser.ConfigParser]] = None, 
@@ -108,23 +115,23 @@ class SimulationBase:
         
         self.config = Config(config=config)
         self._observations: xr.Dataset = xr.Dataset()
-        self._objective_names: Union[str, List[str]] = []
-        self._coordinates: dict = {}
-        self.free_model_parameters: list = []
+        self._coordinates: Dict = {}
+        self.var_dim_mapper: Dict[str, List[str]] = {}
+        self.free_model_parameters: List = []
 
         self.model_parameters: Dict = {}
-        self.observations = None
-        self._objective_names = []
-        self.indices = {}
+        # self.observations = None
+        self._objective_names: List = []
+        self.indices: Dict = {}
 
         # seed gloabal RNG
         self._seed_buffer_size: int = self.config.multiprocessing.n_cores * 2
         self.RNG = np.random.default_rng(self.config.simulation.seed)
         self._random_integers = self.create_random_integers(n=self._seed_buffer_size)
      
+
         # simulation
-        self.initialize(input=self.input_file_paths)
-        self.n_ode_states = self.infer_ode_states()
+        # self.setup()
         
     def setup(self):
         """Simulation setup routine, when the following methods have been 
@@ -141,6 +148,7 @@ class SimulationBase:
         """
 
         self.initialize(input=self.config.input_file_paths)
+        self.var_dim_mapper = self.create_dim_index()
         
         # coords = self.set_coordinates(input=self.config.input_file_paths)
         # self.coordinates = self.create_coordinates(coordinate_data=coords)
@@ -158,6 +166,7 @@ class SimulationBase:
 
         # TODO: set up logger
         self.parameterize = partial(self.parameterize, model_parameters=self.model_parameters)
+        self.config.simulation.n_ode_states = self.infer_ode_states()
 
     @property
     def observations(self):
@@ -187,20 +196,13 @@ class SimulationBase:
         )
 
     def load_functions(self):
-        _model = self.config["simulation"].get("model", fallback=None)
+        _model = self.config.simulation.model
         if _model is not None:
             self.model = getattr(self.mod, _model)
 
-        _solver = self.config["simulation"].get("solver", fallback=None)
+        _solver = self.config.simulation.solver
         if _solver is not None:
             self.solver = getattr(self.mod, _solver)
-
-    def print_config(self):
-        print("Simulation configuration", end="\n")
-        print("========================")
-        for section in self.config.sections():
-            print("\n")
-            print(f"[{section}]", end="\n")
 
     def set_coordinates(self, input):
         dimensions = self.config.simulation.dimensions
@@ -213,15 +215,15 @@ class SimulationBase:
         @benchmark
         def run_bench():
             for i in range(n):
-                evaluator(seed=np.random.randint(1e6))
+                evaluator(seed=self.RNG.integers(100))
         
         print(f"\nBenchmarking with {n} evaluations")
         print(f"=================================")
         run_bench()
         print(f"=================================\n")
         
-    def infer_ode_states(self):
-        if self.n_ode_states is None:
+    def infer_ode_states(self) -> int:
+        if self.config.simulation.n_ode_states == -1:
             try: 
                 return_args = get_return_arguments(self.model)
                 n_ode_states = len(return_args)
@@ -238,9 +240,9 @@ class SimulationBase:
                     "the config file [simulation] > 'n_ode_states = <n>' "
                     "and could not be extracted from the return arguments."
                 )
-                n_ode_states = None
+                n_ode_states = -1
         else:
-            n_ode_states = self.n_ode_states
+            n_ode_states = self.config.simulation.n_ode_states
 
         return n_ode_states
         
@@ -274,14 +276,14 @@ class SimulationBase:
         else:
             post_processing = None
 
-        stochastic = self.config.get("simulation", "modeltype", fallback=False)
+        stochastic = self.config.simulation.modeltype
             
         evaluator = Evaluator(
             model=model,
             solver=solver,
             parameters=model_parameters,
             dimensions=self.dimensions,
-            n_ode_states=self.n_ode_states,
+            n_ode_states=self.config.simulation.n_ode_states,
             var_dim_mapper=self.var_dim_mapper,
             data_structure=self.data_structure,
             data_variables=self.data_variables,
@@ -295,7 +297,7 @@ class SimulationBase:
 
         return evaluator
 
-    def parse_input(self, data=None, input=None, drop_dims=["time"]):
+    def parse_input(self, data=None, input=Literal["y0", "x_in"], drop_dims=["time"]):
         """Parses a config string e.g. y=Array([0]) or a=b to a numpy array 
         and looks up symbols in the elements of data, where data items are
         key:value pairs of a dictionary, xarray items or anything of this form
@@ -311,9 +313,12 @@ class SimulationBase:
         input_dims = {k:v for k, v in self.observations.dims.items() if k not in drop_dims}
         input_coords = {k:v for k, v in self.observations.coords.items() if k in input_dims}
         
-        input_list = self.config["simulation"].getlist(input, fallback=[])
-        if isinstance(input_list, str):
-            input_list = [input_list]
+        if input == "y0":
+            input_list = self.config.simulation.y0
+        elif input == "x_in":
+            input_list = self.config.simulation.x_in
+        else:
+            raise NotImplementedError(f"Input type {input}: is not implemented")
 
         input_dataset = xr.Dataset()
         for input_expression in input_list:
@@ -452,7 +457,9 @@ class SimulationBase:
         if widgets is not None:
             import ipywidgets as widgets
             from IPython.display import display, clear_output
-        
+        else:
+            raise ImportError(f"ipywidgets is not available and needs to be installed")
+
         def interactive_output(func, controls):
             out = widgets.Output(layout={'border': '1px solid black'})
             def observer(change):
@@ -477,7 +484,7 @@ class SimulationBase:
             sliders.update({par.name: s})
 
         def func(theta):
-            extra = self.config.getlist("inference", "extra_vars", fallback=[])
+            extra = self.config.inference.extra_vars
             extra = [extra] if isinstance(extra, str) else extra
             extra_vars = {v: self.observations[v] for v in extra}
             evaluator = self.dispatch(theta=theta, **extra_vars)
@@ -766,7 +773,7 @@ class SimulationBase:
         pass
         
     
-    def plot(self):
+    def plot(self, results):
         pass
 
     def create_coordinates(self, coordinate_data):
@@ -823,101 +830,74 @@ class SimulationBase:
     @property
     def input_file_paths(self):
         # TODO: Remove when all method has been updated to the new config API
-        paths_input_files = []
-        for file in self.input_files:
-            fp = scenario_file(file, self.case_study, self.scenario)
-            paths_input_files.append(fp)
-
-        observation_files = self.config.getlist("case-study", "observations", fallback=[])
-        if isinstance(observation_files, str):
-            observation_files = [observation_files]
-
-        for file in observation_files:
-            if not os.path.isabs(file):
-                fp = os.path.join(self.data_path, file)
-            else:
-                fp = file
-            paths_input_files.append(fp)
-
-        return paths_input_files
+        return self.config.input_file_paths
 
     # config as properties
     @property
     def dimensions(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.dimensions
+        return self.config.simulation.dimensions
 
     @property
     def data_variables(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.data_variables
+        return self.config.simulation.data_variables
 
     @property
     def n_ode_states(self):
         # TODO: Remove when all method has been updated to the new config API
-        # TODO: Add n_ode_states to config
         warnings.warn(config_deprecation, DeprecationWarning)
-        n_ode_states = self.config.getint(
-            "simulation", "n_ode_states", fallback=None
-        )
-
-        return n_ode_states
+        return self.config.simulation.n_ode_states
     
     @n_ode_states.setter
     def n_ode_states(self, n_ode_state):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        self.config.set("simulation", "n_ode_states", f"{n_ode_state}")
+        self.config.simulation.n_ode_states = n_ode_state
 
     @property
     def solver_post_processing(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config["simulation"].get("solver_post_processing", fallback=None)
+        return self.config.simulation.solver_post_processing
 
     @property
     def input_files(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        input_files = self.config.getlist("simulation", "input_files", fallback=[])
-        return self.option_as_list(input_files)
+        return self.config.simulation.input_files
   
     @property
     def case_study_path(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.get("case-study", "package")
+        return self.config.case_study.package
 
     @property
     def root_path(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.get("case-study", "root")
+        return self.config.case_study.root
 
     @property
     def case_study(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.get("case-study", "name")
+        return self.config.case_study.name
 
     @property
     def scenario(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.get("case-study", "scenario")
+        return self.config.case_study.scenario
 
     @property
     def scenario_path(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return os.path.join(
-            self.root_path, 
-            self.case_study_path, 
-            "scenarios", 
-            self.scenario
-        )
+        return self.config.scenario_path
 
     # TODO Outsource model parameters also to config (if it makes sense)
     @property
@@ -941,100 +921,52 @@ class SimulationBase:
     def output_path(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        output_path_ = self.config.get("case-study", "output")
-        if not os.path.isabs(output_path_):
-            return os.path.join(
-                os.path.relpath(output_path_),
-                os.path.relpath(self.case_study_path), 
-                "results",
-                self.scenario,
-            )
-        else:
-            return os.path.abspath(output_path_)
+        return self.config.case_study.output_path
 
     @property
     def data_path(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        data_path_ = self.config.get("case-study", "data")
-        if not os.path.isabs(data_path_):
-            return os.path.join(
-                self.case_study_path, 
-                os.path.relpath(data_path_)
-            )
-        else:
-            return os.path.abspath(data_path_)
+        return self.config.case_study.data_path
        
 
     @property
     def data_variable_bounds(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        lower_bounds = self.config.getlistfloat(
-            "simulation", "data_variables_min", fallback=None
-        )
-        upper_bounds = self.config.getlistfloat(
-            "simulation", "data_variables_max", fallback=None
-        )
-        if lower_bounds is None:
-            lower_bounds = [float("nan")] * 4
-
-        if upper_bounds is None:
-            upper_bounds = [float("nan")] * 4
-
-        if not len(lower_bounds) == len(upper_bounds) == len(self.data_variables):
-            raise ValueError(
-                "If bounds are provided, the must be provided for all data "
-                "variables. If a bound for a variable is unknown, write 'nan' "
-                "in the config file at the position of the variable. "
-                "\nE.g.:"
-                "\ndata_variables = A B C"
-                "\ndata_variables_max = 4 nan 2"
-                "\ndata_variables_min = 0 0 nan"
-            )
-        
-        return np.array(lower_bounds), np.array(upper_bounds)
+        lower_bounds = self.config.simulation.data_variables_min
+        upper_bounds = self.config.simulation.data_variables_max
+        return lower_bounds, upper_bounds
 
     @property
     def objective(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.get("inference", "objective_function", fallback="total_average")
+        return self.config.inference.objective_function
 
     @property
     def n_objectives(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.getint("inference", "n_objectives", fallback=1)
+        return self.config.inference.n_objectives
 
     @property
     def objective_names(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self._objective_names
+        return self.config.inference.objective_names
 
-    @property
-    def n_threads(self):
-        # TODO: Remove when all method has been updated to the new config API
-        warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.getint("multiprocessing", "threads", fallback=4)
-    
     @property
     def n_cores(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        cpu_avail = mp.cpu_count()
-        cpu_set = self.config.getint("multiprocessing", "cores", fallback=1)
-        if cpu_set <= 0:
-            return cpu_avail + cpu_set
-        else: 
-            return cpu_set
+        return self.config.multiprocessing.n_cores
     
     @n_cores.setter
     def n_cores(self, value):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        self.config.set("multiprocessing", "cores", str(value))
+        self.config.multiprocessing.cores = value
 
     def create_random_integers(self, n: int):
         return self.RNG.integers(low=0, high=int(1e18), size=n).tolist()
@@ -1112,7 +1044,7 @@ class SimulationBase:
     @property
     def fixed_model_parameters(self):
         fixed_parameters = {}
-        params = parse_config_section(self.config["fixed-model-parameters"])
+        params = parse_config_section(self.config._config["fixed-model-parameters"])
         for k, v in params.items():
             vlist = v.split(" ")
             floatlist = [float(v) for v in vlist]
@@ -1128,14 +1060,14 @@ class SimulationBase:
 
     @property
     def error_model(self):
-        em = parse_config_section(self.config["error-model"], method="strfloat")
+        em = parse_config_section(self.config._config["error-model"], method="strfloat")
         return em
 
     @property
     def evaluator_dim_order(self):
-        return self.config.getlist("simulation", "evaluator_dim_order", fallback=None)
+        return self.config.simulation.evaluator_dim_order
 
-    def create_dim_index(self):
+    def create_dim_index(self) -> Dict[str, List[str]]:
         # TODO: If a dimensionality config seciton is implemented this function
         # may become superflous
         sim_dims = self.dimensions

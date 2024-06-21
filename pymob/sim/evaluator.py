@@ -61,7 +61,7 @@ class Evaluator:
             parameters: Dict,
             dimensions: List,
             n_ode_states: int,
-            var_dim_mapper: List,
+            var_dim_mapper: Dict,
             data_structure: Dict,
             coordinates: Dict,
             data_variables: List,

@@ -9,7 +9,8 @@ scenario = "case_studies/test_case_study/scenarios/test_scenario_scripting_api"
 def test_simulation():
     sim = SimulationBase()
     os.chdir("case_studies/test_case_study/")
-    
+    sim.config.case_study.name = "test_case_study"
+    sim.config.case_study.scenario = "test_scenario_scription_api"
     sim.config.case_study.data = "data"
     sim.config.case_study.output = "results/test_scenario_scripting_api"
     sim.config.case_study.observations = ["simulated_data.nc"]
@@ -38,4 +39,4 @@ def test_load_generated_settings():
 if __name__ == "__main__":
     pass
     # test_simulation()
-    # test_load_generated_settings()
+    test_load_generated_settings()

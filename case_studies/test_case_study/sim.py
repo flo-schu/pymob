@@ -17,9 +17,8 @@ class Simulation(SimulationBase):
             gamma = 0.3,  # Predator reproduction rate
             delta = 0.01,  # Predator death rate
         )
-        if self.config.getint("simulation", "replicated"):
-            rng = np.random.default_rng(1)
-            self.model_parameters["y0"] = rng.integers(1, 50, size=(10, 2))
+        if self.config.simulation.replicated:
+            self.model_parameters["y0"] = self.RNG.integers(1, 50, size=(10, 2))
         else:
             self.model_parameters["y0"] = np.array([40, 9])  # initial population of prey and predator
 

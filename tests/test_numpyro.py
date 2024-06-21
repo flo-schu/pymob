@@ -2,19 +2,11 @@ import pytest
 import numpy as np
 from matplotlib import pyplot as plt
 
-from pymob.utils.store_file import prepare_casestudy
-
-def create_simulation(scenario):
-    config = prepare_casestudy(
-        case_study=("test_case_study", scenario),
-        config_file="settings.cfg"
-    )
-    from case_studies.test_case_study.sim import Simulation
-    return Simulation(config=config)
+from tests.fixtures import init_test_case_study
 
 def test_diffrax_exception():
     # with proper scripting API define JAX model here or import from fixtures
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
     # diffrax returns infinity for all computed values after which the solver 
     # breaks due to raching maximum number of steps. 
@@ -42,7 +34,7 @@ def test_diffrax_exception():
 
 
 def test_user_defined_probability_model():
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
     sim.config.set("inference.numpyro", "kernel", "nuts")
     sim.config.set("inference.numpyro", "user_defined_probability_model", "parameter_only_model")
@@ -63,7 +55,7 @@ def test_user_defined_probability_model():
 
 
 def test_nuts_kernel():
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
     sim.config.set("inference.numpyro", "kernel", "nuts")
     sim.set_inferer(backend="numpyro")
@@ -81,7 +73,7 @@ def test_nuts_kernel():
     )
 
 def test_svi_kernel():
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
     sim.config.set("inference.numpyro", "kernel", "svi")
     sim.config.set("inference.numpyro", "svi_iterations", "10000")
@@ -118,7 +110,7 @@ def test_svi_kernel():
 
 
 def test_map_kernel():
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
     sim.config.set("inference.numpyro", "kernel", "map")
     sim.config.set("inference.numpyro", "svi_iterations", "2000")
@@ -175,7 +167,7 @@ def test_nuts_kernel_replicated():
     
 
 def test_sa_kernel():
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
     sim.config.set("inference.numpyro", "kernel", "sa")
     sim.config.set("inference.numpyro", "init_strategy", "init_to_sample")

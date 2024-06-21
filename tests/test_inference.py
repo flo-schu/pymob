@@ -6,16 +6,9 @@ from matplotlib import pyplot as plt
 
 from tests.fixtures import init_test_case_study
 
-def create_simulation():
-    config = prepare_casestudy(
-        case_study=("test_case_study", "test_scenario"),
-        config_file="settings.cfg"
-    )
-    from case_studies.test_case_study.sim import Simulation
-    return Simulation(config=config)
 
 def test_scripting_api_pyabc():
-    sim = create_simulation()
+    sim = init_test_case_study()
     sim.set_inferer(backend="pyabc")
     sim.inferer.run()
     sim.inferer.store_results()
@@ -42,7 +35,7 @@ def test_pymoo():
 
 
 def test_inference_evaluation():
-    sim = create_simulation()
+    sim = init_test_case_study()
     sim.set_inferer(backend="pyabc")
 
     sim.inferer.load_results()
