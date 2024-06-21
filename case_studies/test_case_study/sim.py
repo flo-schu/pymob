@@ -12,7 +12,7 @@ class Simulation(SimulationBase):
 
     def initialize(self, input):
         self.model_parameters["parameters"] =  dict(
-            alpha = 0.1,  # Prey birth rate
+            alpha = 0.5,  # Prey birth rate
             beta = 0.02,  # Rate at which predators decrease prey population
             gamma = 0.3,  # Predator reproduction rate
             delta = 0.01,  # Predator death rate
