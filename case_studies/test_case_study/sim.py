@@ -1,9 +1,9 @@
 import numpy as np
 import xarray as xr
-from mod import lotka_volterra, solve, solve_jax
-from plot import plot_trajectory
 from pymob.simulation import SimulationBase
-import prob
+from test_case_study.mod import lotka_volterra, solve, solve_jax
+from test_case_study.plot import plot_trajectory
+from test_case_study import prob
 
 class Simulation(SimulationBase):
     solver = solve_jax
