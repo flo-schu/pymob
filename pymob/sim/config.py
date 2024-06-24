@@ -64,7 +64,7 @@ class FloatParam(BaseModel):
         
 class Casestudy(BaseModel):
     model_config = {"validate_assignment" : True}
-    init_root: str = Field(default=".", exclude=True)
+    init_root: str = Field(default=os.getcwd(), exclude=True)
     root: str = "."
 
     name: str = "unnamed_case_study"
@@ -305,11 +305,6 @@ class Config(BaseModel):
 
         if _cfg_fp is not None: _config.set("case-study", "settings_path", _cfg_fp)
         cfg_dict = {k:dict(s) for k, s in dict(_config).items() if k != "DEFAULT"}
-        if "case-study" not in cfg_dict: 
-            cfg_dict["case-study"] = {}
-        if "root" not in cfg_dict["case-study"]: 
-            cfg_dict["case-study"]["root"] = os.getcwd()
-        cfg_dict["case-study"]["init_root"] = os.getcwd()
         super().__init__(**cfg_dict)
 
         self._config = _config

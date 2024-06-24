@@ -71,7 +71,6 @@ def test_standalone_casestudy():
     sim.config.case_study.name = "."
     sim.config.case_study.scenario = "test_scenario_standalone"
     sim.config.case_study.package = "."
-    sim.config.case_study.root = "."
 
     os.makedirs(sim.config.case_study.output_path)
     os.makedirs(sim.config.case_study.data_path)
