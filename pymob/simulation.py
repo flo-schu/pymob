@@ -104,7 +104,7 @@ class SimulationBase:
     model: Callable
     solver: Callable
     mod: ModuleType
-    mprob: ModuleType
+    prob: ModuleType
     mdata: ModuleType
     mplot: ModuleType
 
@@ -159,7 +159,7 @@ class SimulationBase:
             os.makedirs(output_dir)
             print(f"Created directory: {output_dir}")
 
-        scenario_dir = os.path.dirname(self.config.case_study.settings)
+        scenario_dir = self.config.scenario_path
         if not os.path.exists(scenario_dir):
             os.makedirs(scenario_dir)
             print(f"Created directory: {scenario_dir}")

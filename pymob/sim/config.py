@@ -1,8 +1,9 @@
 import os
 import configparser
 import warnings
+import logging
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Any, Literal
+from typing import List, Optional, Union, Dict, Any, Literal, Callable
 from typing_extensions import Annotated
 import tempfile
 
@@ -63,17 +64,19 @@ class FloatParam(BaseModel):
         
 class Casestudy(BaseModel):
     model_config = {"validate_assignment" : True}
+    init_root: str = Field(default=os.getcwd(), exclude=True)
+    root: Optional[str] = os.getcwd()
 
     name: str = "unnamed_case_study"
     scenario: str = "unnamed_scenario"
+    package: str = "case_studies"
     
     output: Optional[str] = None
     data: Optional[str] = None
-    logging: str = "DEBUG"
+
     observations: OptionListStr = []
-    package: str = "case_studies"
-    root: str = os.getcwd()
-    settings_path: Optional[str] = Field(default=None, exclude=True)
+    
+    logging: str = "DEBUG"
 
     @computed_field
     @property
@@ -98,22 +101,49 @@ class Casestudy(BaseModel):
                 os.path.relpath(self.package), 
                 os.path.relpath(self.name),
                 "data"
-            ) 
+            )
     
     @computed_field
     @property
-    def settings(self) -> str:
-        if self.settings_path is not None:
-            return self.settings_path
-        else:
-            return os.path.join(
-                os.path.relpath(self.package),
-                os.path.relpath(self.name),
-                "scenarios", 
-                self.scenario, 
-                "settings.cfg"
-            )
+    def default_settings_path(self) -> str:
+        return os.path.join(
+            os.path.relpath(self.package),
+            os.path.relpath(self.name),
+            "scenarios", 
+            self.scenario, 
+            "settings.cfg"
+        )
         
+
+    @field_validator("root", mode="after")
+    def set_root(cls, new_value, info, **kwargs):
+        # For conditionally updating values (e.g. when data variables change)
+        # see https://github.com/pydantic/pydantic/discussions/7127
+        os.chdir(info.data.get("init_root"))  # this resets the root to the original value
+        package = info.data.get("package")
+        name = info.data.get("name")
+        root = os.path.abspath(new_value)
+        if root != os.getcwd():
+            if not os.path.exists(os.path.join(root, package)):
+                raise FileNotFoundError(
+                    f"Case study collection-directory '{package}' does not "
+                    f"exist in {root}. If the root is the case study. Set "
+                    f"sim.config.package = '.'"
+                )
+            else:
+                if not os.path.exists(os.path.join(root, package, name)):
+                    raise FileNotFoundError(
+                        f"Case study '{name}' "
+                        f"does not exist in {os.path.join(root, package)}. "
+                    )   
+                else:
+                    os.chdir(root)
+                    print(f"Working directory: '{root}'.")
+                    return root
+        else:
+            print(f"Working directory: '{root}'.")
+            return root
+
 
 class Simulation(BaseModel):
     model_config = {"validate_assignment" : True, "extra": "allow"}
@@ -300,8 +330,8 @@ class Config(BaseModel):
     @property
     def scenario_path(self):
         return os.path.join(
-            self.case_study.root, 
-            self.case_study.package, 
+            os.path.relpath(self.case_study.package), 
+            os.path.relpath(self.case_study.name),
             "scenarios", 
             self.case_study.scenario
         )
@@ -314,7 +344,7 @@ class Config(BaseModel):
 
         print("========================", end="\n")
 
-    def save(self, force=False):
+    def save(self, fp: Optional[str]=None, force=False):
         """Saves the configuration to a settings.cfg file
         
         Uses serializers defined at the top, which parse the options to str
@@ -327,7 +357,7 @@ class Config(BaseModel):
 
         Parameters
         ----------
-
+        fp: Optiona[str] file path to write the settings file to
         force: [bool] should the settings file be overwritten without asking
             for user confirmation (default: False)
         """
@@ -336,16 +366,20 @@ class Config(BaseModel):
             by_alias=True, 
             mode="json", 
             exclude_none=True,
-            exclude={"case_study": {"settings", "output_path", "data_path", "root"}}
+            exclude={"case_study": {"output_path", "data_path", "root", "init_root"}}
         )
         self._config.update(**settings)
 
+        if fp is None:
+            file_path = self.case_study.default_settings_path
+        else:
+            file_path = os.path.abspath(fp)
 
         write = True
-        if os.path.exists(self.case_study.settings) and not force:
+        if os.path.exists(file_path) and not force:
             ui_overwrite = input("Settings file already exists. Overwrite? [y/N]")
             write = True if ui_overwrite == "y" else False
 
         if write:
-            with open(self.case_study.settings, "w") as fp:
-                self._config.write(fp)
+            with open(file_path, "w") as f:
+                self._config.write(f)
