@@ -65,7 +65,7 @@ class FloatParam(BaseModel):
 class Casestudy(BaseModel):
     model_config = {"validate_assignment" : True}
     init_root: str = Field(default=".", exclude=True)
-    root: Optional[str] = "."
+    root: str = "."
 
     name: str = "unnamed_case_study"
     scenario: str = "unnamed_scenario"

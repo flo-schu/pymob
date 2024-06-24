@@ -7,6 +7,7 @@ from tests.fixtures import init_test_case_study
 
 def test_scripting_API():
     sim = init_test_case_study()
+    sim.setup()
 
     evalu = sim.dispatch(theta=sim.model_parameter_dict)
     evalu()
