@@ -1,6 +1,8 @@
 import os
+import sys
 import inspect
 import warnings
+import importlib
 from typing import Optional, List, Union, Literal
 from types import ModuleType
 import configparser
@@ -24,6 +26,7 @@ from pymob.sim.base import stack_variables
 from pymob.sim.config import Config
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
+MODULES = ["sim", "mod", "prob", "data", "plot"]
 
 def is_iterable(x):
     try:
@@ -147,6 +150,8 @@ class SimulationBase:
 
         """
 
+        self.load_modules()
+
         self.initialize(input=self.config.input_file_paths)
         self.var_dim_mapper = self.create_dim_index()
         
@@ -194,6 +199,37 @@ class SimulationBase:
             f"Simulation(case_study={self.config.case_study.name}, "
             f"scenario={self.config.case_study.scenario})"
         )
+
+    def load_modules(self):
+        # append relevant paths to sys
+        package = os.path.join(
+            self.config.case_study.root, 
+            self.config.case_study.package
+        )
+        if package not in sys.path:
+            sys.path.append(package)
+            print(f"Appended '{package}' to PATH")
+    
+        case_study = os.path.join(
+            self.config.case_study.root, 
+            self.config.case_study.package,
+            self.config.case_study.name
+        )
+        if case_study not in sys.path:
+            sys.path.append(case_study)
+            print(f"Appended '{case_study}' to PATH")
+
+        for module in MODULES:
+            try:
+                m = importlib.import_module(module, package=case_study)
+            except ModuleNotFoundError:
+                warnings.warn(
+                    f"Module {module}.py not found in {case_study}."
+                    f"Missing modules can lead to unexpected behavior."
+                )
+
+
+
 
     def load_functions(self):
         _model = self.config.simulation.model
