@@ -1,4 +1,5 @@
 import pytest
+import tempfile
 from pymob.simulation import SimulationBase
 from pymob.utils.store_file import import_package
 import xarray as xr
@@ -55,6 +56,47 @@ def test_load_interpolated_settings():
     assert sim.config.case_study.output == expected_output
 
 
+
+def test_standalone_casestudy():
+    wd = os.getcwd()
+    case_study_name = "test_case_study_standalone"
+    root = os.path.join(str(tempfile.tempdir), case_study_name)
+    os.mkdir(root)
+    os.chdir(root)
+    
+    # this is the syntax for setting up a standalone case study
+    # currently root cannot be set with the config backend, but needs
+    # to be specified with `chdir`
+    sim = SimulationBase()
+    sim.config.case_study.name = "."
+    sim.config.case_study.scenario = "test_scenario_standalone"
+    sim.config.case_study.package = "."
+    sim.config.case_study.root = "."
+
+    os.makedirs(sim.config.case_study.output_path)
+    os.makedirs(sim.config.case_study.data_path)
+    os.makedirs(sim.config.case_study.scenario_path)
+    sim.config.save(force=True)
+
+    # test if all files exist and remove test directory
+    os.chdir(wd)
+    file_structure = [
+        f"{tempfile.tempdir}/test_case_study_standalone",
+        f"{tempfile.tempdir}/test_case_study_standalone/data",
+        f"{tempfile.tempdir}/test_case_study_standalone/results",
+        f"{tempfile.tempdir}/test_case_study_standalone/results/test_scenario_standalone",
+        f"{tempfile.tempdir}/test_case_study_standalone/scenarios",
+        f"{tempfile.tempdir}/test_case_study_standalone/scenarios/test_scenario_standalone",
+        f"{tempfile.tempdir}/test_case_study_standalone/scenarios/test_scenario_standalone/settings.cfg",
+    ]
+    
+    for p in reversed(file_structure):
+        assert os.path.exists(p)
+        if os.path.isdir(p):
+            os.rmdir(p)
+        else:
+            os.remove(p)
+
 if __name__ == "__main__":
     # test_simulation()
-    test_load_generated_settings()
+    pass

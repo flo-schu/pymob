@@ -159,7 +159,7 @@ class SimulationBase:
             os.makedirs(output_dir)
             print(f"Created directory: {output_dir}")
 
-        scenario_dir = self.config.scenario_path
+        scenario_dir = self.config.case_study.scenario_path
         if not os.path.exists(scenario_dir):
             os.makedirs(scenario_dir)
             print(f"Created directory: {scenario_dir}")
@@ -897,7 +897,7 @@ class SimulationBase:
     def scenario_path(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.scenario_path
+        return self.config.case_study.scenario_path
 
     # TODO Outsource model parameters also to config (if it makes sense)
     @property
