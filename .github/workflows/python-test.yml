@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Print Environment Variables
+        # see more contexts: https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
         run: |
           echo "GitHub actor: ${{ github.actor }}"
           echo "GitHub workflow: ${{ github.workflow }}"
@@ -27,8 +28,7 @@ jobs:
   test:
     name: 🛠️ Test package
 
-
-    if: startsWith(github.ref_type, 'branch')
+    if: github.ref_type == 'branch'
     
     runs-on: ubuntu-latest
     strategy:
