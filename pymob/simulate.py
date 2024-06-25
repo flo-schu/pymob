@@ -1,7 +1,7 @@
+import os
 import click
 
-from pymob.utils.store_file import (
-    import_package, opt, prepare_casestudy, prepare_scenario)
+from pymob.sim.config import Config
 from pymob.utils import help
 
 @click.command()
@@ -14,34 +14,29 @@ from pymob.utils import help
 @click.option("-l", "--logging", type=str, default=None)
 @click.option("-f", "--logfile", type=str, default=None)
 def main(case_study, scenario, package, logging, logfile):
-    # TODO: add error messages, in case
-    #       - scenario, 
-    #       - case_study, 
-    #       - package,
-    #       - settings.cfg cannot be found
-    config = prepare_casestudy(
-        case_study=(case_study, scenario), 
-        config_file="settings.cfg", 
-        pkg_dir=package
-    )
+
+    cfg = os.path.join(package, case_study, "scenarios", scenario, "settings.cfg")
+    config = Config(cfg)
+    config.case_study.name = case_study
+    config.case_study.scenario = scenario
+    config.import_casestudy_modules()
 
     # update parameters from config file if they are specified
-    if logging is not None: config.set("case-study", "logging", logging)
-    if logfile is not None: config.set("case-study", "logfile", logfile)
+    if logging is not None: config.case_study.logging = logging
+    if logfile is not None: config.case_study.logfile = logfile
 
-    # import package        
-    pkg = import_package(package_path=config["case-study"]["package"])
-    Simulation = pkg.sim.Simulation
+    # import simulation      
+    Simulation = config.import_simulation_from_case_study()
+    sim = Simulation(config)
+    sim.setup()
 
-    # create and run simulation
-    sim = Simulation(
-        config=config
-    )
-    sim.compute()
+    # run the simulation
+    evaluator = sim.dispatch(theta=sim.model_parameter_dict)
+    evaluator()
 
     # store and process output
-    sim.dump()
-    sim.plot()
+    sim.dump(results=evaluator.results)
+    sim.plot(results=evaluator.results)
 
 if __name__ == "__main__":
     main()
