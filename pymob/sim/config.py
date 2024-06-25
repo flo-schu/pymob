@@ -215,6 +215,8 @@ class Inference(BaseModel):
     objective_names: OptionListStr = []
     backend: Optional[str] = None
     extra_vars: OptionListStr = []
+    plot_function: Optional[str] = None
+    n_predictions: Annotated[int, to_str] = 1
 
 class Multiprocessing(BaseModel):
     _name = "multiprocessing"
@@ -275,6 +277,22 @@ class Pymoo(BaseModel):
     cvtol: Annotated[float, to_str] = 1e-7
     verbose: Annotated[bool, to_str] = True
     
+class Numpyro(BaseModel):
+    model_config = {"validate_assignment" : True}
+    user_defined_probability_model: Optional[str] = None
+    user_defined_preprocessing: Optional[str] = None
+    gaussian_base_distribution: bool = False
+    kernel: str = "nuts"
+    init_strategy: str = "init_to_uniform"
+    chains: Annotated[int, to_str] = 1
+    draws: Annotated[int, to_str] = 2000
+    warmup: Annotated[int, to_str] = 1000
+    thinning: Annotated[int, to_str] = 1
+    svi_iterations: Annotated[int, to_str] = 10_000
+    svi_learning_rate: Annotated[float, to_str] = 0.0001
+    sa_adapt_state_size: Optional[int] = None
+
+
 
 class Config(BaseModel):
     model_config = {"validate_assignment" : True, "extra": "allow", "protected_namespaces": ()}
@@ -317,6 +335,7 @@ class Config(BaseModel):
     inference_pyabc: Pyabc = Field(default=Pyabc(), alias="inference.pyabc")
     inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")
     inference_pymoo: Pymoo = Field(default=Pymoo(), alias="inference.pymoo")
+    inference_numpyro: Numpyro = Field(default=Numpyro(), alias="inference.numpyro")
         
     @property
     def input_file_paths(self) -> list:
