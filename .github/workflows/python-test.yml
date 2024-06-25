@@ -20,6 +20,7 @@ jobs:
           echo "GitHub run_ID: ${{ github.run_id }}"
           echo "GitHub event_name: ${{ github.event_name }}"
           echo "GitHub ref: ${{ github.ref }}"
+          echo "GitHub ref_type: ${{ github.ref_type }}"
           echo "GitHub ref_name: ${{ github.ref_name }}"
           echo "GitHub sha: ${{ github.sha }}"
   
@@ -27,7 +28,7 @@ jobs:
     name: 🛠️ Test package
 
 
-    if: startsWith(github.ref, 'refs/heads/')
+    if: startsWith(github.ref_type, 'branch')
     
     runs-on: ubuntu-latest
     strategy:
