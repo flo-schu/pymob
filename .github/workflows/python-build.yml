@@ -9,6 +9,23 @@ env:
   branch_name: ${{ github.head_ref || github.ref_name }} 
     
 jobs:
+  print-context:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print Environment Variables
+        # see more contexts: https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
+        run: |
+          echo "Branch name ${{ env.branch_name }}"
+          echo "GitHub actor: ${{ github.actor }}"
+          echo "GitHub workflow: ${{ github.workflow }}"
+          echo "GitHub action: ${{ github.action }}"
+          echo "GitHub run_ID: ${{ github.run_id }}"
+          echo "GitHub event_name: ${{ github.event_name }}"
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "GitHub ref_type: ${{ github.ref_type }}"
+          echo "GitHub ref_name: ${{ github.ref_name }}"
+          echo "GitHub sha: ${{ github.sha }}"
+  
   check-test-results:
     name: ✔ Check test results
     runs-on: ubuntu-latest
@@ -19,10 +36,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
     - name: 👇 Download test result artifact python
-      uses: actions/download-artifact@v4
+      uses: dawidd6/action-download-artifact@v2
       with:
+        workflow: python-build.yml
+        workflow_conclusion: success
         name: test-result-${{ env.branch_name }}-${{ matrix.python-version }}
         path: .
 
