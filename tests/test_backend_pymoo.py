@@ -1,13 +1,12 @@
+import pytest
 import json
-import xarray as xr
 import numpy as np
 from click.testing import CliRunner
-from matplotlib import pyplot as plt
 
 from tests.fixtures import init_simulation_casestudy_api
 
 
-def test_pymoo():
+def test_convergence():
     sim = init_simulation_casestudy_api()
     sim.set_inferer(backend="pymoo")
     sim.inferer.run()
@@ -23,6 +22,24 @@ def test_pymoo():
         np.array(list(true_parameters.values())),
         rtol=5e-2, atol=1e-5
     )
+
+
+def test_commandline_api_infer():
+    # TODO: This will run, once methods are available for 
+    # - prior_predictive_checks, 
+    # - store_results, 
+    # - posterior_predictive_checks 
+    pytest.skip()
+    from pymob.infer import main
+    runner = CliRunner()
+    
+    args = "--case_study=test_case_study "\
+        "--scenario=test_scenario "\
+        "--inference_backend=pymoo"
+    result = runner.invoke(main, args.split(" "))
+
+    if result.exception is not None:
+        raise result.exception
 
 
 if __name__ == "__main__":

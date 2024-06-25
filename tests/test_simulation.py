@@ -26,16 +26,17 @@ def test_no_error_from_repeated_setup():
     sim = init_simulation_casestudy_api()  # already executes setup
     sim.setup()
 
-def test_interactive_mode():
-    sim = init_simulation_casestudy_api()
-    sim.interactive()
 
-def test_commandline_API():
+def test_commandline_api_simulate():
     from pymob.simulate import main
     runner = CliRunner()
     
-    args = "--case_study=test_case_study --scenario=test_scenario"
+    args = "--case_study=test_case_study "\
+        "--scenario=test_scenario"
     result = runner.invoke(main, args.split(" "))
+
+    if result.exception is not None:
+        raise result.exception
 
 
 if __name__ == "__main__":
