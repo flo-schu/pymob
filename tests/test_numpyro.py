@@ -144,14 +144,7 @@ def test_map_kernel():
 def test_nuts_kernel_replicated():
     pytest.skip()
     # CURRENTLY UNUSABLE SEE https://github.com/flo-schu/pymob/issues/6
-    config = prepare_casestudy(
-        case_study=("test_case_study", "test_scenario_replicated"),
-        config_file="settings.cfg"
-    )
-    from case_studies.test_case_study.sim import ReplicatedSimulation
-    
-    sim = ReplicatedSimulation(config=config)
-    sim = create_simulation("test_scenario_replicated")
+    sim = init_test_case_study("test_scenario_replicated")
 
     sim.config.set("inference.numpyro", "kernel", "nuts")
     sim.set_inferer(backend="numpyro")
