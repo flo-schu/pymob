@@ -9,8 +9,23 @@ on:
     branches: ["dev", "main"]
 
 jobs:
+  print-context:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print Environment Variables
+        run: |
+          echo "GitHub actor: ${{ github.actor }}"
+          echo "GitHub workflow: ${{ github.workflow }}"
+          echo "GitHub action: ${{ github.action }}"
+          echo "GitHub run_ID: ${{ github.run_id }}"
+          echo "GitHub event_name: ${{ github.event_name }}"
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "GitHub ref_name: ${{ github.ref_name }}"
+          echo "GitHub sha: ${{ github.sha }}"
+  
   test:
     name: 🛠️ Test package
+
 
     if: startsWith(github.ref, 'refs/heads/')
     
