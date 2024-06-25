@@ -11,7 +11,6 @@ def test_scripting_api_pyabc():
     sim = init_test_case_study()
     sim.set_inferer(backend="pyabc")
     sim.inferer.run()
-    sim.inferer.store_results()
     sim.inferer.load_results()
     
     posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))

@@ -14,13 +14,11 @@ from pymob.simulation import SimulationBase
 from pymob.utils.store_file import is_number
 from pymob.utils.errors import import_optional_dependency
 
-extra = "'pyabc' dependencies can be installed with pip install pymob[pyabc]"
-pyabc = import_optional_dependency("pyabc", errors="warn", extra=extra)
-if pyabc is not None:
-    import pyabc
-    from pathos import multiprocessing as mp
+import pyabc
+from pathos import multiprocessing as mp
 
 class PyabcBackend:
+    idata = az.InferenceData
     def __init__(
         self, 
         simulation: SimulationBase
@@ -28,6 +26,7 @@ class PyabcBackend:
         self.parameter_map = {}
         
         self.simulation = simulation
+        self.config = simulation.config
         self.evaluator = self.model_parser()
         self.prior = self.prior_parser(simulation.free_model_parameters)
         self.distance_function = self.distance_function_parser()
@@ -43,10 +42,7 @@ class PyabcBackend:
     def extra_vars(self):
         # TODO: Remove when all methods have been changed
         warnings.warn("Deprecation warning. Use `Simulation.config.OPTION` API")
-        extra = self.config._config.getlist( 
-            "inference", "extra_vars", fallback=[]
-        )
-        return extra if isinstance(extra, list) else [extra]
+        return self.config.inference.extra_vars
     
     
     @property
@@ -199,7 +195,7 @@ class PyabcBackend:
         def model(theta):
             theta_mapped = self.map_parameters(theta, self.parameter_map)
             evaluator = self.simulation.dispatch(theta=theta_mapped, **extra_kwargs)
-            evaluator(seed=np.random.randint(1e6))
+            evaluator(seed=self.simulation.RNG.integers(1000))
             res = {k: np.array(v) for k, v in evaluator.Y.items()}
             res.update({p: theta_mapped[p] for p in obj_func_params if p in theta_mapped})
             return res
