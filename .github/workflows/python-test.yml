@@ -4,14 +4,12 @@
 name: 🛠️ Test Python 🐍 package 
 
 on:
-  pull_request_target:
+  pull_request:
     branches: 
-      - "main"
-      - "dev"
+      - "**"
   push:
     branches: ["dev", "main"]
-  pull_request:
-    branches: "**"
+
 
 jobs:
   test:
