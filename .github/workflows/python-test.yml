@@ -4,19 +4,48 @@
 name: 🛠️ Test Python 🐍 package 
 
 on:
+  # It is not really avoidable to run the tests twice on the commit.
+  # if i want to make sure that only repos that have passed the test are
+  # deployed.
   pull_request:
-    branches: 
-      - "**"
   push:
     branches: ["dev", "main"]
+  workflow_call:
 
+env:
+  # How to get the name of the branch (see: https://stackoverflow.com/a/71158878)
+  branch_name: ${{ github.head_ref || github.ref_name }} 
+  COMMIT_MSG: ${{ github.event.head_commit.message }}
 
 jobs:
+  print-context:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print Environment Variables
+        # see more contexts: https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
+        run: |
+          echo "Branch name ${{ env.branch_name }}"
+          echo "GitHub actor: ${{ github.actor }}"
+          echo "GitHub workflow: ${{ github.workflow }}"
+          echo "GitHub action: ${{ github.action }}"
+          echo "GitHub run_ID: ${{ github.run_id }}"
+          echo "GitHub event_name: ${{ github.event_name }}"
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "GitHub ref_type: ${{ github.ref_type }}"
+          echo "GitHub ref_name: ${{ github.ref_name }}"
+          echo "GitHub sha: ${{ github.sha }}"
+          echo "GitHub message: ${{ github.event.head_commit.message }}"
+  
   test:
     name: 🛠️ Test package
 
-    if: startsWith(github.ref, 'refs/heads/')
-    
+    # The below test does not work. The problem is that bumpver makes a commit
+    # (that is tested) and then uploads the tag, which also triggers a test.
+    # The only thing that would help me is to test whether the commit message
+    # is bump x.x.x -> x.x.y; but this does not work because pull request
+    # apparently does not track the commit message
+    # if: ${{ ! ( github.event.head_commit.message == '' && github.event_name == 'pull_request' ) }} 
+
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -29,6 +58,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+        cache: 'pip' # caching pip dependencies
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -44,13 +74,3 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
-
-    - name: Save test result
-      if: ${{ success() }}
-      run: echo "success" > test_result.txt
-
-    - name: Upload test result artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-result-${{ github.ref_name }}-${{ matrix.python-version }}
-        path: test_result.txt

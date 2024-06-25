@@ -2,19 +2,11 @@ import pytest
 import numpy as np
 from matplotlib import pyplot as plt
 
-from pymob.utils.store_file import prepare_casestudy
-
-def create_simulation(scenario):
-    config = prepare_casestudy(
-        case_study=("test_case_study", scenario),
-        config_file="settings.cfg"
-    )
-    from case_studies.test_case_study.sim import Simulation
-    return Simulation(config=config)
+from tests.fixtures import init_test_case_study
 
 def test_diffrax_exception():
     # with proper scripting API define JAX model here or import from fixtures
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
     # diffrax returns infinity for all computed values after which the solver 
     # breaks due to raching maximum number of steps. 
@@ -42,16 +34,17 @@ def test_diffrax_exception():
 
 
 def test_user_defined_probability_model():
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
-    sim.config.set("inference.numpyro", "kernel", "nuts")
-    sim.config.set("inference.numpyro", "user_defined_probability_model", "parameter_only_model")
-    sim.config.set("inference.numpyro", "user_defined_preprocessing", "dummy_preprocessing")
+    sim.config.inference_numpyro.kernel = "nuts"
+    sim.config.inference_numpyro.user_defined_probability_model = "parameter_only_model"
+    sim.config.inference_numpyro.user_defined_preprocessing = "dummy_preprocessing"
 
     sim.set_inferer(backend="numpyro")
     sim.inferer.run()
     
-    posterior_median = sim.inferer.idata.posterior.median(("chain", "draw"))[["beta", "alpha"]]
+    posterior_median = sim.inferer.idata.posterior.median( # type: ignore
+        ("chain", "draw"))[["beta", "alpha"]] 
     
     # tests if true parameters are close to recovered parameters from simulated
     # data
@@ -63,13 +56,14 @@ def test_user_defined_probability_model():
 
 
 def test_nuts_kernel():
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
-    sim.config.set("inference.numpyro", "kernel", "nuts")
+    sim.config.inference_numpyro.kernel = "nuts"
     sim.set_inferer(backend="numpyro")
     sim.inferer.run()
     
-    posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))[sim.model_parameter_names]
+    posterior_mean = sim.inferer.idata.posterior.mean( # type: ignore
+        ("chain", "draw"))[sim.model_parameter_names]
     true_parameters = sim.model_parameter_dict
     
     # tests if true parameters are close to recovered parameters from simulated
@@ -81,21 +75,22 @@ def test_nuts_kernel():
     )
 
 def test_svi_kernel():
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
-    sim.config.set("inference.numpyro", "kernel", "svi")
-    sim.config.set("inference.numpyro", "svi_iterations", "10000")
-    sim.config.set("inference.numpyro", "svi_learning_rate", "0.01")
+    sim.config.inference_numpyro.kernel = "svi"
+    sim.config.inference_numpyro.svi_iterations = 10_000
+    sim.config.inference_numpyro.svi_learning_rate = 0.01
     # this samples the model with standard normal distributions
     # and rescales them according to the transformations of the specified 
     # parameter distributions to the normal
-    sim.config.set("inference.numpyro", "gaussian_base_distribution", "1")
+    sim.config.inference_numpyro.gaussian_base_distribution = True
 
     sim.set_inferer(backend="numpyro")
     sim.inferer.run()
-    sim.inferer.idata.posterior_predictive
+    sim.inferer.idata.posterior_predictive # type: ignore
 
-    posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))[sim.model_parameter_names]
+    posterior_mean = sim.inferer.idata.posterior.mean( # type: ignore
+        ("chain", "draw"))[sim.model_parameter_names]
     true_parameters = sim.model_parameter_dict
     
     # tests if true parameters are close to recovered parameters from simulated
@@ -118,21 +113,22 @@ def test_svi_kernel():
 
 
 def test_map_kernel():
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
-    sim.config.set("inference.numpyro", "kernel", "map")
-    sim.config.set("inference.numpyro", "svi_iterations", "2000")
-    sim.config.set("inference.numpyro", "svi_learning_rate", "0.01")
+    sim.config.inference_numpyro.kernel = "map"
+    sim.config.inference_numpyro.svi_iterations = 2000
+    sim.config.inference_numpyro.svi_learning_rate = 0.01
     # this samples the model with standard normal distributions
     # and rescales them according to the transformations of the specified 
     # parameter distributions to the normal
-    sim.config.set("inference.numpyro", "gaussian_base_distribution", "1")
+    sim.config.inference_numpyro.gaussian_base_distribution = 1
 
     sim.set_inferer(backend="numpyro")
     sim.inferer.run()
-    sim.inferer.idata.posterior_predictive
+    sim.inferer.idata.posterior_predictive # type: ignore
 
-    posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))[sim.model_parameter_names]
+    posterior_mean = sim.inferer.idata.posterior.mean( # type: ignore
+        ("chain", "draw"))[sim.model_parameter_names]
     true_parameters = sim.model_parameter_dict
     
     # tests if true parameters are close to recovered parameters from simulated
@@ -148,14 +144,7 @@ def test_map_kernel():
 def test_nuts_kernel_replicated():
     pytest.skip()
     # CURRENTLY UNUSABLE SEE https://github.com/flo-schu/pymob/issues/6
-    config = prepare_casestudy(
-        case_study=("test_case_study", "test_scenario_replicated"),
-        config_file="settings.cfg"
-    )
-    from case_studies.test_case_study.sim import ReplicatedSimulation
-    
-    sim = ReplicatedSimulation(config=config)
-    sim = create_simulation("test_scenario_replicated")
+    sim = init_test_case_study("test_scenario_replicated")
 
     sim.config.set("inference.numpyro", "kernel", "nuts")
     sim.set_inferer(backend="numpyro")
@@ -175,18 +164,19 @@ def test_nuts_kernel_replicated():
     
 
 def test_sa_kernel():
-    sim = create_simulation("test_scenario")
+    sim = init_test_case_study("test_scenario")
 
-    sim.config.set("inference.numpyro", "kernel", "sa")
-    sim.config.set("inference.numpyro", "init_strategy", "init_to_sample")
-    sim.config.set("inference.numpyro", "warmup", "2000")
-    sim.config.set("inference.numpyro", "draws", "1000")
-    sim.config.set("inference.numpyro", "sa_adapt_state_size", "10")
+    sim.config.inference_numpyro.kernel = "sa"
+    sim.config.inference_numpyro.init_strategy = "init_to_sample"
+    sim.config.inference_numpyro.warmup = 2000
+    sim.config.inference_numpyro.draws = 1000
+    sim.config.inference_numpyro.sa_adapt_state_size = 10
 
     sim.set_inferer(backend="numpyro")
     sim.inferer.run()
     
-    posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))[sim.model_parameter_names]
+    posterior_mean = sim.inferer.idata.posterior.mean( # type: ignore
+        ("chain", "draw"))[sim.model_parameter_names]
     true_parameters = sim.model_parameter_dict
     
     # tests if true parameters are close to recovered parameters from simulated
@@ -211,3 +201,4 @@ if __name__ == "__main__":
     import os
     sys.path.append(os.getcwd())
     # test_user_defined_probability_model()
+    # test_nuts_kernel()

@@ -1,2 +1,2 @@
-from .mod import lotka_volterra
+from test_case_study.mod import lotka_volterra
 

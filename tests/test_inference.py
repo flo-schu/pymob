@@ -1,24 +1,16 @@
-import subprocess
+import json
 import xarray as xr
 import numpy as np
 from click.testing import CliRunner
 from matplotlib import pyplot as plt
 
-from pymob.utils.store_file import prepare_casestudy
+from tests.fixtures import init_test_case_study
 
-def create_simulation():
-    config = prepare_casestudy(
-        case_study=("test_case_study", "test_scenario"),
-        config_file="settings.cfg"
-    )
-    from case_studies.test_case_study.sim import Simulation
-    return Simulation(config=config)
 
 def test_scripting_api_pyabc():
-    sim = create_simulation()
+    sim = init_test_case_study()
     sim.set_inferer(backend="pyabc")
     sim.inferer.run()
-    sim.inferer.store_results()
     sim.inferer.load_results()
     
     posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))
@@ -33,8 +25,29 @@ def test_scripting_api_pyabc():
     )
 
 
+def test_pymoo():
+    sim = init_test_case_study()
+    sim.set_inferer(backend="pymoo")
+    sim.inferer.run()
+
+    with open(f"{sim.config.case_study.output_path}/pymoo_params.json", "r") as f:
+        pymoo_results = json.load(f)
+
+    estimated_parameters = pymoo_results["X"]
+    true_parameters = sim.model_parameter_dict
+    
+    np.testing.assert_allclose(
+        np.array(list(estimated_parameters.values())),
+        np.array(list(true_parameters.values())),
+        rtol=5e-2, atol=1e-5
+    )
+
+
+    # TODO: write test (something like if error smaller x)
+
+
 def test_inference_evaluation():
-    sim = create_simulation()
+    sim = init_test_case_study()
     sim.set_inferer(backend="pyabc")
 
     sim.inferer.load_results()
@@ -52,13 +65,6 @@ def test_inference_evaluation():
         fig.savefig(f"{sim.output_path}/pyabc_posterior_predictions_{data_var}.png")
         plt.close()
 
-def test_commandline_API_redis():
-    from pymob.infer import main
-    runner = CliRunner()
-    
-    args = "--case_study=test_case_study --scenario=test_scenario"
-    result = runner.invoke(main, args.split(" "))
-
 def test_commandline_API_infer():
     from pymob.infer import main
     runner = CliRunner()
@@ -70,3 +76,4 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
+    # test_scripting_api_pyabc()

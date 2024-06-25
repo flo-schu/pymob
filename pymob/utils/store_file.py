@@ -32,6 +32,14 @@ def is_number(s):
     except ValueError:
         return False
 
+list_converter = lambda x: x if " " not in x else [i.strip() for i in x.split(' ')]
+
+converters = {
+    'list': list_converter,
+    'strint': lambda x: int(x) if x.isdigit() else x,
+    'strfloat': lambda x: float(x) if is_number(x) else x,
+    'listfloat': lambda x: x if " " not in x else [float(i.strip()) for i in x.split(' ')]
+}
 
 def read_config(config_file):
     # get last bit of file name after dot
@@ -42,13 +50,10 @@ def read_config(config_file):
             return json.load(f)
 
     if ext == "cfg":
-        converters={
-            'list': lambda x: x if " " not in x else [i.strip() for i in x.split(' ')],
-            'strint': lambda x: int(x) if x.isdigit() else x,
-            'strfloat': lambda x: float(x) if is_number(x) else x,
-            'listfloat': lambda x: x if " " not in x else [float(i.strip()) for i in x.split(' ')]
-        }
-        config = configparser.ConfigParser(converters=converters)
+        config = configparser.ConfigParser(
+            converters=converters,
+            interpolation=configparser.ExtendedInterpolation()
+        )
         _ = config.read(config_file)
         return config
 
@@ -216,15 +221,15 @@ def prepare_casestudy(
     config["case-study"]["scenario"] = case_study[1]
 
     # store package dir
-    path_case_study = os.path.join(pkg_dir, case_study[0])
-    config["case-study"]["package"] = path_case_study
+    # path_case_study = os.path.join(pkg_dir, case_study[0])
+    config["case-study"]["package"] = pkg_dir
 
     # append relevant paths to sys
     root = os.path.join(config.get("case-study", "root"), pkg_dir)
     if root not in sys.path:
         sys.path.append(root)
     
-    package = os.path.join(config.get("case-study", "root"), config.get("case-study", "package"))
+    package = os.path.join(config.get("case-study", "root"), pkg_dir, case_study[0])
     if package not in sys.path:
         sys.path.append(package)
 
