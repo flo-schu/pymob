@@ -28,10 +28,8 @@ jobs:
     steps:
     - name: Download artifact
       id: download-artifact
-      uses: dawidd6/action-download-artifact@v2
+      uses: actions/download-artifact@v3
       with:
-        workflow: python-build.yml
-        workflow_conclusion: success
         name: python-package-distributions
         path: dist/
     - name: Publish distribution 📦 to PyPI
