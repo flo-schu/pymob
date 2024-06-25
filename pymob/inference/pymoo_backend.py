@@ -32,8 +32,11 @@ class PymooBackend:
     
     def distance_function_parser(self):
         def f(x):
-            Y = self.simulation.evaluate(theta=x)
-            obj_name, obj_value = self.simulation.objective_function(results=Y)
+            evaluator = self.simulation.dispatch(theta=x)
+            evaluator()
+            obj_name, obj_value = self.simulation.objective_function(
+                results=evaluator.results
+            )
             return obj_value
         return f
 
@@ -139,6 +142,10 @@ class PymooBackend:
         res = algorithm.result()
 
         # save the results
+        self.results = res
+        # TODO: Store results to idata (although it seems pointless),
+        # extra dimensions for individuals and generations, one draw nevertheless
+
         self.store_results(results=res)
 
     def post_processing(self, pop):
