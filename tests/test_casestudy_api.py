@@ -3,11 +3,10 @@ import xarray as xr
 import numpy as np
 from click.testing import CliRunner
 
-from tests.fixtures import init_test_case_study
+from tests.fixtures import init_simulation_casestudy_api
 
-def test_scripting_API():
-    sim = init_test_case_study()
-    sim.setup()
+def test_simulation():
+    sim = init_simulation_casestudy_api()
 
     evalu = sim.dispatch(theta=sim.model_parameter_dict)
     evalu()
@@ -24,12 +23,11 @@ def test_indexing_simulation():
     pytest.skip()
 
 def test_no_error_from_repeated_setup():
-    sim = init_test_case_study()  # already executes setup
+    sim = init_simulation_casestudy_api()  # already executes setup
     sim.setup()
 
-
 def test_interactive_mode():
-    sim = init_test_case_study()
+    sim = init_simulation_casestudy_api()
     sim.interactive()
 
 def test_commandline_API():

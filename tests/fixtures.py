@@ -1,6 +1,6 @@
 from pymob.utils.store_file import prepare_casestudy
 
-def init_test_case_study(scenario="test_scenario"):
+def init_simulation_casestudy_api(scenario="test_scenario"):
     config = prepare_casestudy(
         case_study=("test_case_study", scenario),
         config_file="settings.cfg",
@@ -11,3 +11,6 @@ def init_test_case_study(scenario="test_scenario"):
     sim = Simulation(config=config)
     sim.setup()
     return sim
+
+def init_simulation_scripting_api(scenario="test_scenario"):
+    pass
