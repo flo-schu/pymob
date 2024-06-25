@@ -8,6 +8,8 @@ on:
       - "*"
 
 jobs:
+  test-package:
+    uses: ./.github/workflows/python-test.yml
   build-package:
     uses: ./.github/workflows/python-build.yml
   publish-package:

@@ -26,33 +26,6 @@ jobs:
           echo "GitHub ref_name: ${{ github.ref_name }}"
           echo "GitHub sha: ${{ github.sha }}"
   
-  check-test-results:
-    name: ✔ Check test results
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11"]
-
-    steps:
-    - uses: actions/checkout@v4
-    - name: 👇 Download test result artifact python
-      uses: dawidd6/action-download-artifact@v2
-      with:
-        workflow: python-build.yml
-        workflow_conclusion: success
-        name: test-result-${{ env.branch_name }}-${{ matrix.python-version }}
-        path: .
-
-    - name: ✔ Check test result
-      id: check-test-result
-      run: |
-        if [[ -f test_result.txt && $(cat test_result.txt) == "success" ]]; then
-          echo "Tests passed"
-        else
-          echo "Tests failed"
-          exit 1
-        fi
       
   build:
     name: Build distribution 📦
