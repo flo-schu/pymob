@@ -2,14 +2,38 @@ name: Build Python 🐍 package 📦
 
 on:
   workflow_call:
+  workflow_dispatch:
 
 jobs:
-  test-package:
-    uses: ./.github/workflows/python-test.yml
+  check-test-results:
+    name: ✔ Check test results
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: 👇 Download test result artifact python
+      uses: actions/download-artifact@v4
+      with:
+        name: test-result-${{ github.ref_name }}-${{ matrix.python-version }}
+        path: .
+
+    - name: ✔ Check test result
+      id: check-test-result
+      run: |
+        if [[ -f test_result.txt && $(cat test_result.txt) == "success" ]]; then
+          echo "Tests passed"
+        else
+          echo "Tests failed"
+          exit 1
+        fi
+      
   build:
     name: Build distribution 📦
-    
-    needs: test-package
     
     runs-on: ubuntu-latest
 
