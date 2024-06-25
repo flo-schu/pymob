@@ -11,12 +11,12 @@ jobs:
   test-package:
     uses: ./.github/workflows/python-test.yml
   build-package:
+    needs: test-package
     uses: ./.github/workflows/python-build.yml
   publish-package:
     name: Publish Python 🐍 distribution 📦 to PyPI
 
-    needs: 
-      - build-package
+    needs: build-package
 
     runs-on: ubuntu-latest
     environment:
