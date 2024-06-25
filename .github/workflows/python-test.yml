@@ -6,8 +6,11 @@ name: 🛠️ Test Python 🐍 package
 on:
   push:
     branches: ["dev"]
-  pull_request:
-    branches: ["master", "dev"]
+    tags-ignore: "*"
+  pull_request_target:
+    branches: 
+      - "main"
+      - "dev"
   workflow_call:
 
 jobs:
