@@ -34,6 +34,7 @@ jobs:
           echo "GitHub ref_type: ${{ github.ref_type }}"
           echo "GitHub ref_name: ${{ github.ref_name }}"
           echo "GitHub sha: ${{ github.sha }}"
+          echo "GitHub sha: ${{ github.event.head_commit.message }}"
   
   test:
     name: 🛠️ Test package
