@@ -42,8 +42,9 @@ jobs:
     # The below test does not work. The problem is that bumpver makes a commit
     # (that is tested) and then uploads the tag, which also triggers a test.
     # The only thing that would help me is to test whether the commit message
-    # is bump x.x.x -> x.x.y
-    if: ${{ ! ( github.event.head_commit.message == '' && github.event_name == 'pull_request' ) }} 
+    # is bump x.x.x -> x.x.y; but this does not work because pull request
+    # apparently does not track the commit message
+    # if: ${{ ! ( github.event.head_commit.message == '' && github.event_name == 'pull_request' ) }} 
 
     runs-on: ubuntu-latest
     strategy:
