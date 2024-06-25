@@ -120,14 +120,14 @@ class NumpyroBackend:
         # parse preprocessing
         if self.user_defined_preprocessing is not None:
             self.preprocessing = getattr(
-                self.simulation.prob,
+                self.simulation._prob,
                 self.user_defined_preprocessing
             )
 
         # parse the probability model
         if self.user_defined_probability_model is not None:
             self.inference_model = getattr(
-                self.simulation.prob, 
+                self.simulation._prob, 
                 self.user_defined_probability_model
             )
         elif self.gaussian_base_distribution:

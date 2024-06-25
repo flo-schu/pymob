@@ -8,7 +8,7 @@ from test_case_study import prob
 class Simulation(SimulationBase):
     solver = solve_jax
     model = lotka_volterra
-    prob = prob
+    _prob = prob
 
     def initialize(self, input):
         self.model_parameters["parameters"] =  dict(

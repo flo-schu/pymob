@@ -312,7 +312,7 @@ class Config(BaseModel):
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
     simulation: Simulation = Field(default=Simulation())
     inference: Inference = Field(default=Inference())
-    model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters")
+    model_parameters: Modelparameters = Field(default=Modelparameters(), alias="free-model-parameters")
     multiprocessing: Multiprocessing = Field(default=Multiprocessing())
     inference_pyabc: Pyabc = Field(default=Pyabc(), alias="inference.pyabc")
     inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")

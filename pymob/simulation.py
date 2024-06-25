@@ -106,10 +106,10 @@ def get_return_arguments(func):
 class SimulationBase:
     model: Callable
     solver: Callable
-    mod: ModuleType
-    prob: ModuleType
-    mdata: ModuleType
-    mplot: ModuleType
+    _mod: ModuleType
+    _prob: ModuleType
+    _data: ModuleType
+    _plot: ModuleType
 
     def __init__(
         self, 
@@ -222,6 +222,7 @@ class SimulationBase:
         for module in MODULES:
             try:
                 m = importlib.import_module(module, package=case_study)
+                setattr(self, f"_{module}", m)
             except ModuleNotFoundError:
                 warnings.warn(
                     f"Module {module}.py not found in {case_study}."
@@ -234,11 +235,11 @@ class SimulationBase:
     def load_functions(self):
         _model = self.config.simulation.model
         if _model is not None:
-            self.model = getattr(self.mod, _model)
+            self.model = getattr(self._mod, _model)
 
         _solver = self.config.simulation.solver
         if _solver is not None:
-            self.solver = getattr(self.mod, _solver)
+            self.solver = getattr(self._mod, _solver)
 
     def set_coordinates(self, input):
         dimensions = self.config.simulation.dimensions
@@ -308,7 +309,7 @@ class SimulationBase:
         
         if self.solver_post_processing is not None:
             # TODO: Handle similar to solver and model
-            post_processing = getattr(self.mod, self.solver_post_processing)
+            post_processing = getattr(self._mod, self.solver_post_processing)
         else:
             post_processing = None
 
@@ -1047,9 +1048,10 @@ class SimulationBase:
         # create Param instances
         parameters = []
         for param_name, param_dict in parameter_dict.items():
+            value = parse(param_dict.get("value"))
             if isinstance(value, (int, float)):
                 p = param.FloatParam(
-                    value=parse(param_dict.get("value")),
+                    value=value,
                     name=param_name,
                     min=parse(param_dict.get("min")),
                     max=parse(param_dict.get("max")),
