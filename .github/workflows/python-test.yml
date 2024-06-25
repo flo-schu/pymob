@@ -42,7 +42,7 @@ jobs:
     # (that is tested) and then uploads the tag, which also triggers a test.
     # The only thing that would help me is to test whether the commit message
     # is bump x.x.x -> x.x.y
-    if: ! (startsWith(${{ github.event.head_commit.message }}, "bump") && contains(${{ github.event.head_commit.message }}, " -> "))
+    if: ${{ ! startsWith(github.event.head_commit.message, 'bump') }}
 
     runs-on: ubuntu-latest
     strategy:
