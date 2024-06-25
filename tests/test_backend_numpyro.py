@@ -1,12 +1,13 @@
 import pytest
 import numpy as np
+from click.testing import CliRunner
 from matplotlib import pyplot as plt
 
-from tests.fixtures import init_test_case_study
+from tests.fixtures import init_simulation_casestudy_api
 
 def test_diffrax_exception():
     # with proper scripting API define JAX model here or import from fixtures
-    sim = init_test_case_study("test_scenario")
+    sim = init_simulation_casestudy_api("test_scenario")
 
     # diffrax returns infinity for all computed values after which the solver 
     # breaks due to raching maximum number of steps. 
@@ -33,8 +34,8 @@ def test_diffrax_exception():
     assert sum(badness_for_infeasible_alpha) > 0
 
 
-def test_user_defined_probability_model():
-    sim = init_test_case_study("test_scenario")
+def test_convergence_user_defined_probability_model():
+    sim = init_simulation_casestudy_api("test_scenario")
 
     sim.config.inference_numpyro.kernel = "nuts"
     sim.config.inference_numpyro.user_defined_probability_model = "parameter_only_model"
@@ -55,8 +56,8 @@ def test_user_defined_probability_model():
     )
 
 
-def test_nuts_kernel():
-    sim = init_test_case_study("test_scenario")
+def test_convergence_nuts_kernel():
+    sim = init_simulation_casestudy_api("test_scenario")
 
     sim.config.inference_numpyro.kernel = "nuts"
     sim.set_inferer(backend="numpyro")
@@ -74,8 +75,8 @@ def test_nuts_kernel():
         rtol=1e-2, atol=1e-3
     )
 
-def test_svi_kernel():
-    sim = init_test_case_study("test_scenario")
+def test_convergence_svi_kernel():
+    sim = init_simulation_casestudy_api("test_scenario")
 
     sim.config.inference_numpyro.kernel = "svi"
     sim.config.inference_numpyro.svi_iterations = 10_000
@@ -112,8 +113,8 @@ def test_svi_kernel():
         )
 
 
-def test_map_kernel():
-    sim = init_test_case_study("test_scenario")
+def test_convergence_map_kernel():
+    sim = init_simulation_casestudy_api("test_scenario")
 
     sim.config.inference_numpyro.kernel = "map"
     sim.config.inference_numpyro.svi_iterations = 2000
@@ -141,10 +142,10 @@ def test_map_kernel():
 
 
 
-def test_nuts_kernel_replicated():
+def test_convergence_nuts_kernel_replicated():
     pytest.skip()
     # CURRENTLY UNUSABLE SEE https://github.com/flo-schu/pymob/issues/6
-    sim = init_test_case_study("test_scenario_replicated")
+    sim = init_simulation_casestudy_api("test_scenario_replicated")
 
     sim.config.set("inference.numpyro", "kernel", "nuts")
     sim.set_inferer(backend="numpyro")
@@ -163,8 +164,8 @@ def test_nuts_kernel_replicated():
 
     
 
-def test_sa_kernel():
-    sim = init_test_case_study("test_scenario")
+def test_convergence_sa_kernel():
+    sim = init_simulation_casestudy_api("test_scenario")
 
     sim.config.inference_numpyro.kernel = "sa"
     sim.config.inference_numpyro.init_strategy = "init_to_sample"
@@ -195,6 +196,25 @@ def test_sa_kernel():
             data_variable=data_var, 
             x_dim="time"
         )
+
+
+def test_commandline_api_infer():
+    # TODO: This will run, once methods are available for 
+    # - prior_predictive_checks, 
+    # - store_results, 
+    # - posterior_predictive_checks 
+    pytest.skip()
+    from pymob.infer import main
+    runner = CliRunner()
+    
+    args = "--case_study=test_case_study "\
+        "--scenario=test_scenario "\
+        "--inference_backend=numpyro"
+    result = runner.invoke(main, args.split(" "))
+
+    if result.exception is not None:
+        raise result.exception
+
 
 if __name__ == "__main__":
     import sys

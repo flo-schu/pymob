@@ -113,10 +113,13 @@ class SimulationBase:
 
     def __init__(
         self, 
-        config: Optional[Union[str,configparser.ConfigParser]] = None, 
+        config: Optional[Union[str,configparser.ConfigParser,Config]] = None, 
     ) -> None:
         
-        self.config = Config(config=config)
+        if isinstance(config, Config):
+            self.config = config
+        else:
+            self.config = Config(config=config)
         self._observations: xr.Dataset = xr.Dataset()
         self._coordinates: Dict = {}
         self.var_dim_mapper: Dict[str, List[str]] = {}
@@ -806,7 +809,7 @@ class SimulationBase:
         """
         pass
     
-    def dump(self):
+    def dump(self, results):
         pass
         
     
