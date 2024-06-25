@@ -5,8 +5,6 @@ name: 🛠️ Test Python 🐍 package
 
 on:
   pull_request:
-    branches: 
-      - "**"
   push:
     branches: ["dev", "main"]
 
