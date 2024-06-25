@@ -28,7 +28,8 @@ jobs:
     steps:
     - name: Download artifact
       id: download-artifact
-      uses: actions/download-artifact@v3
+      # make sure you use the same version for uploading and downloading artifacts
+      uses: actions/download-artifact@v4
       with:
         name: python-package-distributions
         path: dist/
