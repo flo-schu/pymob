@@ -4,11 +4,11 @@ import numpy as np
 from click.testing import CliRunner
 from matplotlib import pyplot as plt
 
-from tests.fixtures import init_test_case_study
+from tests.fixtures import init_simulation_casestudy_api
 
 
 def test_scripting_api_pyabc():
-    sim = init_test_case_study()
+    sim = init_simulation_casestudy_api()
     sim.set_inferer(backend="pyabc")
     sim.inferer.run()
     sim.inferer.load_results()
@@ -26,7 +26,7 @@ def test_scripting_api_pyabc():
 
 
 def test_pymoo():
-    sim = init_test_case_study()
+    sim = init_simulation_casestudy_api()
     sim.set_inferer(backend="pymoo")
     sim.inferer.run()
 
@@ -47,7 +47,7 @@ def test_pymoo():
 
 
 def test_inference_evaluation():
-    sim = init_test_case_study()
+    sim = init_simulation_casestudy_api()
     sim.set_inferer(backend="pyabc")
 
     sim.inferer.load_results()
