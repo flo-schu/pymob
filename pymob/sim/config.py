@@ -308,7 +308,7 @@ class Config(BaseModel):
 
     def __init__(
         self,
-        config: Optional[Union[str, configparser.ConfigParser]],
+        config: Optional[Union[str, configparser.ConfigParser]] = None,
     ) -> None:
 
         _cfg_fp = None
