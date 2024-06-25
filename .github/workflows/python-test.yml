@@ -4,19 +4,21 @@
 name: 🛠️ Test Python 🐍 package 
 
 on:
-  push:
-    branches: ["dev"]
-    tags-ignore: "*"
   pull_request_target:
     branches: 
       - "main"
       - "dev"
-  workflow_call:
+  push:
+    branches: ["dev", "main"]
+  pull_request:
+    branches: "**"
 
 jobs:
   test:
     name: 🛠️ Test package
 
+    if: startsWith(github.ref, 'refs/heads/')
+    
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -45,3 +47,12 @@ jobs:
       run: |
         pytest
 
+    - name: Save test result
+      if: ${{ success() }}
+      run: echo "success" > test_result.txt
+
+    - name: Upload test result artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-result-${{ github.ref_name }}
+        path: test_result.txt
