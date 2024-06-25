@@ -4,6 +4,10 @@ on:
   workflow_call:
   workflow_dispatch:
 
+env:
+  # not strictly necessary here, because the job will only be triggered by a push (ref_name)
+  branch_name: ${{ github.head_ref || github.ref_name }} 
+    
 jobs:
   check-test-results:
     name: ✔ Check test results
@@ -19,7 +23,7 @@ jobs:
     - name: 👇 Download test result artifact python
       uses: actions/download-artifact@v4
       with:
-        name: test-result-${{ github.ref_name }}-${{ matrix.python-version }}
+        name: test-result-${{ env.branch_name }}-${{ matrix.python-version }}
         path: .
 
     - name: ✔ Check test result

@@ -9,6 +9,7 @@ on:
     branches: ["dev", "main"]
 
 env:
+  # How to get the name of the branch (see: https://stackoverflow.com/a/71158878)
   branch_name: ${{ github.head_ref || github.ref_name }} 
 
 jobs:
