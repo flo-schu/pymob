@@ -308,7 +308,7 @@ class Config(BaseModel):
 
     def __init__(
         self,
-        config: Optional[Union[str, configparser.ConfigParser]],
+        config: Optional[Union[str, configparser.ConfigParser]] = None,
     ) -> None:
 
         _cfg_fp = None
@@ -454,7 +454,7 @@ class Config(BaseModel):
         try:
             Simulation = getattr(self._modules["sim"], self.case_study.simulation)
         except:
-            ImportError(
+            raise ImportError(
                 f"Simulation class {self.case_study.simulation} "
                 "could not be found. Make sure the simulaton option is spelled "
                 "correctly or specify an class that exists in sim.py"
