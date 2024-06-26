@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to pymob's documentation!
-=================================
+Pymob documentation
+===================
 
 Pymob is a Python based model building platform. 
 It abstracts repetitive tasks in the modeling process so that you can focus on building models, asking questions to the real world and learn from observations.
@@ -22,13 +22,11 @@ Currently, supported inference backends are:
 
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
+   :hidden: Contents:
 
-   case_studies
-   simulation
-   parameter_inference
-
+   user_guide/index
+   examples/index
    api/pymob
 
 
