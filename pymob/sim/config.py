@@ -295,6 +295,7 @@ class Numpyro(BaseModel):
 
 
 class Config(BaseModel):
+    """Configuration manager for pymob."""
     model_config = {"validate_assignment" : True, "extra": "allow", "protected_namespaces": ()}
     _config: configparser.ConfigParser
 

@@ -21,7 +21,8 @@ extensions = [
     'sphinx.ext.doctest',
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
-    "sphinx.ext.napoleon"  # used for building numpy style documentation
+    "sphinx.ext.autosectionlabel",
+    "sphinx.ext.napoleon",  # used for building numpy style documentation
 ]
 
 # https://myst-parser.readthedocs.io/en/latest/configuration.html
@@ -44,6 +45,11 @@ source_suffix = {
 
 html_theme = "pydata_sphinx_theme"
 html_static_path = ["_static"]
+html_context = {
+   # ...
+   "default_mode": "light"
+}
 
 autosummary_generate = True
 autosummary_imported_members = True
+autosectionlabel_prefix_document = True

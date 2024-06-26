@@ -11,6 +11,15 @@ For simplicity we will use the term parameter **inference**, because we interpre
 
 > Statistical inference uses mathematics to draw conclusions in the presence of uncertainty. This generalizes deterministic reasoning, with the absence of uncertainty as a special case. Statistical inference uses quantitative or qualitative (categorical) data which may be subject to random variations. 
 
+(inference-backends)=
+## Supported inference backends
+
+* interactive (interactive backend in jupyter notebookswith parameter sliders)
+* numpyro (bayesian inference and stochastic variational inference)
+* pyabc (approximate bayesian inference)
+* pymoo (experimental! multi-objective optimization)
+
+
 ## Why use `pymob.inference`?
 
 The goal of `pymob` is to reduce the overhead for exploring, parameterizing and comparing
