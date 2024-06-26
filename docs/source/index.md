@@ -1,10 +1,14 @@
-.. pymob documentation master file, created by
-   sphinx-quickstart on Mon Jan 15 11:21:56 2024.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 Pymob documentation
 ===================
+
+```{toctree}
+   :maxdepth: 1
+   :hidden: 
+
+   User Guide <user_guide/index>
+   Examples <examples/index>
+   API reference <api/pymob>
+```
 
 Pymob is a Python based model building platform. 
 It abstracts repetitive tasks in the modeling process so that you can focus on building models, asking questions to the real world and learn from observations.
@@ -13,21 +17,8 @@ The idea of `pymob` originated from the frustration with fitting complex models 
 
 The main strength of `pymob` is to provide a uniform interface for describing models and using this model to fit a variety of state-of-the-art optimization and inference algorithms on it.
 
-Currently, supported inference backends are:
-
-* interactive (interactive backend in jupyter notebookswith parameter sliders)
-* numpyro (bayesian inference and stochastic variational inference)
-* pyabc (approximate bayesian inference)
-* pymoo (experimental! multi-objective optimization)
 
 
-.. toctree::
-   :maxdepth: 1
-   :hidden: Contents:
-
-   user_guide/index
-   examples/index
-   api/pymob
 
 
 Indices and tables
