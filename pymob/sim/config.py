@@ -1,10 +1,14 @@
 import os
+import sys
+from glob import glob
 import configparser
 import warnings
+import importlib
 import logging
 import multiprocessing as mp
 from typing import List, Optional, Union, Dict, Any, Literal, Callable
 from typing_extensions import Annotated
+from types import ModuleType
 import tempfile
 
 import numpy as np
@@ -70,13 +74,16 @@ class Casestudy(BaseModel):
     name: str = "unnamed_case_study"
     scenario: str = "unnamed_scenario"
     package: str = "case_studies"
-    
+    modules: OptionListStr = ["sim", "mod", "prob", "data", "plot"]
+    simulation: str = "Simulation"
+
     output: Optional[str] = None
     data: Optional[str] = None
 
     observations: OptionListStr = []
     
     logging: str = "DEBUG"
+    logfile: Optional[str] = None
 
     @computed_field
     @property
@@ -298,6 +305,7 @@ class Config(BaseModel):
     """Configuration manager for pymob."""
     model_config = {"validate_assignment" : True, "extra": "allow", "protected_namespaces": ()}
     _config: configparser.ConfigParser
+    _modules: Dict[str,ModuleType]
 
     def __init__(
         self,
@@ -327,6 +335,7 @@ class Config(BaseModel):
         super().__init__(**cfg_dict)
 
         self._config = _config
+        self._modules = {}
 
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
     simulation: Simulation = Field(default=Simulation())
@@ -402,3 +411,54 @@ class Config(BaseModel):
         if write:
             with open(file_path, "w") as f:
                 self._config.write(f)
+
+
+    def import_casestudy_modules(self):
+        """
+        this script handles the import of a case study without the typical 
+        __init__.py file. It iterates through all .py files in the root directory
+        of the case study (typically: sim, mod, stats, plot, data, prior)
+        and imports them with import_module(...)
+        """
+
+        # append relevant paths to sys
+        package = os.path.join(
+            self.case_study.root, 
+            self.case_study.package
+        )
+        if package not in sys.path:
+            sys.path.append(package)
+            print(f"Appended '{package}' to PATH")
+    
+        case_study = os.path.join(
+            self.case_study.root, 
+            self.case_study.package,
+            self.case_study.name
+        )
+        if case_study not in sys.path:
+            sys.path.append(case_study)
+            print(f"Appended '{case_study}' to PATH")
+
+        for module in self.case_study.modules:
+            try:
+                m = importlib.import_module(module, package=case_study)
+                self._modules.update({module: m})
+            except ModuleNotFoundError:
+                warnings.warn(
+                    f"Module {module}.py not found in {case_study}."
+                    f"Missing modules can lead to unexpected behavior."
+                    "If a module is not imported, you can specify it in the "
+                    "Config 'config.case_study.modules = [...]'"
+                )
+
+    def import_simulation_from_case_study(self) -> Callable:
+        try:
+            Simulation = getattr(self._modules["sim"], self.case_study.simulation)
+        except:
+            ImportError(
+                f"Simulation class {self.case_study.simulation} "
+                "could not be found. Make sure the simulaton option is spelled "
+                "correctly or specify an class that exists in sim.py"
+            )
+        
+        return Simulation

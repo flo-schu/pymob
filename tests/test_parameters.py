@@ -4,10 +4,10 @@ from matplotlib import pyplot as plt
 
 from pymob.simulation import SimulationBase
 
-from tests.fixtures import init_test_case_study
+from tests.fixtures import init_simulation_casestudy_api
 
 def test_casestudy_api():
-    sim = init_test_case_study("test_scenario")
+    sim = init_simulation_casestudy_api("test_scenario")
     assert sim.model_parameter_dict == {'alpha': 0.5, 'beta': 0.02}
 
 
