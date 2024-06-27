@@ -152,6 +152,8 @@ class SimulationBase:
 
         """
 
+        self.validate()
+
         self.load_modules()
 
         self.initialize(input=self.config.input_file_paths)
