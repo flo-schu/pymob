@@ -122,7 +122,6 @@ class SimulationBase:
             self.config = Config(config=config)
         self._observations: xr.Dataset = xr.Dataset()
         self._coordinates: Dict = {}
-        self.var_dim_mapper: Dict[str, List[str]] = {}
         self.free_model_parameters: List = []
 
         self.model_parameters: Dict = {}
@@ -156,7 +155,6 @@ class SimulationBase:
         self.load_modules()
 
         self.initialize(input=self.config.input_file_paths)
-        self.var_dim_mapper = self.create_dim_index()
         
         # coords = self.set_coordinates(input=self.config.input_file_paths)
         # self.coordinates = self.create_coordinates(coordinate_data=coords)
@@ -1107,11 +1105,14 @@ class SimulationBase:
     def evaluator_dim_order(self):
         return self.config.simulation.evaluator_dim_order
 
-    def create_dim_index(self) -> Dict[str, List[str]]:
+    @property
+    def var_dim_mapper(self) -> Dict[str, List[str]]:
         # TODO: If a dimensionality config seciton is implemented this function
         # may become superflous
-        sim_dims = self.dimensions
-        evaluator_dims = self.evaluator_dim_order
+        sim_dims = self.config.simulation.dimensions
+        evaluator_dims = self.config.simulation.evaluator_dim_order
+        if len(evaluator_dims) == 0:
+            evaluator_dims = sim_dims
         obs_ordered = self.observations.transpose(*sim_dims)
 
         var_dim_mapper = {}
