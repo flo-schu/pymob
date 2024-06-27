@@ -162,15 +162,8 @@ class SimulationBase:
         # self.coordinates = self.create_coordinates(coordinate_data=coords)
         self.free_model_parameters  = self.set_free_model_parameters()
 
-        output_dir = self.config.case_study.output_path
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            print(f"Created directory: {output_dir}")
-
-        scenario_dir = self.config.case_study.scenario_path
-        if not os.path.exists(scenario_dir):
-            os.makedirs(scenario_dir)
-            print(f"Created directory: {scenario_dir}")
+        self.config.create_directory(directory="results")
+        self.config.create_directory(directory="scenario")
 
         # TODO: set up logger
         self.parameterize = partial(self.parameterize, model_parameters=self.model_parameters)

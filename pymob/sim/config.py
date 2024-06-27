@@ -75,7 +75,7 @@ class Casestudy(BaseModel):
     scenario: str = "unnamed_scenario"
     package: str = "case_studies"
     modules: OptionListStr = ["sim", "mod", "prob", "data", "plot"]
-    simulation: str = "Simulation"
+    simulation: str = Field(default="Simulation", description="Simulation Class defined in sim.py module in the case study.")
 
     output: Optional[str] = None
     data: Optional[str] = None
@@ -393,7 +393,7 @@ class Config(BaseModel):
             by_alias=True, 
             mode="json", 
             exclude_none=True,
-            exclude={"case_study": {"output_path", "data_path", "root", "init_root"}}
+            exclude={"case_study": {"output_path", "data_path", "root", "init_root", "default_settings_path"}}
         )
         self._config.update(**settings)
 
@@ -411,6 +411,27 @@ class Config(BaseModel):
             with open(file_path, "w") as f:
                 self._config.write(f)
 
+    def create_directory(self, directory: Literal["results", "scenario"], force=False):
+        if directory == "results":
+            p = os.path.abspath(self.case_study.output_path)
+        elif directory == "scenario":
+            p = os.path.abspath(self.case_study.scenario_path)
+        else:
+            raise NotImplementedError(
+                f"{directory.capitalize()} is not an expected directory in the "
+                "case study logic. Use one of 'results' or 'scenario'."
+            )
+
+        if os.path.exists(p):
+            print(f"{directory.capitalize()} directory exists at '{p}'.")
+            return
+        else:
+            answer = input(f"Create {directory} directory at '{p}'? [Y/n]")
+            if answer.lower() == "y" or answer.lower() == "" or force:
+                os.makedirs(p)
+                print(f"{directory.capitalize()} directory created at '{p}'.")
+            else:
+                print(f"No {directory} directory created.")
 
     def import_casestudy_modules(self):
         """
