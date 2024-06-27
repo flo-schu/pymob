@@ -1,6 +1,6 @@
 import pytest
 import tempfile
-from pymob.simulation import SimulationBase
+from pymob.simulation import SimulationBase, Config
 from pymob.utils.store_file import import_package
 import xarray as xr
 import os
@@ -96,6 +96,22 @@ def test_standalone_casestudy():
         else:
             os.remove(p)
 
+def test_parameter_parsing():
+    config = Config()
+
+    io = "value=1 min=0 max=3"
+
+    # test validation
+    config.model_parameters.test = io
+    assert config.model_parameters.test == {"value": "1", "min": "0", "max": "3"} # type: ignore
+
+    # test export
+    serialized = config.model_parameters.model_dump(mode="json")
+    assert serialized == {"test": io}
+
+    config.__pydantic_extra__
+
 if __name__ == "__main__":
     # test_simulation()
+    test_parameter_parsing()
     pass

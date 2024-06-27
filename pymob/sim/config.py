@@ -5,6 +5,7 @@ import configparser
 import warnings
 import importlib
 import logging
+import json
 import multiprocessing as mp
 from typing import List, Optional, Union, Dict, Any, Literal, Callable
 from typing_extensions import Annotated
@@ -13,7 +14,10 @@ import tempfile
 
 import numpy as np
 
-from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+from pydantic import (
+    BaseModel, Field, computed_field, field_validator, model_validator, 
+    ConfigDict
+)
 from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 
@@ -30,6 +34,28 @@ def string_to_list(option: Union[List, str]) -> List:
     else:
         return [i.strip() for i in option.split(" ")]
 
+def string_to_dict(option: Union[Dict[str,str|float|int], str]) -> Dict:
+    """Expects a string of this form 
+    e.g. 'value=1 max=10 min=0 prior=Lognormal(loc=2,scale=1)'
+    """
+    if isinstance(option, dict):
+        return option
+    
+    if len(option) == 0:
+        return {}
+    elif " " not in option:
+        k, v = option.split("=", maxsplit=1)
+        return {k: v}
+    else:
+        retdict = {}
+        for i in option.split(" "):
+            k, v = i.strip().split(sep="=", maxsplit=1)
+            retdict.update({k:v})
+        return retdict
+
+def dict_to_string(dct: Dict):
+    return " ".join([f"{k}={v}" for k, v in dct.items()])
+
 
 def list_to_string(lst: List):
     return " ".join([str(l) for l in lst])
@@ -41,12 +67,24 @@ serialize_list_to_string = PlainSerializer(
     when_used="json"
 )
 
+serialize_dict_to_string = PlainSerializer(
+    dict_to_string, 
+    return_type=str, 
+    when_used="json"
+)
+
 to_str = PlainSerializer(lambda x: str(x), return_type=str, when_used="json")
 
 OptionListStr = Annotated[
     List[str], 
     BeforeValidator(string_to_list), 
     serialize_list_to_string
+]
+
+OptionDictStr = Annotated[
+    Dict[str,str|float|int], 
+    BeforeValidator(string_to_dict), 
+    serialize_dict_to_string
 ]
 
 OptionListFloat = Annotated[
@@ -227,7 +265,7 @@ class Inference(BaseModel):
 
 class Multiprocessing(BaseModel):
     _name = "multiprocessing"
-    model_config = {"validate_assignment" : True, "extra": "ignore"}
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
 
     # TODO: Use as private field
     cores: Annotated[int, to_str] = 1
@@ -242,7 +280,8 @@ class Multiprocessing(BaseModel):
             return cpu_set
         
 class Modelparameters(BaseModel):
-    model_config = {"validate_assignment" : True, "extra": "allow"}
+    __pydantic_extra__: Dict[str,OptionDictStr]
+    model_config = ConfigDict(extra="allow", validate_assignment=True)
 
 
 class Pyabc(BaseModel):
@@ -274,7 +313,7 @@ class Redis(BaseModel):
 
 
 class Pymoo(BaseModel):
-    model_config = {"validate_assignment" : True}
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
 
     algortihm: str = "UNSGA3"
     population_size: Annotated[int, to_str] = 100
@@ -285,7 +324,7 @@ class Pymoo(BaseModel):
     verbose: Annotated[bool, to_str] = True
     
 class Numpyro(BaseModel):
-    model_config = {"validate_assignment" : True}
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
     user_defined_probability_model: Optional[str] = None
     user_defined_preprocessing: Optional[str] = None
     gaussian_base_distribution: bool = False
@@ -339,7 +378,7 @@ class Config(BaseModel):
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
     simulation: Simulation = Field(default=Simulation())
     inference: Inference = Field(default=Inference())
-    model_parameters: Modelparameters = Field(default=Modelparameters(), alias="free-model-parameters")
+    model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters")
     multiprocessing: Multiprocessing = Field(default=Multiprocessing())
     inference_pyabc: Pyabc = Field(default=Pyabc(), alias="inference.pyabc")
     inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")
