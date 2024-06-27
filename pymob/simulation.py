@@ -1050,7 +1050,7 @@ class SimulationBase:
         # create Param instances
         parameters = []
         for param_name, param_dict in parameter_dict.items():
-            value = parse(param_dict.get("value"))
+            value = param_dict.get("value", 1)
             if isinstance(value, (int, float)):
                 p = param.FloatParam(
                     value=value,
