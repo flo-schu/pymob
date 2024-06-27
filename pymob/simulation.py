@@ -736,7 +736,7 @@ class SimulationBase:
             )
 
     @staticmethod
-    def parameterize(free_parameters: list[param.Param], model_parameters) -> dict:
+    def parameterize(free_parameters: Dict[str,float|str|int], model_parameters: Dict) -> dict:
         """
         Optional. Set parameters and initial values of the model. 
         Must return a dictionary with the keys 'y0' and 'parameters'
@@ -757,10 +757,16 @@ class SimulationBase:
         tulpe: tuple of parameters, can have any length.
         """
         parameters = model_parameters["parameters"]
-        y0 = model_parameters["y0"]
+        parameters.update(free_parameters)
 
-        parameters.update({p.name: p.value for p in free_parameters})
-        return {"y0": y0, "parameters": parameters} 
+        updated_model_parameters = dict(parameters=parameters)
+        for k, v in model_parameters.items():
+            if k == "parameters":
+                continue
+            
+            updated_model_parameters["k"] = v
+
+        return updated_model_parameters
 
     def run(self):
         """
