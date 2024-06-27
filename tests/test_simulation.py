@@ -5,7 +5,7 @@ from click.testing import CliRunner
 
 from pymob.simulation import SimulationBase
 
-from fixtures import init_simulation_casestudy_api, linear_model
+from tests.fixtures import init_simulation_casestudy_api, linear_model
 
 def test_simulation():
     sim = init_simulation_casestudy_api()
@@ -75,6 +75,6 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    test_minimal_simulation()
+    # test_minimal_simulation()
     # test_scripting_API()
     # test_interactive_mode()
