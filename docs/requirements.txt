@@ -1,6 +1,7 @@
 sphinx==7.2.6
 myst-parser==2.0.0
 sphinx-book-theme==1.1.0
+pydata-sphinx-theme==0.15.1
 sphinxcontrib-applehelp==1.0.8
 sphinxcontrib-devhelp==1.0.6
 sphinxcontrib-htmlhelp==2.0.5

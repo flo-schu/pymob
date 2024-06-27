@@ -4,6 +4,14 @@ pymob.sim package
 Submodules
 ----------
 
+pymob.sim.config module
+---------------------------
+
+.. automodule:: pymob.sim.config
+   :members:
+   :undoc-members: 
+   :show-inheritance:
+
 pymob.sim.base module
 ---------------------
 
