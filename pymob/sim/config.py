@@ -369,6 +369,12 @@ class Modelparameters(BaseModel):
     @property
     def free_value_dict(self) -> Dict[str,float|List[float]]:
         return {k:v.value for k, v in self.free.items()}
+    
+    @property
+    def value_dict(self) -> Dict[str,float|List[float]]:
+        return {k:v.value for k, v in self.all.items()}
+    
+    
 
 class Pyabc(BaseModel):
     model_config = {"validate_assignment" : True}
