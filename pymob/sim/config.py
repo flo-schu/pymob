@@ -557,8 +557,12 @@ class Config(BaseModel):
             print(f"{directory.capitalize()} directory exists at '{p}'.")
             return
         else:
-            answer = input(f"Create {directory} directory at '{p}'? [Y/n]")
-            if answer.lower() == "y" or answer.lower() == "" or force:
+            if not force:
+                answer = input(f"Create {directory} directory at '{p}'? [Y/n]")
+            else:
+                answer = "y"
+
+            if answer.lower() == "y" or answer.lower() == "":
                 os.makedirs(p)
                 print(f"{directory.capitalize()} directory created at '{p}'.")
             else:
