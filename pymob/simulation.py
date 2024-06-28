@@ -251,8 +251,35 @@ class SimulationBase:
             self.solver = getattr(self._mod, _solver)
 
     def set_coordinates(self, input):
+        # TODO remove input statement. I think set_coordinates will no longer
+        # be necessary for pymob
         dimensions = self.config.simulation.dimensions
         return [self.observations[dim].values for dim in dimensions]
+
+    def reset_coordinate(self, dim):
+        self.coordinates[dim] = self.observations[dim].values
+
+    def reset_all_coordinates(self):
+        self.coordinates = self.set_coordinates(input=self.config.input_file_paths)
+
+    def create_interpolated_coordinates(self, dim):
+        """Combines coordinates from observations and from interpolation"""
+        if "x_in" not in self.model_parameters:
+            warnings.warn(
+                "No interpolated input available, coordinates will remain unchanged"
+            )
+            return
+
+        # this resets the coordinates to observation coordinates
+        self.reset_coordinate(dim=dim) 
+
+        new_coord = np.unique(np.concatenate([
+            self.coordinates[dim], 
+            self.model_parameters["x_in"][dim].values
+        ]))
+        new_coord.sort()
+
+        self.coordinates[dim] = new_coord
 
     def benchmark(self, n=100, **kwargs):
         evaluator = self.dispatch(theta=self.model_parameter_dict, **kwargs)
