@@ -159,8 +159,8 @@ class SimulationBase:
         
         # coords = self.set_coordinates(input=self.config.input_file_paths)
         # self.coordinates = self.create_coordinates(coordinate_data=coords)
-        self.config.create_directory(directory="results")
-        self.config.create_directory(directory="scenario")
+        self.config.create_directory(directory="results", force=True)
+        self.config.create_directory(directory="scenario", force=True)
 
         # TODO: set up logger
         self.parameterize = partial(self.parameterize, model_parameters=self.model_parameters)
