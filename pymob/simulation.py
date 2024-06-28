@@ -23,7 +23,7 @@ from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
-from pymob.sim.config import Config
+from pymob.sim.config import Config, FloatParam, ArrayParam
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -122,7 +122,6 @@ class SimulationBase:
             self.config = Config(config=config)
         self._observations: xr.Dataset = xr.Dataset()
         self._coordinates: Dict = {}
-        self.free_model_parameters: List = []
 
         self.model_parameters: Dict = {}
         # self.observations = None
@@ -160,8 +159,6 @@ class SimulationBase:
         
         # coords = self.set_coordinates(input=self.config.input_file_paths)
         # self.coordinates = self.create_coordinates(coordinate_data=coords)
-        self.free_model_parameters  = self.set_free_model_parameters()
-
         self.config.create_directory(directory="results")
         self.config.create_directory(directory="scenario")
 
@@ -189,6 +186,22 @@ class SimulationBase:
     def coordinates(self, value):
         self._coordinates = self.create_coordinates(coordinate_data=value)
 
+    @property
+    def free_model_parameters(self) -> List[FloatParam|ArrayParam]:
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        free_params = self.config.model_parameters.free.copy()
+        for k, param in free_params.items():
+            param.name = k
+        return list(free_params.values())
+
+    @property
+    def fixed_model_parameters(self) -> Dict[str, FloatParam|ArrayParam]:
+        return self.config.model_parameters.fixed
+
+    @property
+    def all_model_parameters(self) -> Dict[str, FloatParam|ArrayParam]:
+        return self.config.model_parameters.all
 
     def __repr__(self) -> str:
         return (
@@ -364,7 +377,7 @@ class SimulationBase:
             value = func(**kwargs)
 
             if not isinstance(value, xr.DataArray):
-                value.shape != tuple(input_dims.values())
+                assert value.shape != tuple(input_dims.values())
                 value = np.broadcast_to(value, tuple(input_dims.values()))
                 value = xr.DataArray(value, coords=input_coords)
 
@@ -509,12 +522,12 @@ class SimulationBase:
             return out
 
         sliders = {}
-        for par in self.free_model_parameters:
+        for key, par in self.config.model_parameters.free.items():
             s = widgets.FloatSlider(
-                par.value, description=par.name, min=par.min, max=par.max,
+                par.value, description=key, min=par.min, max=par.max,
                 step=par.step
             )
-            sliders.update({par.name: s})
+            sliders.update({key: s})
 
         def func(theta):
             extra = self.config.inference.extra_vars
@@ -941,19 +954,27 @@ class SimulationBase:
     # TODO Outsource model parameters also to config (if it makes sense)
     @property
     def model_parameter_values(self):
-        return [p.value for p in self.free_model_parameters]
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        return [p.value for p in self.config.model_parameters.free.values()]
     
     @property
     def model_parameter_names(self):
-        return [p.name for p in self.free_model_parameters]
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        return list(self.config.model_parameters.free.keys())
     
     @property
     def n_free_parameters(self):
-        return len(self.free_model_parameters)
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        return self.config.model_parameters.n_free
 
     @property
     def model_parameter_dict(self):
-        return {p.name:p.value for p in self.free_model_parameters}
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        return self.config.model_parameters.free_value_dict
 
 
     @property
@@ -1025,78 +1046,6 @@ class SimulationBase:
         self.refill_consumed_seeds()
         seed = self._random_integers.pop(0)
         return seed
-
-    def set_free_model_parameters(self):
-        if self.config._config.has_section("model-parameters"):
-            warnings.warn(
-                "config section 'model-parameters' is deprecated, "
-                "use 'free-model-parameters' and 'fixed-model-parameters'", 
-                DeprecationWarning
-            )
-            params = self.config.model_parameters.model_dump()
-        elif self.config._config.has_section("free-model-parameters"):
-            params = self.config.model_parameters.model_dump()
-        else:
-            warnings.warn("No parameters were specified.")
-            params = {}
-        
-        # create a nested dictionary from model parameters
-        parameter_dict = {}
-        for par_key, par_value in params.items():
-            dp.new(parameter_dict, par_key, par_value, separator=".")
-
-        parse = lambda x: None if x is None else float(x)
-
-        # create Param instances
-        parameters = []
-        for param_name, param_dict in parameter_dict.items():
-            value = param_dict.get("value", 1)
-            if isinstance(value, (int, float)):
-                p = param.FloatParam(
-                    value=value,
-                    name=param_name,
-                    min=parse(param_dict.get("min")),
-                    max=parse(param_dict.get("max")),
-                    step=parse(param_dict.get("step")),
-                    prior=param_dict.get("prior", None)
-                )
-            else:
-                # check for array notation
-                pattern = r"(\d+(\.\d+)?(\s+\d+(\.\d+)?)*|\s*)"
-                if re.fullmatch(pattern, value):
-                    value = np.array([float(v) for v in value.split(" ")])
-                    p = param.ArrayParam(
-                        value=value,
-                        name=param_name,
-                        min=param_dict.get("min", None),
-                        max=param_dict.get("max", None),
-                        step=param_dict.get("step", None),
-                        prior=param_dict.get("prior", None)
-                    )
-                else:
-                    raise NotImplementedError(
-                        f"Parameter specification '{value}' cannot be parsed."
-                    )
-            parameters.append(p)
-
-        return parameters
-
-    @property
-    def fixed_model_parameters(self):
-        fixed_parameters = {}
-        params = parse_config_section(self.config._config["fixed-model-parameters"])
-        for k, v in params.items():
-            vlist = v.split(" ")
-            floatlist = [float(v) for v in vlist]
-            if len(vlist) == 1:
-                v_ = floatlist[0]
-
-            else: 
-                v_ = np.array(floatlist)
-
-            fixed_parameters.update({k: v_})
-
-        return fixed_parameters
 
     @property
     def error_model(self):

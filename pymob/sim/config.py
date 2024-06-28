@@ -1,5 +1,7 @@
 import os
+import re
 import sys
+from dataclasses import dataclass
 from glob import glob
 import configparser
 import warnings
@@ -13,15 +15,37 @@ from types import ModuleType
 import tempfile
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 from pydantic import (
     BaseModel, Field, computed_field, field_validator, model_validator, 
-    ConfigDict
+    ConfigDict, TypeAdapter, ValidationError
 )
 from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 
 from pymob.utils.store_file import scenario_file, converters
+
+
+class FloatParam(BaseModel):
+    name: Optional[str] = None
+    value: float = 0.0
+    min: Optional[float] = None
+    max: Optional[float] = None
+    step: Optional[float] = None
+    prior: Optional[str] = None
+    free: bool = True
+
+
+class ArrayParam(BaseModel):
+    name: Optional[str] = None
+    value: List[float] = [0.0]
+    min: Optional[List[float]] = None
+    max: Optional[List[float]] = None
+    step: Optional[List[float]] = None
+    prior: Optional[List[str]] = None
+    free: bool = True
+
 
 def string_to_list(option: Union[List, str]) -> List:
     if isinstance(option, (list, tuple)):
@@ -34,31 +58,65 @@ def string_to_list(option: Union[List, str]) -> List:
     else:
         return [i.strip() for i in option.split(" ")]
 
-def string_to_dict(option: Union[Dict[str,str|float|int], str]) -> Dict:
+
+def string_to_dict(
+        option: Union[Dict[str,str|float|int|List[float|int]], str]
+    ) -> Dict[str,str|float|int|List[float|int]]:
     """Expects a string of this form 
     e.g. 'value=1 max=10 min=0 prior=Lognormal(loc=2,scale=1)'
     """
-    if isinstance(option, dict):
+    if isinstance(option, Dict):
         return option
     
-    if len(option) == 0:
-        return {}
-    elif " " not in option:
-        k, v = option.split("=", maxsplit=1)
-        return {k: v}
     else:
         retdict = {}
         for i in option.split(" "):
             k, v = i.strip().split(sep="=", maxsplit=1)
-            retdict.update({k:v})
+            parsed = False
+            if not parsed:
+                try:
+                    parsed_value = TypeAdapter(List[float]).validate_json(v)
+                    parsed = True
+                except ValidationError:
+                    pass
+
+            if not parsed:
+                try:
+                    parsed_value = TypeAdapter(float).validate_json(v)
+                    parsed = True
+                except ValidationError:
+                    pass
+
+            if not parsed:
+                parsed_value = v
+
+            retdict.update({k:parsed_value})
+                
         return retdict
 
+
+def string_to_param(option:str|FloatParam|ArrayParam) -> FloatParam|ArrayParam:
+    if isinstance(option, FloatParam|ArrayParam):
+        return option
+    else:
+        param_dict = string_to_dict(option)
+        if isinstance(param_dict.get("value"), float):
+            return FloatParam.model_validate(param_dict, strict=False)
+        
+        else:
+            return ArrayParam.model_validate(param_dict, strict=False)
+    
+
 def dict_to_string(dct: Dict):
-    return " ".join([f"{k}={v}" for k, v in dct.items()])
+    return " ".join([f"{k}={v}".replace(" ", "") for k, v in dct.items()])
 
 
 def list_to_string(lst: List):
     return " ".join([str(l) for l in lst])
+
+
+def param_to_string(prm: ArrayParam|FloatParam):
+    return dict_to_string(prm.model_dump(exclude_none=True))
 
 
 serialize_list_to_string = PlainSerializer(
@@ -67,13 +125,23 @@ serialize_list_to_string = PlainSerializer(
     when_used="json"
 )
 
+
 serialize_dict_to_string = PlainSerializer(
     dict_to_string, 
     return_type=str, 
     when_used="json"
 )
 
+
+serialize_param_to_string = PlainSerializer(
+    param_to_string, 
+    return_type=str, 
+    when_used="json"
+)
+
+
 to_str = PlainSerializer(lambda x: str(x), return_type=str, when_used="json")
+
 
 OptionListStr = Annotated[
     List[str], 
@@ -81,27 +149,26 @@ OptionListStr = Annotated[
     serialize_list_to_string
 ]
 
+
 OptionDictStr = Annotated[
-    Dict[str,str|float|int], 
+    Dict[str,str|float|int|List[float|int]], 
     BeforeValidator(string_to_dict), 
     serialize_dict_to_string
 ]
+
+
+OptionParam = Annotated[
+    FloatParam|ArrayParam, 
+    BeforeValidator(string_to_param), 
+    serialize_param_to_string
+]
+
 
 OptionListFloat = Annotated[
     List[float], 
     BeforeValidator(string_to_list), 
     serialize_list_to_string
 ]
-
-
-class FloatParam(BaseModel):
-    name: str
-    value: Optional[float]
-    min: Optional[float]
-    max: Optional[float]
-    step: Optional[float]
-    prior: Optional[str]
-
 
         
 class Casestudy(BaseModel):
@@ -280,9 +347,28 @@ class Multiprocessing(BaseModel):
             return cpu_set
         
 class Modelparameters(BaseModel):
-    __pydantic_extra__: Dict[str,OptionDictStr]
+    __pydantic_extra__: Dict[str,OptionParam]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
+    @property
+    def free(self) -> Dict[str,OptionParam]:
+        return {k:v for k, v in self.__pydantic_extra__.items() if v.free}
+
+    @property
+    def fixed(self) -> Dict[str,OptionParam]:
+        return {k:v for k, v in self.__pydantic_extra__.items() if not v.free}
+
+    @property
+    def all(self) -> Dict[str,OptionParam]:
+        return self.__pydantic_extra__
+
+    @property
+    def n_free(self) -> int:
+        return len(self.free)
+    
+    @property
+    def free_value_dict(self) -> Dict[str,float|List[float]]:
+        return {k:v.value for k, v in self.free.items()}
 
 class Pyabc(BaseModel):
     model_config = {"validate_assignment" : True}
