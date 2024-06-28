@@ -370,7 +370,7 @@ class SimulationBase:
 
         return evaluator
 
-    def parse_input(self, data=None, input=Literal["y0", "x_in"], drop_dims=["time"]):
+    def parse_input(self, input:Literal["y0", "x_in"], reference_data, drop_dims=["time"]):
         """Parses a config string e.g. y=Array([0]) or a=b to a numpy array 
         and looks up symbols in the elements of data, where data items are
         key:value pairs of a dictionary, xarray items or anything of this form
@@ -383,8 +383,8 @@ class SimulationBase:
         starting values along batch dimensions.
         """
         # parse dims and coords
-        input_dims = {k:v for k, v in self.observations.dims.items() if k not in drop_dims}
-        input_coords = {k:v for k, v in self.observations.coords.items() if k in input_dims}
+        input_dims = {k:v for k, v in reference_data.dims.items() if k not in drop_dims}
+        input_coords = {k:reference_data.coords[k] for k in input_dims}
         
         if input == "y0":
             input_list = self.config.simulation.y0
@@ -399,7 +399,7 @@ class SimulationBase:
             
             func, args = lambdify_expression(expr)
 
-            kwargs = lookup_args(args, data)
+            kwargs = lookup_args(args, reference_data)
 
             value = func(**kwargs)
 
@@ -797,7 +797,7 @@ class SimulationBase:
             if k == "parameters":
                 continue
             
-            updated_model_parameters["k"] = v
+            updated_model_parameters[k] = v
 
         return updated_model_parameters
 

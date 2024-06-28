@@ -116,7 +116,6 @@ class NumpyroBackend:
         self.config = simulation.config
         self.evaluator = self.parse_deterministic_model()
         self.prior = self.parse_model_priors()
-        self.error_model = self.parse_error_model()
 
         # parse preprocessing
         if self.user_defined_preprocessing is not None:
@@ -131,10 +130,12 @@ class NumpyroBackend:
                 self.simulation._prob, 
                 self.user_defined_probability_model
             )
-        elif self.gaussian_base_distribution:
-            self.inference_model = self.parse_probabilistic_model_with_gaussian_base()
         else:
-            self.inference_model = self.parse_probabilistic_model()
+            self.error_model = self.parse_error_model()
+            if self.gaussian_base_distribution:
+                self.inference_model = self.parse_probabilistic_model_with_gaussian_base()
+            else:
+                self.inference_model = self.parse_probabilistic_model()
 
 
         self.idata: az.InferenceData

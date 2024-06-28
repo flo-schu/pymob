@@ -158,8 +158,17 @@ def test_model_parameters():
     assert fimp == {"b": b}
     assert almp == {"a": a, "b":b}
 
+def test_error_model():
+    config = Config()
+
+    a = "lognorm(loc=1,scale=2)"
+    config.error_model.a = a
+
+    
+
 if __name__ == "__main__":
     # test_simulation()
+    test_error_model()
     test_parameter_parsing()
     test_parameter_array()
     test_model_parameters()

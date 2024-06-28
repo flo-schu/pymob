@@ -374,7 +374,10 @@ class Modelparameters(BaseModel):
     def value_dict(self) -> Dict[str,float|List[float]]:
         return {k:v.value for k, v in self.all.items()}
     
-    
+
+class Errormodel(BaseModel):
+    __pydantic_extra__: Dict[str,str]
+    model_config = ConfigDict(extra="allow", validate_assignment=True)
 
 class Pyabc(BaseModel):
     model_config = {"validate_assignment" : True}
@@ -471,6 +474,7 @@ class Config(BaseModel):
     simulation: Simulation = Field(default=Simulation())
     inference: Inference = Field(default=Inference())
     model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters")
+    error_model: Errormodel = Field(default=Errormodel(), alias="error-model")
     multiprocessing: Multiprocessing = Field(default=Multiprocessing())
     inference_pyabc: Pyabc = Field(default=Pyabc(), alias="inference.pyabc")
     inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")
