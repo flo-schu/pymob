@@ -283,9 +283,14 @@ class NumpyroBackend:
 
     def parse_model_priors(self):
         priors = {}
-        for par in self.simulation.free_model_parameters:
+        for key, par in self.config.model_parameters.free.items():
+            if par.prior is None:
+                raise AttributeError(
+                    f"No prior was defined for {par}. E.g.: "
+                    "sim.config.model_parameters.{par} = lognorm(loc=1, scale=2)"
+                )
             name, distribution, params = self.parse_parameter(
-                parname=par.name, 
+                parname=key, 
                 prior=par.prior, 
                 distribution_map=self.distribution_map
             )

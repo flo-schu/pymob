@@ -43,7 +43,7 @@ class ArrayParam(BaseModel):
     min: Optional[List[float]] = None
     max: Optional[List[float]] = None
     step: Optional[List[float]] = None
-    prior: Optional[List[str]] = None
+    prior: Optional[str] = None
     free: bool = True
 
 
