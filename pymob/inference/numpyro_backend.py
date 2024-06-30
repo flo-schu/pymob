@@ -141,10 +141,6 @@ class NumpyroBackend:
         self.idata: az.InferenceData
 
     @property
-    def plot_function(self) -> Optional[str]:
-        return self.config.inference.plot_function
-
-    @property
     def extra_vars(self):
         return self.config.inference.extra_vars
     
@@ -1025,8 +1021,9 @@ class NumpyroBackend:
         self.idata = az.from_netcdf(f"{self.simulation.output_path}/{file}")
 
 
-    def plot(self):
-        # TODO: combine prior_predictions and posterior predictions
+
+
+    def plot_diagnostics(self):
         if hasattr(self.idata, "posterior"):
             axes = az.plot_trace(
                 self.idata,
@@ -1044,12 +1041,6 @@ class NumpyroBackend:
             fig.savefig(f"{self.simulation.output_path}/pairs_posterior.png")
             plt.close()
 
-        if hasattr(self.idata, "prior_predictive"):
-            self.plot_prior_predictions()
-
-        plot_func = getattr(self.simulation, self.config.inference.plot_function)
-        plot_func()
-
     def plot_prior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={}, 
             n=None, seed=None
@@ -1066,8 +1057,6 @@ class NumpyroBackend:
             seed=seed
         )
 
-        plot_func = getattr(self.simulation, self.config.inference.plot_function)
-        
         ax = self.plot_predictions(
             observations=self.simulation.observations,
             predictions=idata.prior_predictive, # type: ignore
@@ -1108,7 +1097,23 @@ class NumpyroBackend:
 
         return ax
 
+    def plot(self):
+        self.plot_diagnostics()
 
+        plot = self.config.inference.plot
+        if isinstance(plot, str):
+            try:
+                plot_func = getattr(self.simulation, plot)
+                plot_func(self.simulation)
+            except AttributeError:
+                warnings.warn(
+                    f"Plot function {plot} was not found in the plot.py module "
+                    "Make sure the name has been spelled correctly or try to "
+                    "set the function directly to 'sim.config.inference.plot'.",
+                    category=UserWarning
+                )
+        else:
+            plot(self.simulation)
 
     def plot_predictions(
             self, 

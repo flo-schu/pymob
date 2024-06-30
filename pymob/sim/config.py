@@ -327,7 +327,7 @@ class Inference(BaseModel):
     objective_names: OptionListStr = []
     backend: Optional[str] = None
     extra_vars: OptionListStr = []
-    plot_function: Optional[str] = None
+    plot: str|Callable = lambda simulation: None
     n_predictions: Annotated[int, to_str] = 1
 
 class Multiprocessing(BaseModel):
@@ -387,7 +387,6 @@ class Pyabc(BaseModel):
     minimum_epsilon: Annotated[float, to_str] = 0.0
     min_eps_diff: Annotated[float, to_str] = 0.0
     max_nr_populations: Annotated[int, to_str] = 1000
-    plot_function: Optional[str] = None
     
     # database configuration
     database_path: str = f"{tempfile.gettempdir()}/pyabc.db"
@@ -473,8 +472,8 @@ class Config(BaseModel):
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
     simulation: Simulation = Field(default=Simulation())
     inference: Inference = Field(default=Inference())
-    model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters")
-    error_model: Errormodel = Field(default=Errormodel(), alias="error-model")
+    model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters") #type: ignore
+    error_model: Errormodel = Field(default=Errormodel(), alias="error-model") # type: ignore
     multiprocessing: Multiprocessing = Field(default=Multiprocessing())
     inference_pyabc: Pyabc = Field(default=Pyabc(), alias="inference.pyabc")
     inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")

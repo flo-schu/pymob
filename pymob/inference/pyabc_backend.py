@@ -168,20 +168,21 @@ class PyabcBackend:
             return param_map, dist_map
 
     
-    @property
-    def plot_function(self):
-        return self.config.inference_pyabc.plot_function
-
     def plot(self):
-        if self.plot_function is not None:
-            plot_func = getattr(self.simulation, self.plot_function)
-            plot_func()
+        plot = self.config.inference.plot
+        if isinstance(plot, str):
+            try:
+                plot_func = getattr(self.simulation, plot)
+                plot_func(self.simulation)
+            except AttributeError:
+                warnings.warn(
+                    f"Plot function {plot} was not found in the plot.py module "
+                    "Make sure the name has been spelled correctly or try to "
+                    "set the function directly to 'sim.config.inference.plot'.",
+                    category=UserWarning
+                )
         else:
-            warnings.warn(
-                "No posterior prediction plot function specified in config under "
-                "inference.pyabc.plot_function",
-                category=UserWarning
-            )
+            plot(self.simulation)
         
 
     def model_parser(self):
