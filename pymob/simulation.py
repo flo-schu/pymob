@@ -1,5 +1,6 @@
 import os
 import sys
+import copy
 import inspect
 import warnings
 import importlib
@@ -23,7 +24,7 @@ from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
-from pymob.sim.config import Config
+from pymob.sim.config import Config, FloatParam, ArrayParam
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -121,9 +122,8 @@ class SimulationBase:
         else:
             self.config = Config(config=config)
         self._observations: xr.Dataset = xr.Dataset()
+        self._observations_copy: xr.Dataset = xr.Dataset()
         self._coordinates: Dict = {}
-        self.var_dim_mapper: Dict[str, List[str]] = {}
-        self.free_model_parameters: List = []
 
         self.model_parameters: Dict = {}
         # self.observations = None
@@ -153,24 +153,16 @@ class SimulationBase:
 
         """
 
+        self.validate()
+
         self.load_modules()
 
         self.initialize(input=self.config.input_file_paths)
-        self.var_dim_mapper = self.create_dim_index()
         
         # coords = self.set_coordinates(input=self.config.input_file_paths)
         # self.coordinates = self.create_coordinates(coordinate_data=coords)
-        self.free_model_parameters  = self.set_free_model_parameters()
-
-        output_dir = self.config.case_study.output_path
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            print(f"Created directory: {output_dir}")
-
-        scenario_dir = self.config.case_study.scenario_path
-        if not os.path.exists(scenario_dir):
-            os.makedirs(scenario_dir)
-            print(f"Created directory: {scenario_dir}")
+        self.config.create_directory(directory="results", force=True)
+        self.config.create_directory(directory="scenario", force=True)
 
         # TODO: set up logger
         self.parameterize = partial(self.parameterize, model_parameters=self.model_parameters)
@@ -184,6 +176,9 @@ class SimulationBase:
     @observations.setter
     def observations(self, value):
         self._observations = value
+        if sum(tuple(self._observations_copy.sizes.values())) == 0:
+            self._observations_copy = copy.deepcopy(value)
+
         self.create_data_scaler()
         self.coordinates = self.set_coordinates(input=self.config.input_file_paths)
         
@@ -196,6 +191,22 @@ class SimulationBase:
     def coordinates(self, value):
         self._coordinates = self.create_coordinates(coordinate_data=value)
 
+    @property
+    def free_model_parameters(self) -> List[FloatParam|ArrayParam]:
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        free_params = self.config.model_parameters.free.copy()
+        for k, param in free_params.items():
+            param.name = k
+        return list(free_params.values())
+
+    @property
+    def fixed_model_parameters(self) -> Dict[str, FloatParam|ArrayParam]:
+        return self.config.model_parameters.fixed
+
+    @property
+    def all_model_parameters(self) -> Dict[str, FloatParam|ArrayParam]:
+        return self.config.model_parameters.all
 
     def __repr__(self) -> str:
         return (
@@ -245,8 +256,38 @@ class SimulationBase:
             self.solver = getattr(self._mod, _solver)
 
     def set_coordinates(self, input):
+        # TODO remove input statement. I think set_coordinates will no longer
+        # be necessary for pymob
         dimensions = self.config.simulation.dimensions
         return [self.observations[dim].values for dim in dimensions]
+
+    def reset_coordinate(self, dim:str):
+        self.coordinates[dim] = self.observations[dim].values
+
+    def reset_data_variable(self, data_variable:str):
+        self.observations[data_variable] = self._observations_copy[data_variable]
+
+    def reset_all_coordinates(self):
+        self.coordinates = self.set_coordinates(input=self.config.input_file_paths)
+
+    def create_interpolated_coordinates(self, dim):
+        """Combines coordinates from observations and from interpolation"""
+        if "x_in" not in self.model_parameters:
+            warnings.warn(
+                "No interpolated input available, coordinates will remain unchanged"
+            )
+            return
+
+        # this resets the coordinates to observation coordinates
+        self.reset_coordinate(dim=dim) 
+
+        new_coord = np.unique(np.concatenate([
+            self.coordinates[dim], 
+            self.model_parameters["x_in"][dim].values
+        ]))
+        new_coord.sort()
+
+        self.coordinates[dim] = new_coord
 
     def benchmark(self, n=100, **kwargs):
         evaluator = self.dispatch(theta=self.model_parameter_dict, **kwargs)
@@ -337,7 +378,7 @@ class SimulationBase:
 
         return evaluator
 
-    def parse_input(self, data=None, input=Literal["y0", "x_in"], drop_dims=["time"]):
+    def parse_input(self, input:Literal["y0", "x_in"], reference_data, drop_dims=["time"]):
         """Parses a config string e.g. y=Array([0]) or a=b to a numpy array 
         and looks up symbols in the elements of data, where data items are
         key:value pairs of a dictionary, xarray items or anything of this form
@@ -350,8 +391,8 @@ class SimulationBase:
         starting values along batch dimensions.
         """
         # parse dims and coords
-        input_dims = {k:v for k, v in self.observations.dims.items() if k not in drop_dims}
-        input_coords = {k:v for k, v in self.observations.coords.items() if k in input_dims}
+        input_dims = {k:v for k, v in reference_data.dims.items() if k not in drop_dims}
+        input_coords = {k:reference_data.coords[k] for k in input_dims}
         
         if input == "y0":
             input_list = self.config.simulation.y0
@@ -366,12 +407,12 @@ class SimulationBase:
             
             func, args = lambdify_expression(expr)
 
-            kwargs = lookup_args(args, data)
+            kwargs = lookup_args(args, reference_data)
 
             value = func(**kwargs)
 
             if not isinstance(value, xr.DataArray):
-                value.shape != tuple(input_dims.values())
+                assert value.shape != tuple(input_dims.values())
                 value = np.broadcast_to(value, tuple(input_dims.values()))
                 value = xr.DataArray(value, coords=input_coords)
 
@@ -516,12 +557,12 @@ class SimulationBase:
             return out
 
         sliders = {}
-        for par in self.free_model_parameters:
+        for key, par in self.config.model_parameters.free.items():
             s = widgets.FloatSlider(
-                par.value, description=par.name, min=par.min, max=par.max,
+                par.value, description=key, min=par.min, max=par.max,
                 step=par.step
             )
-            sliders.update({par.name: s})
+            sliders.update({key: s})
 
         def func(theta):
             extra = self.config.inference.extra_vars
@@ -736,7 +777,7 @@ class SimulationBase:
             )
 
     @staticmethod
-    def parameterize(free_parameters: list[param.Param], model_parameters) -> dict:
+    def parameterize(free_parameters: Dict[str,float|str|int], model_parameters: Dict) -> dict:
         """
         Optional. Set parameters and initial values of the model. 
         Must return a dictionary with the keys 'y0' and 'parameters'
@@ -757,10 +798,16 @@ class SimulationBase:
         tulpe: tuple of parameters, can have any length.
         """
         parameters = model_parameters["parameters"]
-        y0 = model_parameters["y0"]
+        parameters.update(free_parameters)
 
-        parameters.update({p.name: p.value for p in free_parameters})
-        return {"y0": y0, "parameters": parameters} 
+        updated_model_parameters = dict(parameters=parameters)
+        for k, v in model_parameters.items():
+            if k == "parameters":
+                continue
+            
+            updated_model_parameters[k] = v
+
+        return updated_model_parameters
 
     def run(self):
         """
@@ -942,19 +989,27 @@ class SimulationBase:
     # TODO Outsource model parameters also to config (if it makes sense)
     @property
     def model_parameter_values(self):
-        return [p.value for p in self.free_model_parameters]
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        return [p.value for p in self.config.model_parameters.free.values()]
     
     @property
     def model_parameter_names(self):
-        return [p.name for p in self.free_model_parameters]
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        return list(self.config.model_parameters.free.keys())
     
     @property
     def n_free_parameters(self):
-        return len(self.free_model_parameters)
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        return self.config.model_parameters.n_free
 
     @property
     def model_parameter_dict(self):
-        return {p.name:p.value for p in self.free_model_parameters}
+        # TODO: Remove when all method has been updated to the new config API
+        warnings.warn(config_deprecation, DeprecationWarning)
+        return self.config.model_parameters.free_value_dict
 
 
     @property
@@ -1027,78 +1082,6 @@ class SimulationBase:
         seed = self._random_integers.pop(0)
         return seed
 
-    def set_free_model_parameters(self):
-        if self.config._config.has_section("model-parameters"):
-            warnings.warn(
-                "config section 'model-parameters' is deprecated, "
-                "use 'free-model-parameters' and 'fixed-model-parameters'", 
-                DeprecationWarning
-            )
-            params = self.config.model_parameters.model_dump()
-        elif self.config._config.has_section("free-model-parameters"):
-            params = self.config.model_parameters.model_dump()
-        else:
-            warnings.warn("No parameters were specified.")
-            params = {}
-        
-        # create a nested dictionary from model parameters
-        parameter_dict = {}
-        for par_key, par_value in params.items():
-            dp.new(parameter_dict, par_key, par_value, separator=".")
-
-        parse = lambda x: None if x is None else float(x)
-
-        # create Param instances
-        parameters = []
-        for param_name, param_dict in parameter_dict.items():
-            value = parse(param_dict.get("value"))
-            if isinstance(value, (int, float)):
-                p = param.FloatParam(
-                    value=value,
-                    name=param_name,
-                    min=parse(param_dict.get("min")),
-                    max=parse(param_dict.get("max")),
-                    step=parse(param_dict.get("step")),
-                    prior=param_dict.get("prior", None)
-                )
-            else:
-                # check for array notation
-                pattern = r"(\d+(\.\d+)?(\s+\d+(\.\d+)?)*|\s*)"
-                if re.fullmatch(pattern, value):
-                    value = np.array([float(v) for v in value.split(" ")])
-                    p = param.ArrayParam(
-                        value=value,
-                        name=param_name,
-                        min=param_dict.get("min", None),
-                        max=param_dict.get("max", None),
-                        step=param_dict.get("step", None),
-                        prior=param_dict.get("prior", None)
-                    )
-                else:
-                    raise NotImplementedError(
-                        f"Parameter specification '{value}' cannot be parsed."
-                    )
-            parameters.append(p)
-
-        return parameters
-
-    @property
-    def fixed_model_parameters(self):
-        fixed_parameters = {}
-        params = parse_config_section(self.config._config["fixed-model-parameters"])
-        for k, v in params.items():
-            vlist = v.split(" ")
-            floatlist = [float(v) for v in vlist]
-            if len(vlist) == 1:
-                v_ = floatlist[0]
-
-            else: 
-                v_ = np.array(floatlist)
-
-            fixed_parameters.update({k: v_})
-
-        return fixed_parameters
-
     @property
     def error_model(self):
         em = parse_config_section(self.config._config["error-model"], method="strfloat")
@@ -1108,11 +1091,14 @@ class SimulationBase:
     def evaluator_dim_order(self):
         return self.config.simulation.evaluator_dim_order
 
-    def create_dim_index(self) -> Dict[str, List[str]]:
+    @property
+    def var_dim_mapper(self) -> Dict[str, List[str]]:
         # TODO: If a dimensionality config seciton is implemented this function
         # may become superflous
-        sim_dims = self.dimensions
-        evaluator_dims = self.evaluator_dim_order
+        sim_dims = self.config.simulation.dimensions
+        evaluator_dims = self.config.simulation.evaluator_dim_order
+        if len(evaluator_dims) == 0:
+            evaluator_dims = sim_dims
         obs_ordered = self.observations.transpose(*sim_dims)
 
         var_dim_mapper = {}

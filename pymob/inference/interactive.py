@@ -1,4 +1,8 @@
 # visit http://127.0.0.1:8050/ in your web browser.
+raise NotImplementedError(
+    "The interactive backend is currently not implemented in pymob"
+)
+
 import json
 import glob
 import os

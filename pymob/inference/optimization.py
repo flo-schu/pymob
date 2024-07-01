@@ -1,3 +1,7 @@
+raise NotImplementedError(
+    "The optimization backend is currently not implemented in pymob"
+)
+
 from scipy.optimize import basinhopping
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer, MinMaxScaler
 from data.datasets import indy

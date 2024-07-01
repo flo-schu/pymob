@@ -50,6 +50,10 @@ class PymooBackend:
         bounds = []
         names = []
         for v in variables:
+            if v.min is None or v.max is None:
+                raise ValueError(
+                    f"Bounds are not fully defined in Param({v}). Bounds (min, max) "
+                    "must be defined when using the pymoo backend.")
             bounds.append([v.min, v.max])
             names.append(v.name)
 
