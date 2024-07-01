@@ -202,6 +202,10 @@ class Casestudy(BaseModel):
                 "results",
                 self.scenario,
             )
+    
+    @output_path.setter
+    def output_path(self, value) -> None:
+        self.output = value
 
     @computed_field
     @property
@@ -214,6 +218,10 @@ class Casestudy(BaseModel):
                 os.path.relpath(self.name),
                 "data"
             )
+        
+    @data_path.setter
+    def data_path(self, value) -> None:
+        self.data = value
     
     @computed_field
     @property

@@ -15,6 +15,7 @@ def test_simulation():
     sim.config.case_study.observations = ["simulated_data.nc"]
     sim.config.simulation.data_variables = ["rabbits", "wolves"]
     sim.config.simulation.dimensions = ["time"]
+    sim.config.case_study.data_path = None
     
     sim.validate()
 
