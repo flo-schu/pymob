@@ -1,5 +1,6 @@
 import os
 import sys
+import copy
 import inspect
 import warnings
 import importlib
@@ -121,6 +122,7 @@ class SimulationBase:
         else:
             self.config = Config(config=config)
         self._observations: xr.Dataset = xr.Dataset()
+        self._observations_copy: xr.Dataset = xr.Dataset()
         self._coordinates: Dict = {}
 
         self.model_parameters: Dict = {}
@@ -174,6 +176,9 @@ class SimulationBase:
     @observations.setter
     def observations(self, value):
         self._observations = value
+        if sum(tuple(self._observations_copy.sizes.values())) == 0:
+            self._observations_copy = copy.deepcopy(value)
+
         self.create_data_scaler()
         self.coordinates = self.set_coordinates(input=self.config.input_file_paths)
         
@@ -256,8 +261,11 @@ class SimulationBase:
         dimensions = self.config.simulation.dimensions
         return [self.observations[dim].values for dim in dimensions]
 
-    def reset_coordinate(self, dim):
+    def reset_coordinate(self, dim:str):
         self.coordinates[dim] = self.observations[dim].values
+
+    def reset_data_variable(self, data_variable:str):
+        self.observations[data_variable] = self._observations_copy[data_variable]
 
     def reset_all_coordinates(self):
         self.coordinates = self.set_coordinates(input=self.config.input_file_paths)
