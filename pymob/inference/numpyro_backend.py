@@ -2,7 +2,7 @@ from functools import partial, lru_cache
 import glob
 import re
 import warnings
-from typing import Tuple, Dict, Union, Optional, Callable
+from typing import Tuple, Dict, Union, Optional, Callable, Literal
 
 from tqdm import tqdm
 import numpy as np
@@ -1051,7 +1051,7 @@ class NumpyroBackend:
 
     def plot_prior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={}, 
-            n=None, seed=None
+            n=None, seed=None, plot_preds_without_obs=False,
         ):
         if n is None:
             n = self.n_predictions
@@ -1069,6 +1069,7 @@ class NumpyroBackend:
             observations=self.simulation.observations,
             predictions=idata.prior_predictive, # type: ignore
             data_variable=data_variable,
+            plot_preds_without_obs=plot_preds_without_obs,
             x_dim=x_dim,
             ax=ax,
             subset=subset,
@@ -1079,7 +1080,7 @@ class NumpyroBackend:
 
     def plot_posterior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={},
-            n=None, seed=None
+            n=None, seed=None, plot_preds_without_obs=False
         ):
         # TODO: This method should be trashed. It is not really useful
         if n is None:
@@ -1098,6 +1099,7 @@ class NumpyroBackend:
             observations=self.simulation.observations,
             predictions=predictions,
             data_variable=data_variable,
+            plot_preds_without_obs=plot_preds_without_obs,
             x_dim=x_dim,
             ax=ax,
             subset=subset,
@@ -1132,16 +1134,21 @@ class NumpyroBackend:
             data_variable: str, 
             x_dim: str, 
             ax=None, 
+            plot_preds_without_obs=False,
             subset={},
-            mode="mean+hdi",
-            plot_options={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
+            mode: Literal["mean+hdi", "draws"]="mean+hdi",
+            plot_options: Dict={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
         ):
         # filter subset coordinates present in data_variable
         subset = {k: v for k, v in subset.items() if k in observations.coords}
         
         # select subset
-        obs = observations.sel(subset)[data_variable]
-        preds = predictions.sel(subset)[f"{data_variable}"]
+        preds = predictions.sel(subset)[data_variable]
+        try:
+            obs = observations.sel(subset)[data_variable]
+        except KeyError:
+            obs = preds.copy().mean(dim=("chain", "draw"))
+            obs.values = np.full_like(obs.values, np.nan)
         
         # stack all dims that are not in the time dimension
         if len(obs.dims) == 1:
@@ -1153,7 +1160,7 @@ class NumpyroBackend:
             preds = preds.assign_coords(batch=[0])
 
 
-        stack_dims = [d for d in obs.dims if d != x_dim]
+        stack_dims = [d for d in obs.dims if d not in [x_dim, "chain", "draw"]]
         obs = obs.stack(i=stack_dims)
         preds = preds.stack(i=stack_dims)
         N = len(obs.coords["i"])
@@ -1166,7 +1173,7 @@ class NumpyroBackend:
         y_mean = preds.mean(dim=("chain", "draw"))
 
         for i in obs.i:
-            if obs.sel(i=i).isnull().all():
+            if obs.sel(i=i).isnull().all() and not plot_preds_without_obs:
                 # skip plotting combinations, where all values are NaN
                 continue
             
