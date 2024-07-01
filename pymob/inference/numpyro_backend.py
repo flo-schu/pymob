@@ -872,17 +872,25 @@ class NumpyroBackend:
 
         preds = self.simulation.data_variables
         preds_obs = [f"{d}_obs" for d in self.simulation.data_variables]
-        priors = list(self.simulation.model_parameter_dict.keys())
-        # TODO: This causes priors to be dropped that are not part of the 
-        #       config file. Makes interactive model development more difficult
-        #       This should be derived from the model directly.
+        prior_keys = list(self.simulation.model_parameter_dict.keys())
         posterior_coords = self.posterior_coordinates
         posterior_coords["draw"] = list(range(n))
         data_structure = self.posterior_data_structure
         
+        priors = {k: v for k, v in prior_predictions.items() if k in prior_keys}
+
+        if len(prior_keys) != len(priors):
+            warnings.warn(
+                f"Priors {[k for k in prior_keys if k not in prior_predictions]} "
+                "were not found in the predictions. Make sure that the prior "
+                "names match the names in user_defined_probability_model = "
+                f"{self.config.inference_numpyro.user_defined_probability_model}.",
+                category=UserWarning
+            )
+
         idata = az.from_dict(
             observed_data=obs,
-            prior={k: v for k, v in prior_predictions.items() if k in priors},
+            prior=priors,
             prior_predictive={k: v for k, v in prior_predictions.items() if k in preds+preds_obs},
             log_likelihood=loglik,
             dims=data_structure,
