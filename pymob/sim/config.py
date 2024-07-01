@@ -327,7 +327,7 @@ class Inference(BaseModel):
     objective_names: OptionListStr = []
     backend: Optional[str] = None
     extra_vars: OptionListStr = []
-    plot: str|Callable = lambda simulation: None
+    plot: Optional[str|Callable] = None
     n_predictions: Annotated[int, to_str] = 1
 
 class Multiprocessing(BaseModel):

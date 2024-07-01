@@ -1109,7 +1109,9 @@ class NumpyroBackend:
         self.plot_diagnostics()
 
         plot = self.config.inference.plot
-        if isinstance(plot, str):
+        if plot is None:
+            return
+        elif isinstance(plot, str):
             try:
                 plot_func = getattr(self.simulation, plot)
                 plot_func(self.simulation)
