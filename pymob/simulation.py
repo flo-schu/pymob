@@ -125,7 +125,9 @@ class SimulationBase:
         self._observations_copy: xr.Dataset = xr.Dataset()
         self._coordinates: Dict = {}
 
-        self.model_parameters: Dict = {}
+        self._model_parameters: Dict[Literal["parameters","y0","x_in"],Any] = {
+            "parameters": {},
+        }
         # self.observations = None
         self._objective_names: str|List[str] = []
         self.indices: Dict = {}
@@ -135,7 +137,7 @@ class SimulationBase:
         self.RNG = np.random.default_rng(self.config.simulation.seed)
         self._random_integers = self.create_random_integers(n=self._seed_buffer_size)
      
-
+        self.parameterize = partial(self.parameterize, model_parameters=self.model_parameters)
         # simulation
         # self.setup()
         
@@ -169,12 +171,54 @@ class SimulationBase:
         self.config.simulation.n_ode_states = self.infer_ode_states()
 
     @property
+    def model_parameters(self) -> Dict[Literal["parameters","y0","x_in"],Any]:
+        return self._model_parameters
+    
+    @model_parameters.setter
+    def model_parameters(self, value: Dict[Literal["parameters","y0","x_in"],Any]):
+        if "parameters" not in value:
+            raise KeyError(
+                "'model_parameters' must contain a 'parameters' key"
+            )
+        
+        if not isinstance(value["parameters"], dict):
+            raise ValueError(
+                f"`model_parameters['parameters'] = {value['parameters']}`, but "
+                "must be of type dict."
+            )
+        self.parameterize = partial(self.parameterize, model_parameters=value)
+        self._model_parameters = ParameterDict(value, callback=self._on_params_updated)
+
+    def _on_params_updated(self, updated_dict):
+        self.model_parameters = updated_dict
+
+    @property
     def observations(self):
         assert isinstance(self._observations, xr.Dataset), "Observations must be an xr.Dataset"
         return self._observations
 
     @observations.setter
-    def observations(self, value):
+    def observations(self, value: xr.Dataset):
+        if len(self.config.simulation.dimensions) == 0:
+            new_dims = list(value.dims.keys())
+            self.config.simulation.dimensions = new_dims # type: ignore
+            warnings.warn(
+                f"`sim.config.simulation.dimensions = {new_dims}` have been "
+                "assumed from `sim.observations`. If the order of the dimensions "
+                "should be different, specify `sim.config.simulation.dimensions` "
+                "manually."
+            )
+
+        if len(self.config.simulation.data_variables) == 0:
+            new_data_vars = list(value.data_vars.keys())
+            self.config.simulation.data_variables = new_data_vars
+            warnings.warn(
+                f"`sim.config.simulation.data_variables = {new_data_vars}` have been "
+                "assumed from `sim.observations`. If the used data variables "
+                "should be different, specify `sim.config.simulation.data_variables` "
+                "manually."
+            )
+
         self._observations = value
         if sum(tuple(self._observations_copy.sizes.values())) == 0:
             self._observations_copy = copy.deepcopy(value)
@@ -1099,10 +1143,10 @@ class SimulationBase:
         evaluator_dims = self.config.simulation.evaluator_dim_order
         if len(evaluator_dims) == 0:
             evaluator_dims = sim_dims
-        obs_ordered = self.observations.transpose(*sim_dims)
 
         var_dim_mapper = {}
         for var in self.data_variables:
+            obs_ordered = self.observations.transpose(*sim_dims)
             obs_var_dims = obs_ordered[var].dims
             var_dim_mapper.update({
                 var: [obs_var_dims.index(e_i) for e_i in evaluator_dims if e_i in obs_var_dims]
@@ -1114,10 +1158,10 @@ class SimulationBase:
     def data_structure(self):
         # TODO: If a dimensionality config seciton is implemented this function
         # may become superflous
-        obs_ordered = self.observations.transpose(*self.dimensions)
 
         data_structure = {}
         for var in self.data_variables:
+            obs_ordered = self.observations.transpose(*self.dimensions)
             obs_var_dims = obs_ordered[var].dims
             data_structure.update({
                 var: list(obs_var_dims)

@@ -9,7 +9,7 @@ import importlib
 import logging
 import json
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Any, Literal, Callable
+from typing import List, Optional, Union, Dict, Any, Literal, Callable, Sequence
 from typing_extensions import Annotated
 from types import ModuleType
 import tempfile
@@ -46,6 +46,20 @@ class ArrayParam(BaseModel):
     prior: Optional[str] = None
     free: bool = True
 
+class ParameterDict(dict):
+    def __init__(self, *args, **kwargs):
+        self.callback: Callable = kwargs.pop('callback', None)
+        super().__init__(*args, **kwargs)
+    
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if self.callback:
+            self.callback(self)
+    
+    def update(self, *args, **kwargs):
+        super().update(*args, **kwargs)
+        if self.callback:
+            self.callback(self)
 
 def string_to_list(option: Union[List, str]) -> List:
     if isinstance(option, (list, tuple)):
