@@ -125,9 +125,8 @@ class SimulationBase:
         self._observations_copy: xr.Dataset = xr.Dataset()
         self._coordinates: Dict = {}
 
-        self._model_parameters: Dict[Literal["parameters","y0","x_in"],Any] = {
-            "parameters": {},
-        }
+        self._model_parameters: Dict[Literal["parameters","y0","x_in"],Any] =\
+            ParameterDict(parameters={}, callback=self._on_params_updated)
         # self.observations = None
         self._objective_names: str|List[str] = []
         self.indices: Dict = {}
@@ -137,7 +136,10 @@ class SimulationBase:
         self.RNG = np.random.default_rng(self.config.simulation.seed)
         self._random_integers = self.create_random_integers(n=self._seed_buffer_size)
      
-        self.parameterize = partial(self.parameterize, model_parameters=self.model_parameters)
+        self.parameterize = partial(
+            self.parameterize, 
+            model_parameters=copy.deepcopy(dict(self.model_parameters))
+        )
         # simulation
         # self.setup()
         
@@ -167,7 +169,10 @@ class SimulationBase:
         self.config.create_directory(directory="scenario", force=True)
 
         # TODO: set up logger
-        self.parameterize = partial(self.parameterize, model_parameters=self.model_parameters)
+        self.parameterize = partial(
+            self.parameterize, 
+            model_parameters=copy.deepcopy(dict(self.model_parameters))
+        )
         self.config.simulation.n_ode_states = self.infer_ode_states()
 
     @property
@@ -186,7 +191,10 @@ class SimulationBase:
                 f"`model_parameters['parameters'] = {value['parameters']}`, but "
                 "must be of type dict."
             )
-        self.parameterize = partial(self.parameterize, model_parameters=value)
+        self.parameterize = partial(
+            self.parameterize, 
+            model_parameters=copy.deepcopy(dict(self.model_parameters))
+        )
         self._model_parameters = ParameterDict(value, callback=self._on_params_updated)
 
     def _on_params_updated(self, updated_dict):
@@ -380,7 +388,7 @@ class SimulationBase:
         Theoretically, this could also be used to constrain coordinates etc, 
         before evaluating.  
         """
-        model_parameters = self.parameterize(theta) #type: ignore
+        model_parameters = self.parameterize(dict(theta)) #type: ignore
         
         # TODO: make sure the evaluator has all arguments required for solving
         # model
