@@ -513,6 +513,10 @@ class Modelparameters(BaseModel):
 class Errormodel(BaseModel):
     __pydantic_extra__: Dict[str,str]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
+    
+    @property
+    def all(self) -> Dict[str,str]:
+        return self.__pydantic_extra__
 
 class Pyabc(BaseModel):
     model_config = {"validate_assignment" : True}

@@ -200,6 +200,5 @@ def test_data_variables():
 
 
 if __name__ == "__main__":
-    test_simulation()
     # test_data_variables()
     pass
