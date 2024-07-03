@@ -301,7 +301,7 @@ class NumpyroBackend:
 
     def parse_error_model(self):
         error_model = {}
-        for data_var, error_distribution in self.simulation.error_model.items():
+        for data_var, error_distribution in self.config.error_model.all.items():
             name, distribution, parameters = self.parse_parameter(
                 parname=data_var,
                 prior=error_distribution,

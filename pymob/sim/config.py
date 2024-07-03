@@ -47,6 +47,35 @@ class ArrayParam(BaseModel):
     free: bool = True
 
 class DataVariable(BaseModel):
+    """Describe a data variable
+
+    Parameters
+    ----------
+    dimensions: List[str]
+        Specifies the dimensions, which have to be found in the observations and 
+        the dimensional order of the data variable
+    
+    min: float
+        The possible minimum of a data variable, is used to construct scalers.
+        Defaults to 'nan', which sets the minimum to the minimum of the 
+        observations
+
+    min: float
+        The possible maxmimum of a data variable, is used to construct scalers
+        Defaults to 'nan', which sets the maximum to the maximum of the 
+        observations
+
+    dimensions_evaluator: List[str]
+        Specifies the dimensions and their order returned by the evaluator.
+        This is necessary to bring observations and results together, if for some
+        reason the returned simulation results from the evaluator have a different
+        dimensional order than the observations
+
+    Returns
+    -------
+    None
+
+    """
     dimensions: List[str]
     min: float = np.nan
     max: float = np.nan
@@ -513,6 +542,10 @@ class Modelparameters(BaseModel):
 class Errormodel(BaseModel):
     __pydantic_extra__: Dict[str,str]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
+    
+    @property
+    def all(self) -> Dict[str,str]:
+        return self.__pydantic_extra__
 
 class Pyabc(BaseModel):
     model_config = {"validate_assignment" : True}
@@ -570,6 +603,7 @@ class Numpyro(BaseModel):
 
 
 class Config(BaseModel):
+    """Configuration manager for pymob."""
     model_config = {"validate_assignment" : True, "extra": "allow", "protected_namespaces": ()}
     _config: configparser.ConfigParser
     _modules: Dict[str,ModuleType]

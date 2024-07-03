@@ -27,10 +27,6 @@ def test_minimal_simulation():
     linreg, x, y, y_noise, parameters = linear_model()
 
     obs = xr.DataArray(y_noise, coords={"x": x}).to_dataset(name="y")
-
-    sim.config.simulation.dimensions = ["x"]
-    sim.config.simulation.data_variables = ["y"]
-
     sim.observations = obs
     
     from pymob.sim.solvetools import solve_analytic_1d
@@ -38,7 +34,7 @@ def test_minimal_simulation():
     sim.solver = solve_analytic_1d
 
     sim.config.model_parameters.a = FloatParam(value=10, free=False)
-    sim.config.model_parameters.b = FloatParam(value=3, free=True , prior="norm(loc=0,scale=10)")
+    sim.config.model_parameters.b = FloatParam(value=3, free=True , prior="normal(loc=0,scale=10)")
     sim.model_parameters["parameters"] = sim.config.model_parameters.value_dict
     evaluator = sim.dispatch(theta={"b":3})
     evaluator()
@@ -55,16 +51,21 @@ def test_minimal_simulation():
 
     np.testing.assert_allclose(evaluator.results.y.values, y * 3)
 
-    sim.set_inferer("pyabc")
-    sim.inferer.config.inference_pyabc.min_eps_diff = 0.001
+    sim.config.model_parameters.sigma_y = FloatParam(free=True , prior="lognorm(scale=1,s=1)")
+    sim.config.error_model.y = "normal(loc=y,scale=sigma_y)"
+
+    sim.set_inferer("numpyro")
+    sim.inferer.config.inference_numpyro.kernel = "nuts"
+    # sim.inferer.config.inference_pyabc.min_eps_diff = 0.001
     sim.inferer.run()
-    sim.inferer.load_results()
     b = float(sim.inferer.idata.posterior["b"].mean()) # type: ignore
+    sigma_y = float(sim.inferer.idata.posterior["sigma_y"].mean()) # type: ignore
 
     # test that the _model parameters of the Simulation remain unchanged. This is
     # achieved throgh deepcopying the dictionary on setting partial
     assert sim._model_parameters["parameters"]["b"] == 3
     np.testing.assert_allclose(b, parameters["b"], atol=0.05, rtol=0.05)
+    np.testing.assert_allclose(sigma_y, parameters["sigma_y"], atol=0.05, rtol=0.05)
 
 
 
@@ -92,7 +93,3 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    # test_minimal_simulation()
-    # test_scripting_API()
-    # test_interactive_mode()
-    test_simulation()

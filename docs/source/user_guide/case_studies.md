@@ -33,56 +33,55 @@ While it is recommended to keep data, docs, results, scripts directories in each
 
 Settings files are created as conf `.cfg` files. These files are organized into the following sections.
 
-```{admonition}
+```{admonition} Scripting API
 :class: attention
-This will change in the next version of `pymob` configuration is then done in the scripting API, but config files can still be exported and imported
-from the Simulation instance. This will make configuration considerably more user friendly as the possible options are directly availble through type hints.
+Since `pymob-0.4.0` configurations can be specified in the scripting API and exported to config files from the Simulation instance. This makes configuration considerably more user friendly as the possible options are directly availble through type hints.
 ```
 
 ```conf
 [case-study]
-output = 
-data = 
-simulation = 
+name = test_case_study
+scenario = test_scenario
+package = case_studies
+modules = sim mod prob data plot
+simulation = Simulation
+observations = simulated_data.nc
+logging = DEBUG
 
 [simulation]
-# model specification
-# --------------------
-model = 
-solver = 
-solver_post_processing = 
-y0 = 
-seed = 
+seed = 1
 
-# data description
-# --------------------
-dimensions = time
-evaluator_dim_order = time
-data_variables = 
-data_variables_max = 
-data_variables_min = 
-
-[free-model-parameters]
-...
-
-[fixed-model-parameters]
-...
-
-[error-model]
-...
+[data-structure]
+rabbits = dimensions=[time] min=0 max=nan
+wolves = dimensions=[time] min=0 max=nan
 
 [inference]
-...
+objective_function = total_average
+n_objectives = 1
+EPS = 1e-8
+
+[model-parameters]
+alpha = value=0.5 min=0.1 max=5.0 prior=lognorm(s=0.1,scale=0.50) free=True
+beta = value=0.02 min=0.005 max=0.2 prior=lognorm(s=0.1,scale=0.02) free=True
+
+[error-model]
+wolves = lognorm(scale=wolves+EPS,s=0.1)
+rabbits = lognorm(scale=rabbits+EPS,s=0.1)
+
+[multiprocessing]
+cores = 1
 
 [inference.pyabc]
-...
 
 [inference.pymoo]
-...
 
 [inference.numpyro]
-...
-
+gaussian_base_distribution = False
+kernel = nuts
+init_strategy = init_to_uniform
+chains = 1
+draws = 2000
+warmup = 1000
 ```
 
 ### case-study configuration
@@ -101,15 +100,17 @@ It is also possible to provide the solver directly which then executes the entir
 
 **seed**. The seed is used to initate random processes for reproducibility. The behavior is still experimental.
 
-### free-model-parameters
+### data-structure
 
-Model parameters that are subject to parameter inference and can be varied in the parameter estimation process or in the interactive simulation 
+This discribes the dimensions and dimensional order of the data. It optionally provides an interface for setting minima and maxima for data scaling for use in optimizers that perform better when working on scaled data.
+In addition, also different dimensional order between observation and simulation results can be specified  with `dimensions_evaluator=[...]`
 
-### fixed-model-parameters
+### model-parameters
 
-Model parmameters that remain fixed throughout the simulation
+Model parameters that are subject to parameter inference and can be varied in the parameter estimation process or in the interactive simulation. 
+Model parmameters that remain fixed throughout the simulation.
 
-### error model
+### error-model
 
 Error functions for comparing the simulation results to the data. These functions will also be parsed with `sympy` parsers. Still experimental
 
