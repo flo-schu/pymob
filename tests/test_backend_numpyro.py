@@ -105,7 +105,7 @@ def test_convergence_svi_kernel():
 
     # posterior predictions
     fig, axes = plt.subplots(2,1, sharex=True)
-    for data_var, ax in zip(sim.data_variables, axes):
+    for data_var, ax in zip(sim.config.data_structure.data_variables, axes):
         ax = sim.inferer.plot_posterior_predictions(
             data_variable=data_var, 
             x_dim="time",
@@ -191,7 +191,7 @@ def test_convergence_sa_kernel():
 
 
     # posterior predictions
-    for data_var in sim.data_variables:
+    for data_var in sim.config.data_structure.data_variables:
         ax = sim.inferer.plot_posterior_predictions(
             data_variable=data_var, 
             x_dim="time"

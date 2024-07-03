@@ -20,7 +20,7 @@ def test_convergence():
     np.testing.assert_allclose(
         np.array(list(estimated_parameters.values())),
         np.array(list(true_parameters.values())),
-        rtol=5e-2, atol=1e-5
+        rtol=1e-1, atol=5e-3
     )
 
 

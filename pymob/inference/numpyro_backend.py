@@ -2,7 +2,7 @@ from functools import partial, lru_cache
 import glob
 import re
 import warnings
-from typing import Tuple, Dict, Union, Optional, Callable
+from typing import Tuple, Dict, Union, Optional, Callable, Literal
 
 from tqdm import tqdm
 import numpy as np
@@ -116,7 +116,6 @@ class NumpyroBackend:
         self.config = simulation.config
         self.evaluator = self.parse_deterministic_model()
         self.prior = self.parse_model_priors()
-        self.error_model = self.parse_error_model()
 
         # parse preprocessing
         if self.user_defined_preprocessing is not None:
@@ -131,17 +130,15 @@ class NumpyroBackend:
                 self.simulation._prob, 
                 self.user_defined_probability_model
             )
-        elif self.gaussian_base_distribution:
-            self.inference_model = self.parse_probabilistic_model_with_gaussian_base()
         else:
-            self.inference_model = self.parse_probabilistic_model()
+            self.error_model = self.parse_error_model()
+            if self.gaussian_base_distribution:
+                self.inference_model = self.parse_probabilistic_model_with_gaussian_base()
+            else:
+                self.inference_model = self.parse_probabilistic_model()
 
 
         self.idata: az.InferenceData
-
-    @property
-    def plot_function(self) -> Optional[str]:
-        return self.config.inference.plot_function
 
     @property
     def extra_vars(self):
@@ -234,7 +231,7 @@ class NumpyroBackend:
         """
         obs = self.simulation.observations \
             .transpose(*self.simulation.dimensions)
-        data_vars = self.simulation.data_variables + self.extra_vars
+        data_vars = self.config.data_structure.data_variables + self.extra_vars
 
         masks = {}
         observations = {}
@@ -282,9 +279,14 @@ class NumpyroBackend:
 
     def parse_model_priors(self):
         priors = {}
-        for par in self.simulation.free_model_parameters:
+        for key, par in self.config.model_parameters.free.items():
+            if par.prior is None:
+                raise AttributeError(
+                    f"No prior was defined for {par}. E.g.: "
+                    "sim.config.model_parameters.{par} = lognorm(loc=1, scale=2)"
+                )
             name, distribution, params = self.parse_parameter(
-                parname=par.name, 
+                parname=key, 
                 prior=par.prior, 
                 distribution_map=self.distribution_map
             )
@@ -868,19 +870,27 @@ class NumpyroBackend:
             masks=masks
         )
 
-        preds = self.simulation.data_variables
-        preds_obs = [f"{d}_obs" for d in self.simulation.data_variables]
-        priors = list(self.simulation.model_parameter_dict.keys())
-        # TODO: This causes priors to be dropped that are not part of the 
-        #       config file. Makes interactive model development more difficult
-        #       This should be derived from the model directly.
+        preds = self.config.data_structure.data_variables
+        preds_obs = [f"{d}_obs" for d in self.config.data_structure.data_variables]
+        prior_keys = list(self.simulation.model_parameter_dict.keys())
         posterior_coords = self.posterior_coordinates
         posterior_coords["draw"] = list(range(n))
         data_structure = self.posterior_data_structure
         
+        priors = {k: v for k, v in prior_predictions.items() if k in prior_keys}
+
+        if len(prior_keys) != len(priors):
+            warnings.warn(
+                f"Priors {[k for k in prior_keys if k not in prior_predictions]} "
+                "were not found in the predictions. Make sure that the prior "
+                "names match the names in user_defined_probability_model = "
+                f"{self.config.inference_numpyro.user_defined_probability_model}.",
+                category=UserWarning
+            )
+
         idata = az.from_dict(
             observed_data=obs,
-            prior={k: v for k, v in prior_predictions.items() if k in priors},
+            prior=priors,
             prior_predictive={k: v for k, v in prior_predictions.items() if k in preds+preds_obs},
             log_likelihood=loglik,
             dims=data_structure,
@@ -924,8 +934,8 @@ class NumpyroBackend:
             batch_ndims=2, 
         )
 
-        preds = self.simulation.data_variables
-        preds_obs = [f"{d}_obs" for d in self.simulation.data_variables]
+        preds = self.config.data_structure.data_variables
+        preds_obs = [f"{d}_obs" for d in self.config.data_structure.data_variables]
         priors = list(self.simulation.model_parameter_dict.keys())
         posterior_coords = self.posterior_coordinates
         posterior_coords["draw"] = list(range(n))
@@ -1019,8 +1029,9 @@ class NumpyroBackend:
         self.idata = az.from_netcdf(f"{self.simulation.output_path}/{file}")
 
 
-    def plot(self):
-        # TODO: combine prior_predictions and posterior predictions
+
+
+    def plot_diagnostics(self):
         if hasattr(self.idata, "posterior"):
             axes = az.plot_trace(
                 self.idata,
@@ -1038,15 +1049,9 @@ class NumpyroBackend:
             fig.savefig(f"{self.simulation.output_path}/pairs_posterior.png")
             plt.close()
 
-        if hasattr(self.idata, "prior_predictive"):
-            self.plot_prior_predictions()
-
-        plot_func = getattr(self.simulation, self.config.inference.plot_function)
-        plot_func()
-
     def plot_prior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={}, 
-            n=None, seed=None
+            n=None, seed=None, plot_preds_without_obs=False,
         ):
         if n is None:
             n = self.n_predictions
@@ -1060,12 +1065,11 @@ class NumpyroBackend:
             seed=seed
         )
 
-        plot_func = getattr(self.simulation, self.config.inference.plot_function)
-        
         ax = self.plot_predictions(
             observations=self.simulation.observations,
             predictions=idata.prior_predictive, # type: ignore
             data_variable=data_variable,
+            plot_preds_without_obs=plot_preds_without_obs,
             x_dim=x_dim,
             ax=ax,
             subset=subset,
@@ -1076,7 +1080,7 @@ class NumpyroBackend:
 
     def plot_posterior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={},
-            n=None, seed=None
+            n=None, seed=None, plot_preds_without_obs=False
         ):
         # TODO: This method should be trashed. It is not really useful
         if n is None:
@@ -1095,6 +1099,7 @@ class NumpyroBackend:
             observations=self.simulation.observations,
             predictions=predictions,
             data_variable=data_variable,
+            plot_preds_without_obs=plot_preds_without_obs,
             x_dim=x_dim,
             ax=ax,
             subset=subset,
@@ -1102,7 +1107,25 @@ class NumpyroBackend:
 
         return ax
 
+    def plot(self):
+        self.plot_diagnostics()
 
+        plot = self.config.inference.plot
+        if plot is None:
+            return
+        elif isinstance(plot, str):
+            try:
+                plot_func = getattr(self.simulation, plot)
+                plot_func(self.simulation)
+            except AttributeError:
+                warnings.warn(
+                    f"Plot function {plot} was not found in the plot.py module "
+                    "Make sure the name has been spelled correctly or try to "
+                    "set the function directly to 'sim.config.inference.plot'.",
+                    category=UserWarning
+                )
+        else:
+            plot(self.simulation)
 
     def plot_predictions(
             self, 
@@ -1111,16 +1134,21 @@ class NumpyroBackend:
             data_variable: str, 
             x_dim: str, 
             ax=None, 
+            plot_preds_without_obs=False,
             subset={},
-            mode="mean+hdi",
-            plot_options={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
+            mode: Literal["mean+hdi", "draws"]="mean+hdi",
+            plot_options: Dict={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
         ):
         # filter subset coordinates present in data_variable
         subset = {k: v for k, v in subset.items() if k in observations.coords}
         
         # select subset
-        obs = observations.sel(subset)[data_variable]
-        preds = predictions.sel(subset)[f"{data_variable}"]
+        preds = predictions.sel(subset)[data_variable]
+        try:
+            obs = observations.sel(subset)[data_variable]
+        except KeyError:
+            obs = preds.copy().mean(dim=("chain", "draw"))
+            obs.values = np.full_like(obs.values, np.nan)
         
         # stack all dims that are not in the time dimension
         if len(obs.dims) == 1:
@@ -1132,7 +1160,7 @@ class NumpyroBackend:
             preds = preds.assign_coords(batch=[0])
 
 
-        stack_dims = [d for d in obs.dims if d != x_dim]
+        stack_dims = [d for d in obs.dims if d not in [x_dim, "chain", "draw"]]
         obs = obs.stack(i=stack_dims)
         preds = preds.stack(i=stack_dims)
         N = len(obs.coords["i"])
@@ -1145,7 +1173,7 @@ class NumpyroBackend:
         y_mean = preds.mean(dim=("chain", "draw"))
 
         for i in obs.i:
-            if obs.sel(i=i).isnull().all():
+            if obs.sel(i=i).isnull().all() and not plot_preds_without_obs:
                 # skip plotting combinations, where all values are NaN
                 continue
             
@@ -1265,7 +1293,7 @@ class NumpyroBackend:
         """drops extra variables if they are included in the posterior
         """
         drop_vars = [k for k in list(posterior.data_vars.keys()) if "_norm" in k]
-        drop_vars = drop_vars + self.simulation.data_variables + drop_extra_vars
+        drop_vars = drop_vars + self.config.data_structure.data_variables + drop_extra_vars
         drop_vars = [v for v in drop_vars if v in posterior]
         drop_coords = [c for c in list(posterior.coords.keys()) if c.split("_dim_")[0] in drop_vars]
 
