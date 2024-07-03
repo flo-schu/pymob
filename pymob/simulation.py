@@ -1155,37 +1155,11 @@ class SimulationBase:
 
     @property
     def var_dim_mapper(self) -> Dict[str, List[str]]:
-        # TODO: If a dimensionality config seciton is implemented this function
-        # may become superflous
-        sim_dims = self.config.data_structure.dimensions
-        evaluator_dims = self.config.data_structure.evaluator_dim_order
-        if len(evaluator_dims) == 0:
-            evaluator_dims = sim_dims
-
-        var_dim_mapper = {}
-        for var in self.data_variables:
-            obs_ordered = self.observations.transpose(*sim_dims)
-            obs_var_dims = obs_ordered[var].dims
-            var_dim_mapper.update({
-                var: [obs_var_dims.index(e_i) for e_i in evaluator_dims if e_i in obs_var_dims]
-            })
-
-        return var_dim_mapper
+        return self.config.data_structure.var_dim_mapper
     
     @property
     def data_structure(self):
-        # TODO: If a dimensionality config seciton is implemented this function
-        # may become superflous
-
-        data_structure = {}
-        for var in self.data_variables:
-            obs_ordered = self.observations.transpose(*self.dimensions)
-            obs_var_dims = obs_ordered[var].dims
-            data_structure.update({
-                var: list(obs_var_dims)
-            })
-
-        return data_structure
+        return self.config.data_structure.dimdict
 
     def reorder_dims(self, Y):
         results = {}

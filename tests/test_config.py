@@ -193,8 +193,10 @@ def test_data_variables():
     config.data_structure = {"wolves": dict(dimensions = ["time"])} # type: ignore
     assert config.data_structure.data_variables == ["wolves"]
 
-    config.data_structure
 
+    config.data_structure.B = DataVariable(dimensions=["a", "b"], dimensions_evaluator=["b","a"])
+    assert config.data_structure.dimdict == {"wolves": ["time"], "B": ["a", "b"]}
+    assert config.data_structure.var_dim_mapper == {"wolves": [0], "B": [1,0]}
 
 
 if __name__ == "__main__":

@@ -50,7 +50,41 @@ class DataVariable(BaseModel):
     dimensions: List[str]
     min: float = np.nan
     max: float = np.nan
-    dimensions_evaluator: List[str] = []
+    dimensions_evaluator: Optional[List[str]] = None
+
+    @model_validator(mode="after")
+    def post_update(self):
+        if self.dimensions_evaluator is not None:
+            if len(self.dimensions_evaluator) != len(self.dimensions):
+                self.dimensions_evaluator = None
+
+        return self
+        
+        
+    @field_validator("dimensions_evaluator", mode="after")
+    def set_data_variable_bounds(cls, v, info, **kwargs):
+        # For conditionally updating values (e.g. when data variables change)
+        # see https://github.com/pydantic/pydantic/discussions/7127
+        dimensions = info.data.get("dimensions")
+        if v is not None:
+            if len(v) != len(dimensions):
+                raise AssertionError(
+                    f"Evaluator dimensions {v} must have the "
+                    f"same length as observations {dimensions} dimensions."
+                )
+
+            elif set(v) != set(dimensions):
+                raise AssertionError(
+                    f"Evaluator dimensions {set(v)} must have the "
+                    f"same names as observations {set(dimensions)} dimensions."
+                )
+
+            else:
+                return v
+        else:
+            return None
+    
+
 
 class ParameterDict(dict):
     def __init__(self, *args, **kwargs):
@@ -369,6 +403,29 @@ class Datastructure(BaseModel):
         return dims
     
     @property
+    def all(self) -> Dict[str, DataVariable]:
+        return {k: v for k, v in self.__pydantic_extra__.items()}
+
+    @property
+    def dimdict(self) -> Dict[str, List[str]]:
+        return {k: v.dimensions for k, v in self.__pydantic_extra__.items()}
+
+    @property
+    def var_dim_mapper(self) -> Dict[str, List[str]]:
+        var_dim_mapper = {}
+        for k, v in self.all.items():
+            if v.dimensions_evaluator is None:
+                dims_evaluator = v.dimensions
+            else:
+                dims_evaluator = v.dimensions_evaluator
+
+            var_dim_mapper.update({
+                k: [v.dimensions.index(e_i) for e_i in dims_evaluator]
+            })
+
+        return var_dim_mapper
+    
+    @property
     def evaluator_dim_order(self) -> List[str]:
         # TODO: Remove when dimensions is not accessed any longer
         warnings.warn(
@@ -377,8 +434,13 @@ class Datastructure(BaseModel):
             category=DeprecationWarning
         )
         dims = []
-        for k, v in self.__pydantic_extra__.items():
-            for d in v.dimensions_evaluator:
+        for k, v in self.all.items():
+            if v.dimensions_evaluator is None:
+                dims_evaluator = v.dimensions
+            else:
+                dims_evaluator = v.dimensions_evaluator
+
+            for d in dims_evaluator:
                 if d not in dims:
                     dims.append(d)
         return dims
