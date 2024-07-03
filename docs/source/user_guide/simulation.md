@@ -2,6 +2,11 @@
 
 The modelling toolkit offers a variety of algorithms that can be used on a large number of models. Recognizing that simulation, optimization/calibration, parameter inference, sensitivity analysis, validation, etc. require similar workflows and have common input and output datastreams allows the abstraction of shared processes into a generic Simulation class, which can be reused for the listed purposes.
 
+```{admonition} Outdated documentation
+:class: danger
+The description of the simulation components is outdated. Especially the components `parameterize` and `set_coordinates` are now handled automatically, when parameters are defined, but they can still be used without problems.
+```
+
 ## Simulation components
 
 Any simulation has recurring components. Facilitating the transfer of information between those components is key to analyze a described model with different tools. In this framework, simulations are defined as classes which require the definition of methods that define the simulation.

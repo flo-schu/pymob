@@ -47,6 +47,35 @@ class ArrayParam(BaseModel):
     free: bool = True
 
 class DataVariable(BaseModel):
+    """Describe a data variable
+
+    Parameters
+    ----------
+    dimensions: List[str]
+        Specifies the dimensions, which have to be found in the observations and 
+        the dimensional order of the data variable
+    
+    min: float
+        The possible minimum of a data variable, is used to construct scalers.
+        Defaults to 'nan', which sets the minimum to the minimum of the 
+        observations
+
+    min: float
+        The possible maxmimum of a data variable, is used to construct scalers
+        Defaults to 'nan', which sets the maximum to the maximum of the 
+        observations
+
+    dimensions_evaluator: List[str]
+        Specifies the dimensions and their order returned by the evaluator.
+        This is necessary to bring observations and results together, if for some
+        reason the returned simulation results from the evaluator have a different
+        dimensional order than the observations
+
+    Returns
+    -------
+    None
+
+    """
     dimensions: List[str]
     min: float = np.nan
     max: float = np.nan
