@@ -95,3 +95,4 @@ if __name__ == "__main__":
     # test_minimal_simulation()
     # test_scripting_API()
     # test_interactive_mode()
+    test_simulation()

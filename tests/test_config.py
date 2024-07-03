@@ -1,7 +1,7 @@
 import pytest
 import tempfile
 from pymob.simulation import SimulationBase, Config
-from pymob.sim.config import ArrayParam, FloatParam
+from pymob.sim.config import ArrayParam, FloatParam, DataVariable, Datastructure
 from pymob.utils.store_file import import_package
 import xarray as xr
 import os
@@ -13,12 +13,28 @@ def test_simulation():
     sim.config.case_study.name = "test_case_study"
     sim.config.case_study.scenario = "test_scenario_scripting_api"
     sim.config.case_study.observations = ["simulated_data.nc"]
-    sim.config.simulation.data_variables = ["rabbits", "wolves"]
-    sim.config.simulation.dimensions = ["time"]
     sim.config.case_study.data_path = None
-    
+
+    # load data before specifying dims
+    sim.config.case_study.data = os.path.abspath("case_studies/test_case_study/data")
+    sim.observations = xr.load_dataset(sim.config.input_file_paths[0])    
+
+    # try wrong specification
+    threw_error = None
+    try:
+        sim.config.data_structure.rabbits = DataVariable(dimensions=["hash"])
+        sim.config.data_structure.wolves = DataVariable(dimensions=["time"])
+        sim.observations = xr.load_dataset(sim.config.input_file_paths[0])
+        threw_error = False
+    except KeyError:
+        threw_error = True
+
+    assert threw_error
+
     sim.validate()
 
+    sim.config.data_structure.rabbits = DataVariable(dimensions=["time"])
+    sim.config.data_structure.wolves = DataVariable(dimensions=["time"])
     
     # load data by providing an absolute path
     sim.config.case_study.data = os.path.abspath("case_studies/test_case_study/data")
@@ -166,11 +182,22 @@ def test_error_model():
     config.error_model.a = a
 
     
+def test_data_variables():
+    config = Config()
+    config.case_study.name = "test_case_study"
+    config.case_study.scenario = "test_scenario_scripting_api"
+    config.data_structure.wolves = DataVariable(dimensions=["time"], min=0)
+    assert config.data_structure.data_variables == ["wolves"]
+    config.save(force=True)
+    
+    config.data_structure = {"wolves": dict(dimensions = ["time"])} # type: ignore
+    assert config.data_structure.data_variables == ["wolves"]
+
+    config.data_structure
+
+
 
 if __name__ == "__main__":
-    # test_simulation()
-    test_error_model()
-    test_parameter_parsing()
-    test_parameter_array()
-    test_model_parameters()
+    test_simulation()
+    # test_data_variables()
     pass

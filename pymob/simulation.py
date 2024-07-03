@@ -24,7 +24,7 @@ from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
-from pymob.sim.config import Config, FloatParam, ArrayParam, ParameterDict
+from pymob.sim.config import Config, FloatParam, ArrayParam, ParameterDict, DataVariable
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -207,25 +207,35 @@ class SimulationBase:
 
     @observations.setter
     def observations(self, value: xr.Dataset):
-        if len(self.config.simulation.dimensions) == 0:
-            new_dims = list(value.dims.keys())
-            self.config.simulation.dimensions = new_dims # type: ignore
-            warnings.warn(
-                f"`sim.config.simulation.dimensions = {new_dims}` have been "
-                "assumed from `sim.observations`. If the order of the dimensions "
-                "should be different, specify `sim.config.simulation.dimensions` "
-                "manually."
-            )
+        for k, v in value.data_vars.items():
+            if k not in self.config.data_structure.data_variables:
+                datavar = DataVariable(
+                    dimensions=[str(d) for d in v.dims],
+                    min=float(v.min()),
+                    max=float(v.max()),
+                )
+                setattr(self.config.data_structure, k, datavar)
+                warnings.warn(
+                    f"`sim.config.data_structure.{k} = Datavariable({datavar})` has been "
+                    "assumed from `sim.observations`. If the order of the dimensions "
+                    f"should be different, specify `sim.config.data_structure.{k} "
+                    "= DataVariable(dimensions=[...], ...)` manually."
+                )
+            else:
+                datavar: DataVariable = getattr(self.config.data_structure, k)
+                if np.isnan(datavar.min):
+                    datavar.min = float(v.min())
+                if np.isnan(datavar.max):
+                    datavar.max = float(v.max())
 
-        if len(self.config.simulation.data_variables) == 0:
-            new_data_vars = list(value.data_vars.keys())
-            self.config.simulation.data_variables = new_data_vars
-            warnings.warn(
-                f"`sim.config.simulation.data_variables = {new_data_vars}` have been "
-                "assumed from `sim.observations`. If the used data variables "
-                "should be different, specify `sim.config.simulation.data_variables` "
-                "manually."
-            )
+                if set(datavar.dimensions) != set(v.dims):
+                    raise KeyError(
+                        f"Dimensions of the '{k}' DataVariable({datavar}) "
+                        f"Did not match the definitions in the observations: "
+                        f"dimensions={list(v.dims)}. "
+                        "If you are unsure what to do, not specifying data variables"
+                        "is a valid option."
+                    )
 
         self._observations = value
         if sum(tuple(self._observations_copy.sizes.values())) == 0:
@@ -310,7 +320,7 @@ class SimulationBase:
     def set_coordinates(self, input):
         # TODO remove input statement. I think set_coordinates will no longer
         # be necessary for pymob
-        dimensions = self.config.simulation.dimensions
+        dimensions = self.config.data_structure.dimensions
         return [self.observations[dim].values for dim in dimensions]
 
     def reset_coordinate(self, dim:str):
@@ -678,12 +688,12 @@ class SimulationBase:
         
     def dataset_to_2Darray(self, dataset: xr.DataArray) -> xr.DataArray: 
         self.check_dimensions(dataset=dataset)
-        array_2D = dataset.stack(multiindex=self.config.simulation.dimensions)
+        array_2D = dataset.stack(multiindex=self.config.data_structure.dimensions)
         return array_2D.to_array().transpose("multiindex", "variable")
 
     def array2D_to_dataset(self, dataarray: xr.DataArray) -> xr.Dataset: 
         dataset_2D = dataarray.to_dataset(dim="variable")      
-        return dataset_2D.unstack().transpose(*self.config.simulation.dimensions)
+        return dataset_2D.unstack().transpose(*self.config.data_structure.dimensions)
 
     def create_data_scaler(self):
         """Creates a scaler for the data variables of the dataset over all
@@ -693,14 +703,14 @@ class SimulationBase:
         # make sure the dataset follows the order of variables specified in
         # the config file. This is important so also in the simulation results
         # the scalers are matched.
-        ordered_dataset = self.observations[self.config.simulation.data_variables]
+        ordered_dataset = self.observations[self.config.data_structure.data_variables]
         obs_2D_array = self.dataset_to_2Darray(dataset=ordered_dataset)
         # scaler = StandardScaler()
         scaler = MinMaxScaler()
         
         # add bounds to array of observations and fit scaler
-        lower_bounds = np.array(self.config.simulation.data_variables_min)
-        upper_bounds = np.array(self.config.simulation.data_variables_max)
+        lower_bounds = np.array(self.config.data_structure.data_variables_min)
+        upper_bounds = np.array(self.config.data_structure.data_variables_max)
         stacked_array = np.row_stack([lower_bounds, upper_bounds, obs_2D_array])
         scaler.fit(stacked_array)
 
@@ -712,14 +722,14 @@ class SimulationBase:
 
     def print_scaling_info(self):
         scaler = type(self.scaler).__name__
-        for i, var in enumerate(self.config.simulation.data_variables):
+        for i, var in enumerate(self.config.data_structure.data_variables):
             print(
                 f"{scaler}(variable={var}, "
                 f"min={self.scaler.data_min_[i]}, max={self.scaler.data_max_[i]})"
             )
 
     def scale_(self, dataset: xr.Dataset):
-        ordered_dataset = dataset[self.config.simulation.data_variables]
+        ordered_dataset = dataset[self.config.data_structure.data_variables]
         data_2D_array = self.dataset_to_2Darray(dataset=ordered_dataset)
         obs_2D_array_scaled = data_2D_array.copy() 
         obs_2D_array_scaled.values = self.scaler.transform(data_2D_array) # type: ignore
@@ -730,7 +740,7 @@ class SimulationBase:
         warnings.warn("Discouraged to use results property.", DeprecationWarning, 2)
         return self.create_dataset_from_numpy(
             Y=self.Y, 
-            Y_names=self.config.simulation.data_variables, 
+            Y_names=self.config.data_structure.data_variables, 
             coordinates=self.coordinates
         )
 
@@ -746,7 +756,7 @@ class SimulationBase:
         elif isinstance(results, np.ndarray):
             return create_dataset_from_numpy(
                 Y=results,
-                Y_names=self.config.simulation.data_variables,
+                Y_names=self.config.data_structure.data_variables,
                 coordinates=self.coordinates,
             )
         else:
@@ -764,7 +774,7 @@ class SimulationBase:
     def scale_results(self, Y):
         ds = self.create_dataset_from_numpy(
             Y=Y, 
-            Y_names=self.config.simulation.data_variables, 
+            Y_names=self.config.data_structure.data_variables, 
             coordinates=self.coordinates
         )
         return self.scale_(ds)
@@ -808,7 +818,7 @@ class SimulationBase:
         #       - do observation dimensions match the model output (run a mini
         #         simulation with reduced coordinates to verify)
         #       -
-        if len(self.config.simulation.data_variables) == 0:
+        if len(self.config.data_structure.data_variables) == 0:
             raise RuntimeError(
                 "No data_variables were specified. "
                 "Specify like sim.config.simulation.data_variables = ['a', 'b'] "
@@ -819,7 +829,7 @@ class SimulationBase:
             )
 
                     
-        if len(self.config.simulation.dimensions) == 0:
+        if len(self.config.data_structure.dimensions) == 0:
             raise RuntimeError(
                 "No dimensions of the simulation were specified. "
                 "Which observations are you expecting? "
@@ -919,13 +929,13 @@ class SimulationBase:
         if not isinstance(coordinate_data, (list, tuple)):
             coordinate_data = (coordinate_data, )
 
-        assert len(self.config.simulation.dimensions) == len(coordinate_data), errormsg(
+        assert len(self.config.data_structure.dimensions) == len(coordinate_data), errormsg(
             f"""number of dimensions, specified in the configuration file
             must match the coordinate data (X) returned by the `run` method.
             """
         )
 
-        coord_zipper = zip(self.config.simulation.dimensions, coordinate_data)
+        coord_zipper = zip(self.config.data_structure.dimensions, coordinate_data)
         coords = {dim: x_i for dim, x_i in coord_zipper}
         return coords
 
@@ -976,13 +986,13 @@ class SimulationBase:
     def dimensions(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.simulation.dimensions
+        return self.config.data_structure.dimensions
 
     @property
     def data_variables(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.simulation.data_variables
+        return self.config.data_structure.data_variables
 
     @property
     def n_ode_states(self):
@@ -1081,8 +1091,8 @@ class SimulationBase:
     def data_variable_bounds(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
-        lower_bounds = self.config.simulation.data_variables_min
-        upper_bounds = self.config.simulation.data_variables_max
+        lower_bounds = self.config.data_structure.data_variables_min
+        upper_bounds = self.config.data_structure.data_variables_max
         return lower_bounds, upper_bounds
 
     @property
@@ -1141,14 +1151,14 @@ class SimulationBase:
 
     @property
     def evaluator_dim_order(self):
-        return self.config.simulation.evaluator_dim_order
+        return self.config.data_structure.evaluator_dim_order
 
     @property
     def var_dim_mapper(self) -> Dict[str, List[str]]:
         # TODO: If a dimensionality config seciton is implemented this function
         # may become superflous
-        sim_dims = self.config.simulation.dimensions
-        evaluator_dims = self.config.simulation.evaluator_dim_order
+        sim_dims = self.config.data_structure.dimensions
+        evaluator_dims = self.config.data_structure.evaluator_dim_order
         if len(evaluator_dims) == 0:
             evaluator_dims = sim_dims
 
