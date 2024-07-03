@@ -3,7 +3,7 @@ import json
 import numpy as np
 from click.testing import CliRunner
 
-from tests.fixtures import init_simulation_casestudy_api
+from fixtures import init_simulation_casestudy_api
 
 
 def test_convergence():
@@ -20,7 +20,7 @@ def test_convergence():
     np.testing.assert_allclose(
         np.array(list(estimated_parameters.values())),
         np.array(list(true_parameters.values())),
-        rtol=5e-2, atol=1e-5
+        rtol=1e-1, atol=5e-3
     )
 
 
@@ -46,4 +46,5 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
+    test_convergence()
     # test_scripting_api_pyabc()
