@@ -686,7 +686,7 @@ class SimulationBase:
             f"Settings(dims={self.dimensions}) != dataset(dims={ds_dims})"
         )
         
-    def dataset_to_2Darray(self, dataset: xr.DataArray) -> xr.DataArray: 
+    def dataset_to_2Darray(self, dataset: xr.Dataset) -> xr.DataArray: 
         self.check_dimensions(dataset=dataset)
         array_2D = dataset.stack(multiindex=self.config.data_structure.dimensions)
         return array_2D.to_array().transpose("multiindex", "variable")

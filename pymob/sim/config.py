@@ -9,7 +9,7 @@ import importlib
 import logging
 import json
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Any, Literal, Callable, Sequence, Text
+from typing import List, Optional, Union, Dict, Literal, Callable
 from typing_extensions import Annotated
 from types import ModuleType
 import tempfile
@@ -192,7 +192,7 @@ to_str = PlainSerializer(lambda x: str(x), return_type=str, when_used="json")
 
 
 OptionListStr = Annotated[
-    Sequence[str], 
+    List[str], 
     BeforeValidator(string_to_list), 
     serialize_list_to_string
 ]
@@ -350,11 +350,11 @@ class Datastructure(BaseModel):
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
     @property
-    def data_variables(self) -> Sequence[str]:
+    def data_variables(self) -> List[str]:
         return [k for k in self.__pydantic_extra__.keys()]
     
     @property
-    def dimensions(self) -> Sequence[str]:
+    def dimensions(self) -> List[str]:
         # TODO: Remove when dimensions is not accessed any longer
         warnings.warn(
             "Legacy method, will be deprecated soon. This works only if all "
@@ -369,7 +369,7 @@ class Datastructure(BaseModel):
         return dims
     
     @property
-    def evaluator_dim_order(self) -> Sequence[str]:
+    def evaluator_dim_order(self) -> List[str]:
         # TODO: Remove when dimensions is not accessed any longer
         warnings.warn(
             "Legacy method, will be deprecated soon. This works only if all "

@@ -231,7 +231,7 @@ class NumpyroBackend:
         """
         obs = self.simulation.observations \
             .transpose(*self.simulation.dimensions)
-        data_vars = self.simulation.data_variables + self.extra_vars
+        data_vars = self.config.data_structure.data_variables + self.extra_vars
 
         masks = {}
         observations = {}
@@ -870,8 +870,8 @@ class NumpyroBackend:
             masks=masks
         )
 
-        preds = self.simulation.data_variables
-        preds_obs = [f"{d}_obs" for d in self.simulation.data_variables]
+        preds = self.config.data_structure.data_variables
+        preds_obs = [f"{d}_obs" for d in self.config.data_structure.data_variables]
         prior_keys = list(self.simulation.model_parameter_dict.keys())
         posterior_coords = self.posterior_coordinates
         posterior_coords["draw"] = list(range(n))
@@ -934,8 +934,8 @@ class NumpyroBackend:
             batch_ndims=2, 
         )
 
-        preds = self.simulation.data_variables
-        preds_obs = [f"{d}_obs" for d in self.simulation.data_variables]
+        preds = self.config.data_structure.data_variables
+        preds_obs = [f"{d}_obs" for d in self.config.data_structure.data_variables]
         priors = list(self.simulation.model_parameter_dict.keys())
         posterior_coords = self.posterior_coordinates
         posterior_coords["draw"] = list(range(n))
@@ -1293,7 +1293,7 @@ class NumpyroBackend:
         """drops extra variables if they are included in the posterior
         """
         drop_vars = [k for k in list(posterior.data_vars.keys()) if "_norm" in k]
-        drop_vars = drop_vars + self.simulation.data_variables + drop_extra_vars
+        drop_vars = drop_vars + self.config.data_structure.data_variables + drop_extra_vars
         drop_vars = [v for v in drop_vars if v in posterior]
         drop_coords = [c for c in list(posterior.coords.keys()) if c.split("_dim_")[0] in drop_vars]
 

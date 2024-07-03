@@ -12,7 +12,7 @@ def test_inference_evaluation():
     fig.savefig(sim.output_path + "/pyabc_chains.png")
 
     # posterior predictions
-    for data_var in sim.data_variables:
+    for data_var in sim.config.data_structure.data_variables:
         ax = sim.inferer.plot_predictions(
             data_variable=data_var, 
             x_dim="time"
