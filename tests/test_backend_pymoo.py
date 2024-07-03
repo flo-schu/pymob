@@ -3,7 +3,7 @@ import json
 import numpy as np
 from click.testing import CliRunner
 
-from fixtures import init_simulation_casestudy_api
+from tests.fixtures import init_simulation_casestudy_api
 
 
 def test_convergence():
@@ -46,5 +46,4 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    test_convergence()
     # test_scripting_api_pyabc()
