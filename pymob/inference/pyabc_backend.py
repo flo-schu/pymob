@@ -209,7 +209,7 @@ class PyabcBackend:
         obj_func_params = list(obj_func_signature.parameters.keys())
             
         def distance_function(x, x0):
-            Y = {k: v for k, v in x.items() if k in self.simulation.data_variables}
+            Y = {k: v for k, v in x.items() if k in self.config.data_structure.data_variables}
             
             theta_obj_func = {p: x[p] for p in obj_func_params if p in x}
             obj_name, obj_value = self.simulation.objective_function(

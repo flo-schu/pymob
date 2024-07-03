@@ -9,7 +9,7 @@ import importlib
 import logging
 import json
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Any, Literal, Callable, Sequence
+from typing import List, Optional, Union, Dict, Literal, Callable
 from typing_extensions import Annotated
 from types import ModuleType
 import tempfile
@@ -46,6 +46,46 @@ class ArrayParam(BaseModel):
     prior: Optional[str] = None
     free: bool = True
 
+class DataVariable(BaseModel):
+    dimensions: List[str]
+    min: float = np.nan
+    max: float = np.nan
+    dimensions_evaluator: Optional[List[str]] = None
+
+    @model_validator(mode="after")
+    def post_update(self):
+        if self.dimensions_evaluator is not None:
+            if len(self.dimensions_evaluator) != len(self.dimensions):
+                self.dimensions_evaluator = None
+
+        return self
+        
+        
+    @field_validator("dimensions_evaluator", mode="after")
+    def set_data_variable_bounds(cls, v, info, **kwargs):
+        # For conditionally updating values (e.g. when data variables change)
+        # see https://github.com/pydantic/pydantic/discussions/7127
+        dimensions = info.data.get("dimensions")
+        if v is not None:
+            if len(v) != len(dimensions):
+                raise AssertionError(
+                    f"Evaluator dimensions {v} must have the "
+                    f"same length as observations {dimensions} dimensions."
+                )
+
+            elif set(v) != set(dimensions):
+                raise AssertionError(
+                    f"Evaluator dimensions {set(v)} must have the "
+                    f"same names as observations {set(dimensions)} dimensions."
+                )
+
+            else:
+                return v
+        else:
+            return None
+    
+
+
 class ParameterDict(dict):
     def __init__(self, *args, **kwargs):
         self.callback: Callable = kwargs.pop('callback', None)
@@ -74,8 +114,8 @@ def string_to_list(option: Union[List, str]) -> List:
 
 
 def string_to_dict(
-        option: Union[Dict[str,str|float|int|List[float|int]], str]
-    ) -> Dict[str,str|float|int|List[float|int]]:
+        option: Union[Dict[str,str|float|int|List[float|int|str]], str]
+    ) -> Dict[str,str|float|int|List[float|int|str]]:
     """Expects a string of this form 
     e.g. 'value=1 max=10 min=0 prior=Lognormal(loc=2,scale=1)'
     """
@@ -101,6 +141,17 @@ def string_to_dict(
                 except ValidationError:
                     pass
 
+            if not parsed and  "[" in v and "]" in v:
+                try:
+                    v_ = v.strip("[]").split(",")
+                    # remove double quotes
+                    v_ = [re.sub(r'^"|"$', '', s) for s in v_]
+                    v_ = [re.sub(r"^'|'$", '', s) for s in v_]
+                    parsed_value = TypeAdapter(List[str]).validate_python(v_)
+                    parsed = True
+                except ValidationError:
+                    pass
+
             if not parsed:
                 parsed_value = v
 
@@ -121,8 +172,17 @@ def string_to_param(option:str|FloatParam|ArrayParam) -> FloatParam|ArrayParam:
             return ArrayParam.model_validate(param_dict, strict=False)
     
 
+def string_to_datavar(option:str|DataVariable) -> DataVariable:
+    if isinstance(option, DataVariable):
+        return option
+    else:
+        param_dict = string_to_dict(option)
+        return DataVariable.model_validate(param_dict, strict=False)
+        
+    
+
 def dict_to_string(dct: Dict):
-    return " ".join([f"{k}={v}".replace(" ", "") for k, v in dct.items()])
+    return " ".join([f"{k}={v}".replace(" ", "") for k, v in dct.items()]).replace("'", "")
 
 
 def list_to_string(lst: List):
@@ -130,6 +190,9 @@ def list_to_string(lst: List):
 
 
 def param_to_string(prm: ArrayParam|FloatParam):
+    return dict_to_string(prm.model_dump(exclude_none=True))
+
+def datavar_to_string(prm: DataVariable):
     return dict_to_string(prm.model_dump(exclude_none=True))
 
 
@@ -153,12 +216,17 @@ serialize_param_to_string = PlainSerializer(
     when_used="json"
 )
 
+serialize_datavar_to_string = PlainSerializer(
+    datavar_to_string, 
+    return_type=str, 
+    when_used="json"
+)
 
 to_str = PlainSerializer(lambda x: str(x), return_type=str, when_used="json")
 
 
 OptionListStr = Annotated[
-    Sequence[str], 
+    List[str], 
     BeforeValidator(string_to_list), 
     serialize_list_to_string
 ]
@@ -170,6 +238,11 @@ OptionDictStr = Annotated[
     serialize_dict_to_string
 ]
 
+OptionDataVariable = Annotated[
+    DataVariable, 
+    BeforeValidator(string_to_datavar), 
+    serialize_datavar_to_string
+]
 
 OptionParam = Annotated[
     FloatParam|ArrayParam, 
@@ -287,6 +360,8 @@ class Casestudy(BaseModel):
             return root
 
 
+
+
 class Simulation(BaseModel):
     model_config = {"validate_assignment" : True, "extra": "allow"}
 
@@ -297,50 +372,88 @@ class Simulation(BaseModel):
     x_in: OptionListStr = []
 
     input_files: OptionListStr = []
-    dimensions: OptionListStr = []
-    data_variables: OptionListStr = []
+    # data_variables: OptionListStr = []
     n_ode_states: int = -1
     replicated: bool = False
     modeltype: Literal["stochastic", "deterministic"] = "stochastic"
     solver_post_processing: Optional[str] = Field(default=None, validate_default=True)
     seed: Annotated[int, to_str] = 1
-    data_variables_min: Optional[OptionListFloat] = Field(default=None, validate_default=True)
-    data_variables_max: Optional[OptionListFloat] = Field(default=None, validate_default=True)
-    evaluator_dim_order: OptionListStr = []
 
-    @model_validator(mode='after')
-    def post_update(self):
-        if self.data_variables_min is not None:
-            if len(self.data_variables_min) != len(self.data_variables):
-                self.data_variables_min = None
-        
-        if self.data_variables_max is not None:
-            if len(self.data_variables_max) != len(self.data_variables):
-                self.data_variables_max = None
-                
-        return self
-        
-    @field_validator("data_variables_min", "data_variables_max", mode="after")
-    def set_data_variable_bounds(cls, v, info, **kwargs):
-        # For conditionally updating values (e.g. when data variables change)
-        # see https://github.com/pydantic/pydantic/discussions/7127
-        data_variables = info.data.get("data_variables")
-        if v is not None:
-            if len(v) != len(data_variables):
-                raise AssertionError(
-                    "If bounds are provided, the must be provided for all data "
-                    "variables. If a bound for a variable is unknown, write 'nan' "
-                    "in the config file at the position of the variable. "
-                    "\nE.g.:"
-                    "\ndata_variables = A B C"
-                    "\ndata_variables_max = 4 nan 2"
-                    "\ndata_variables_min = 0 0 nan"
-                )
-            else:
-                return v
-        else:
-            return [float("nan")] * len(data_variables)
+class Datastructure(BaseModel):
+    __pydantic_extra__: Dict[str,OptionDataVariable]
+    model_config = ConfigDict(extra="allow", validate_assignment=True)
+
+    @property
+    def data_variables(self) -> List[str]:
+        return [k for k in self.__pydantic_extra__.keys()]
     
+    @property
+    def dimensions(self) -> List[str]:
+        # TODO: Remove when dimensions is not accessed any longer
+        warnings.warn(
+            "Legacy method, will be deprecated soon. This works only if all "
+            "Data variables have the same dimension",
+            category=DeprecationWarning
+        )
+        dims = []
+        for k, v in self.__pydantic_extra__.items():
+            for d in v.dimensions:
+                if d not in dims:
+                    dims.append(d)
+        return dims
+    
+    @property
+    def all(self) -> Dict[str, DataVariable]:
+        return {k: v for k, v in self.__pydantic_extra__.items()}
+
+    @property
+    def dimdict(self) -> Dict[str, List[str]]:
+        return {k: v.dimensions for k, v in self.__pydantic_extra__.items()}
+
+    @property
+    def var_dim_mapper(self) -> Dict[str, List[str]]:
+        var_dim_mapper = {}
+        for k, v in self.all.items():
+            if v.dimensions_evaluator is None:
+                dims_evaluator = v.dimensions
+            else:
+                dims_evaluator = v.dimensions_evaluator
+
+            var_dim_mapper.update({
+                k: [v.dimensions.index(e_i) for e_i in dims_evaluator]
+            })
+
+        return var_dim_mapper
+    
+    @property
+    def evaluator_dim_order(self) -> List[str]:
+        # TODO: Remove when dimensions is not accessed any longer
+        warnings.warn(
+            "Legacy method, will be deprecated soon. This works only if all "
+            "Data variables have the same dimension",
+            category=DeprecationWarning
+        )
+        dims = []
+        for k, v in self.all.items():
+            if v.dimensions_evaluator is None:
+                dims_evaluator = v.dimensions
+            else:
+                dims_evaluator = v.dimensions_evaluator
+
+            for d in dims_evaluator:
+                if d not in dims:
+                    dims.append(d)
+        return dims
+    
+    @property
+    def data_variables_min(self):
+        return [v.min for v in self.__pydantic_extra__.values()]
+
+    @property
+    def data_variables_max(self):
+        return [v.max for v in self.__pydantic_extra__.values()]
+
+
 class Inference(BaseModel):
     model_config = {"validate_assignment" : True}
 
@@ -493,6 +606,7 @@ class Config(BaseModel):
 
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
     simulation: Simulation = Field(default=Simulation())
+    data_structure: Datastructure = Field(default=Datastructure(), alias="data-structure") # type:ignore
     inference: Inference = Field(default=Inference())
     model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters") #type: ignore
     error_model: Errormodel = Field(default=Errormodel(), alias="error-model") # type: ignore
