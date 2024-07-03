@@ -144,7 +144,7 @@ to_str = PlainSerializer(lambda x: str(x), return_type=str, when_used="json")
 
 
 OptionListStr = Annotated[
-    List[str], 
+    Sequence[str], 
     BeforeValidator(string_to_list), 
     serialize_list_to_string
 ]

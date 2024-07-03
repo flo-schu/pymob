@@ -4,7 +4,7 @@ import copy
 import inspect
 import warnings
 import importlib
-from typing import Optional, List, Union, Literal
+from typing import Optional, List, Union, Literal, Any
 from types import ModuleType
 import configparser
 from functools import partial
@@ -24,7 +24,7 @@ from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
-from pymob.sim.config import Config, FloatParam, ArrayParam
+from pymob.sim.config import Config, FloatParam, ArrayParam, ParameterDict
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -127,7 +127,7 @@ class SimulationBase:
 
         self.model_parameters: Dict = {}
         # self.observations = None
-        self._objective_names: List = []
+        self._objective_names: str|List[str] = []
         self.indices: Dict = {}
 
         # seed gloabal RNG
@@ -336,7 +336,7 @@ class SimulationBase:
         Theoretically, this could also be used to constrain coordinates etc, 
         before evaluating.  
         """
-        model_parameters = self.parameterize(theta)
+        model_parameters = self.parameterize(theta) #type: ignore
         
         # TODO: make sure the evaluator has all arguments required for solving
         # model
@@ -521,7 +521,7 @@ class SimulationBase:
     def evaluate(self, theta):
         """Wrapper around run to modify paramters of the model.
         """
-        self.model_parameters = self.parameterize(theta)
+        self.model_parameters = self.parameterize(theta) #type: ignore
         return self.run()
     
     def compute(self):
@@ -624,7 +624,7 @@ class SimulationBase:
             f"Settings(dims={self.dimensions}) != dataset(dims={ds_dims})"
         )
         
-    def dataset_to_2Darray(self, dataset: xr.Dataset) -> xr.DataArray: 
+    def dataset_to_2Darray(self, dataset: xr.DataArray) -> xr.DataArray: 
         self.check_dimensions(dataset=dataset)
         array_2D = dataset.stack(multiindex=self.config.simulation.dimensions)
         return array_2D.to_array().transpose("multiindex", "variable")
