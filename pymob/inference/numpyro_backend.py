@@ -2,7 +2,7 @@ from functools import partial, lru_cache
 import glob
 import re
 import warnings
-from typing import Tuple, Dict, Union, Optional, Callable
+from typing import Tuple, Dict, Union, Optional, Callable, Literal
 
 from tqdm import tqdm
 import numpy as np
@@ -113,127 +113,90 @@ class NumpyroBackend:
         }
         
         self.simulation = simulation
+        self.config = simulation.config
         self.evaluator = self.parse_deterministic_model()
         self.prior = self.parse_model_priors()
-        self.error_model = self.parse_error_model()
 
         # parse preprocessing
         if self.user_defined_preprocessing is not None:
             self.preprocessing = getattr(
-                self.simulation.prob,
+                self.simulation._prob,
                 self.user_defined_preprocessing
             )
 
         # parse the probability model
         if self.user_defined_probability_model is not None:
             self.inference_model = getattr(
-                self.simulation.prob, 
+                self.simulation._prob, 
                 self.user_defined_probability_model
             )
-        elif self.gaussian_base_distribution:
-            self.inference_model = self.parse_probabilistic_model_with_gaussian_base()
         else:
-            self.inference_model = self.parse_probabilistic_model()
+            self.error_model = self.parse_error_model()
+            if self.gaussian_base_distribution:
+                self.inference_model = self.parse_probabilistic_model_with_gaussian_base()
+            else:
+                self.inference_model = self.parse_probabilistic_model()
 
 
         self.idata: az.InferenceData
 
     @property
-    def plot_function(self) -> Optional[str]:
-        return self.simulation.config.get(
-            "inference", "plot_function", 
-            fallback=None
-        )
-
-    @property
     def extra_vars(self):
-        extra = self.simulation.config.getlist( 
-            "inference", "extra_vars", fallback=[]
-        )
-        return extra if isinstance(extra, list) else [extra]
+        return self.config.inference.extra_vars
     
 
     @property
     def user_defined_probability_model(self):
-        return self.simulation.config.get(
-            "inference.numpyro", "user_defined_probability_model", fallback=None
-        )
+        return self.config.inference_numpyro.user_defined_probability_model
     
     @property
     def user_defined_preprocessing(self):
-        return self.simulation.config.get(
-            "inference.numpyro", "user_defined_preprocessing", fallback=None
-        )
+        return self.config.inference_numpyro.user_defined_preprocessing
 
     @property
     def gaussian_base_distribution(self):
-        flag = self.simulation.config.getint(
-            "inference.numpyro", "gaussian_base_distribution", fallback=False
-        )
-        return bool(flag)
+        return self.config.inference_numpyro.gaussian_base_distribution
     
     @property
     def n_predictions(self):
-        return self.simulation.config.getint(
-            "inference", "n_predictions", fallback=100
-        )
+        return self.config.inference.n_predictions
     
 
     @property
     def chains(self):
-        return self.simulation.config.getint(
-            "inference.numpyro", "chains", fallback=1
-        )
+        return self.config.inference_numpyro.chains
     
     @property
     def draws(self):
-        return self.simulation.config.getint(
-            "inference.numpyro", "draws", fallback=1000
-        )
+        return self.config.inference_numpyro.draws
     
     @property
     def warmup(self):
-        return self.simulation.config.getint(
-            "inference.numpyro", "warmup", fallback=self.draws
-        )
+        return self.config.inference_numpyro.warmup
     
     @property
     def thinning(self):
-        return self.simulation.config.getint(
-            "inference.numpyro", "thinning", fallback=1
-        )
+        return self.config.inference_numpyro.thinning
 
     @property
     def svi_iterations(self):
-        return self.simulation.config.getint(
-            "inference.numpyro", "svi_iterations", fallback=10_000
-        )
+        return self.config.inference_numpyro.svi_iterations
     
     @property
     def svi_learning_rate(self):
-        return self.simulation.config.getfloat(
-            "inference.numpyro", "svi_learning_rate", fallback=0.0001
-        )
+        return self.config.inference_numpyro.svi_learning_rate
     
     @property
     def kernel(self):
-        return self.simulation.config.get(
-            "inference.numpyro", "kernel", fallback="nuts"
-        )
+        return self.config.inference_numpyro.kernel
     
-
     @property
     def adapt_state_size(self):
-        return self.simulation.config.getint(
-            "inference.numpyro", "sa_adapt_state_size", fallback=None
-        )
+        return self.config.inference_numpyro.sa_adapt_state_size
 
     @property
     def init_strategy(self):
-        strategy = self.simulation.config.get(
-            "inference.numpyro", "init_strategy", fallback="init_to_median"
-        )
-
+        strategy = self.config.inference_numpyro.init_strategy
         return getattr(infer, strategy)
 
     def parse_deterministic_model(self) -> Callable:
@@ -268,7 +231,7 @@ class NumpyroBackend:
         """
         obs = self.simulation.observations \
             .transpose(*self.simulation.dimensions)
-        data_vars = self.simulation.data_variables + self.extra_vars
+        data_vars = self.config.data_structure.data_variables + self.extra_vars
 
         masks = {}
         observations = {}
@@ -316,9 +279,14 @@ class NumpyroBackend:
 
     def parse_model_priors(self):
         priors = {}
-        for par in self.simulation.free_model_parameters:
+        for key, par in self.config.model_parameters.free.items():
+            if par.prior is None:
+                raise AttributeError(
+                    f"No prior was defined for {par}. E.g.: "
+                    "sim.config.model_parameters.{par} = lognorm(loc=1, scale=2)"
+                )
             name, distribution, params = self.parse_parameter(
-                parname=par.name, 
+                parname=key, 
                 prior=par.prior, 
                 distribution_map=self.distribution_map
             )
@@ -333,7 +301,7 @@ class NumpyroBackend:
 
     def parse_error_model(self):
         error_model = {}
-        for data_var, error_distribution in self.simulation.error_model.items():
+        for data_var, error_distribution in self.config.error_model.all.items():
             name, distribution, parameters = self.parse_parameter(
                 parname=data_var,
                 prior=error_distribution,
@@ -551,7 +519,7 @@ class NumpyroBackend:
         # jax.config.update("jax_enable_x64", True)
 
         # generate random keys
-        key = jax.random.PRNGKey(self.simulation.seed)
+        key = jax.random.PRNGKey(self.simulation.config.simulation.seed)
         key, *subkeys = jax.random.split(key, 20)
         keys = iter(subkeys)
 
@@ -588,7 +556,7 @@ class NumpyroBackend:
         if print_debug:
             with numpyro.handlers.seed(rng_seed=1):
                 trace = numpyro.handlers.trace(model).get_trace()
-            print(numpyro.util.format_shapes(trace))
+            print(numpyro.util.format_shapes(trace)) # type: ignore
             
         # run inference
         if self.kernel.lower() == "sa" or self.kernel.lower() == "nuts":
@@ -713,7 +681,11 @@ class NumpyroBackend:
 
     @property
     def posterior(self):
-        return self.idata.posterior
+        warnings.warn(
+            "Discouraged use of inferer.posterior API"
+            "use inferer.idata.posterior instead."
+        )
+        return self.idata.posterior  # type: ignore
 
 
     @property
@@ -797,7 +769,7 @@ class NumpyroBackend:
             # https://num.pyro.ai/en/stable/_modules/numpyro/infer/util.html#log_likelihood
 
         
-            joint_log_density, trace = numpyro.infer.util.log_density(
+            joint_log_density, trace = numpyro.infer.util.log_density( # type: ignore
                 model=seeded_model,
                 model_args=(),
                 model_kwargs={},
@@ -898,19 +870,27 @@ class NumpyroBackend:
             masks=masks
         )
 
-        preds = self.simulation.data_variables
-        preds_obs = [f"{d}_obs" for d in self.simulation.data_variables]
-        priors = list(self.simulation.model_parameter_dict.keys())
-        # TODO: This causes priors to be dropped that are not part of the 
-        #       config file. Makes interactive model development more difficult
-        #       This should be derived from the model directly.
+        preds = self.config.data_structure.data_variables
+        preds_obs = [f"{d}_obs" for d in self.config.data_structure.data_variables]
+        prior_keys = list(self.simulation.model_parameter_dict.keys())
         posterior_coords = self.posterior_coordinates
         posterior_coords["draw"] = list(range(n))
         data_structure = self.posterior_data_structure
         
+        priors = {k: v for k, v in prior_predictions.items() if k in prior_keys}
+
+        if len(prior_keys) != len(priors):
+            warnings.warn(
+                f"Priors {[k for k in prior_keys if k not in prior_predictions]} "
+                "were not found in the predictions. Make sure that the prior "
+                "names match the names in user_defined_probability_model = "
+                f"{self.config.inference_numpyro.user_defined_probability_model}.",
+                category=UserWarning
+            )
+
         idata = az.from_dict(
             observed_data=obs,
-            prior={k: v for k, v in prior_predictions.items() if k in priors},
+            prior=priors,
             prior_predictive={k: v for k, v in prior_predictions.items() if k in preds+preds_obs},
             log_likelihood=loglik,
             dims=data_structure,
@@ -954,8 +934,8 @@ class NumpyroBackend:
             batch_ndims=2, 
         )
 
-        preds = self.simulation.data_variables
-        preds_obs = [f"{d}_obs" for d in self.simulation.data_variables]
+        preds = self.config.data_structure.data_variables
+        preds_obs = [f"{d}_obs" for d in self.config.data_structure.data_variables]
         priors = list(self.simulation.model_parameter_dict.keys())
         posterior_coords = self.posterior_coordinates
         posterior_coords["draw"] = list(range(n))
@@ -995,7 +975,7 @@ class NumpyroBackend:
         # be evaluated again. But considering that the jitted functions do take
         # coordinates as an input argument, maybe I'm okay. This should be
         # tested.
-        posterior = self.idata.posterior
+        posterior = self.idata.posterior  # type: ignore
         n_samples = posterior.sizes["chain"] * posterior.sizes["draw"]
     
         if n is not None:
@@ -1049,8 +1029,9 @@ class NumpyroBackend:
         self.idata = az.from_netcdf(f"{self.simulation.output_path}/{file}")
 
 
-    def plot(self):
-        # TODO: combine prior_predictions and posterior predictions
+
+
+    def plot_diagnostics(self):
         if hasattr(self.idata, "posterior"):
             axes = az.plot_trace(
                 self.idata,
@@ -1068,33 +1049,27 @@ class NumpyroBackend:
             fig.savefig(f"{self.simulation.output_path}/pairs_posterior.png")
             plt.close()
 
-        if hasattr(self.idata, "prior_predictive"):
-            self.plot_prior_predictive()
-
-        plot_func = getattr(self.simulation, self.plot_function)
-        plot_func()
-
     def plot_prior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={}, 
-            n=None, seed=None
+            n=None, seed=None, plot_preds_without_obs=False,
         ):
         if n is None:
             n = self.n_predictions
 
         if seed is None:
-            seed = self.simulation.seed
+            seed = self.config.simulation.seed
         
         idata = self.prior_predictions(
             n=n, 
             # seed only controls the parameters samples drawn from posterior
             seed=seed
         )
-        plot_func = getattr(self.simulation, self.plot_function)
-        
+
         ax = self.plot_predictions(
             observations=self.simulation.observations,
-            predictions=idata.prior_predictive,
+            predictions=idata.prior_predictive, # type: ignore
             data_variable=data_variable,
+            plot_preds_without_obs=plot_preds_without_obs,
             x_dim=x_dim,
             ax=ax,
             subset=subset,
@@ -1105,14 +1080,14 @@ class NumpyroBackend:
 
     def plot_posterior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={},
-            n=None, seed=None
+            n=None, seed=None, plot_preds_without_obs=False
         ):
         # TODO: This method should be trashed. It is not really useful
         if n is None:
             n = self.n_predictions
         
         if seed is None:
-            seed = self.simulation.seed
+            seed = self.config.simulation.seed
         
         predictions = self.posterior_predictions(
             n=n, 
@@ -1124,6 +1099,7 @@ class NumpyroBackend:
             observations=self.simulation.observations,
             predictions=predictions,
             data_variable=data_variable,
+            plot_preds_without_obs=plot_preds_without_obs,
             x_dim=x_dim,
             ax=ax,
             subset=subset,
@@ -1131,7 +1107,25 @@ class NumpyroBackend:
 
         return ax
 
+    def plot(self):
+        self.plot_diagnostics()
 
+        plot = self.config.inference.plot
+        if plot is None:
+            return
+        elif isinstance(plot, str):
+            try:
+                plot_func = getattr(self.simulation, plot)
+                plot_func(self.simulation)
+            except AttributeError:
+                warnings.warn(
+                    f"Plot function {plot} was not found in the plot.py module "
+                    "Make sure the name has been spelled correctly or try to "
+                    "set the function directly to 'sim.config.inference.plot'.",
+                    category=UserWarning
+                )
+        else:
+            plot(self.simulation)
 
     def plot_predictions(
             self, 
@@ -1140,16 +1134,21 @@ class NumpyroBackend:
             data_variable: str, 
             x_dim: str, 
             ax=None, 
+            plot_preds_without_obs=False,
             subset={},
-            mode="mean+hdi",
-            plot_options={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
+            mode: Literal["mean+hdi", "draws"]="mean+hdi",
+            plot_options: Dict={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
         ):
         # filter subset coordinates present in data_variable
         subset = {k: v for k, v in subset.items() if k in observations.coords}
         
         # select subset
-        obs = observations.sel(subset)[data_variable]
-        preds = predictions.sel(subset)[f"{data_variable}"]
+        preds = predictions.sel(subset)[data_variable]
+        try:
+            obs = observations.sel(subset)[data_variable]
+        except KeyError:
+            obs = preds.copy().mean(dim=("chain", "draw"))
+            obs.values = np.full_like(obs.values, np.nan)
         
         # stack all dims that are not in the time dimension
         if len(obs.dims) == 1:
@@ -1161,7 +1160,7 @@ class NumpyroBackend:
             preds = preds.assign_coords(batch=[0])
 
 
-        stack_dims = [d for d in obs.dims if d != x_dim]
+        stack_dims = [d for d in obs.dims if d not in [x_dim, "chain", "draw"]]
         obs = obs.stack(i=stack_dims)
         preds = preds.stack(i=stack_dims)
         N = len(obs.coords["i"])
@@ -1174,7 +1173,7 @@ class NumpyroBackend:
         y_mean = preds.mean(dim=("chain", "draw"))
 
         for i in obs.i:
-            if obs.sel(i=i).isnull().all():
+            if obs.sel(i=i).isnull().all() and not plot_preds_without_obs:
                 # skip plotting combinations, where all values are NaN
                 continue
             
@@ -1182,7 +1181,7 @@ class NumpyroBackend:
                 kwargs_hdi = dict(color="black", alpha=0.1)
                 kwargs_hdi.update(plot_options.get("pred_hdi", {}))
                 ax.fill_between(
-                    preds[x_dim].values, *hdi.sel(i=i).values.T, 
+                    preds[x_dim].values, *hdi.sel(i=i).values.T, # type: ignore
                     **kwargs_hdi
                 )
 
@@ -1244,8 +1243,8 @@ class NumpyroBackend:
         # just be aware that in the case of MAP this is not an acutal posterior.
         # But it can behave like one with multiple chains (1 for each start)
         idata = az.from_netcdf(pseudo_chains[0])
-        posterior = self.drop_vars_from_posterior(idata.posterior, drop_extra_vars)
-        log_likelihood = idata.log_likelihood
+        posterior = self.drop_vars_from_posterior(idata.posterior, drop_extra_vars) # type: ignore
+        log_likelihood = idata.log_likelihood # type: ignore
 
         # iterate over the posterior files with a progress bar (depending on the
         # size and number of posteriors this op needs time and memory)
@@ -1259,14 +1258,14 @@ class NumpyroBackend:
             ccord = {"chain": np.array([i])}
             
             # add chain coordinate to posterior and likelihood
-            idata.posterior = self.drop_vars_from_posterior(idata.posterior, drop_extra_vars)
-            idata.posterior = idata.posterior.assign_coords(ccord)
-            idata.log_likelihood = idata.log_likelihood.assign_coords(ccord)
+            idata.posterior = self.drop_vars_from_posterior(idata.posterior, drop_extra_vars) # type: ignore
+            idata.posterior = idata.posterior.assign_coords(ccord) # type: ignore
+            idata.log_likelihood = idata.log_likelihood.assign_coords(ccord) # type: ignore
 
             # concatenate chains
-            posterior = xr.concat([posterior, idata.posterior], dim="chain")
+            posterior = xr.concat([posterior, idata.posterior], dim="chain") # type: ignore
             log_likelihood = xr.concat(
-                [log_likelihood, idata.log_likelihood], 
+                [log_likelihood, idata.log_likelihood], # type: ignore
                 dim="chain"
             )
 
@@ -1282,7 +1281,7 @@ class NumpyroBackend:
         idata_multichain = az.InferenceData(
             posterior=posterior, 
             log_likelihood=log_likelihood,
-            observed_data=idata.observed_data,
+            observed_data=idata.observed_data, # type: ignore
         )
 
         idata_multichain = add_cluster_coordinates(idata_multichain, cluster_deviation)
@@ -1294,7 +1293,7 @@ class NumpyroBackend:
         """drops extra variables if they are included in the posterior
         """
         drop_vars = [k for k in list(posterior.data_vars.keys()) if "_norm" in k]
-        drop_vars = drop_vars + self.simulation.data_variables + drop_extra_vars
+        drop_vars = drop_vars + self.config.data_structure.data_variables + drop_extra_vars
         drop_vars = [v for v in drop_vars if v in posterior]
         drop_coords = [c for c in list(posterior.coords.keys()) if c.split("_dim_")[0] in drop_vars]
 

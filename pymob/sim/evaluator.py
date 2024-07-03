@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Sequence
 import inspect
 import xarray as xr
 import numpy as np
@@ -59,12 +59,12 @@ class Evaluator:
             model: Callable,
             solver: Callable,
             parameters: Dict,
-            dimensions: List,
+            dimensions: Sequence[str],
             n_ode_states: int,
-            var_dim_mapper: List,
+            var_dim_mapper: Dict,
             data_structure: Dict,
             coordinates: Dict,
-            data_variables: List,
+            data_variables: Sequence[str],
             stochastic: bool,
             indices: Optional[Dict] = {},
             post_processing: Optional[Callable] = None,

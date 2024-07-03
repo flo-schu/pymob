@@ -1,12 +1,22 @@
 name: Publish Python 🐍 distribution 📦 to PyPI 
 
 on:
-  release:
-    types: [published]
+  # release:
+  #   types: [published]
+  push:
+    tags: 
+      - "*"
 
 jobs:
+  test-package:
+    uses: ./.github/workflows/python-test.yml
+  build-package:
+    needs: test-package
+    uses: ./.github/workflows/python-build.yml
   publish-package:
     name: Publish Python 🐍 distribution 📦 to PyPI
+
+    needs: build-package
 
     runs-on: ubuntu-latest
     environment:
@@ -18,10 +28,9 @@ jobs:
     steps:
     - name: Download artifact
       id: download-artifact
-      uses: dawidd6/action-download-artifact@v2
+      # make sure you use the same version for uploading and downloading artifacts
+      uses: actions/download-artifact@v4
       with:
-        workflow: python-build.yml
-        workflow_conclusion: success
         name: python-package-distributions
         path: dist/
     - name: Publish distribution 📦 to PyPI

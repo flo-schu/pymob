@@ -23,43 +23,20 @@ class PymooBackend:
         simulation: SimulationBase,
     ):
         self.simulation = simulation
-        self.pool: mp.Pool = None
+        self.config = self.simulation.config
+        self.pool: mp.Pool = None  # type: ignore
         self.distance_function = self.distance_function_parser()
         self.transform = self.variable_parser()
         self.problem = OptimizationProblem(backend=self)
 
-    @property
-    def population_size(self):
-        return self.simulation.config.getint("inference.pymoo", "population_size", fallback=100)
-    
-    @property
-    def seed(self):
-        return self.simulation.config.getint("inference.pymoo", "seed", fallback=1)
-        
-    @property
-    def max_nr_populations(self):
-        return self.simulation.config.getint("inference.pymoo", "max_nr_populations", fallback=50)
-    
-    @property
-    def xtol(self):
-        return self.simulation.config.getfloat("inference.pymoo", "xtol", fallback=0.0005)
-    
-    @property
-    def ftol(self):
-        return self.simulation.config.getfloat("inference.pymoo", "ftol", fallback=0.005)
-    
-    @property
-    def cvtol(self):
-        return self.simulation.config.getfloat("inference.pymoo", "cvtol", fallback=1e-8)
-    
-    @property
-    def verbose(self):
-        return self.simulation.config.get("inference.pymoo", "verbose", fallback=True)
     
     def distance_function_parser(self):
         def f(x):
-            Y = self.simulation.evaluate(theta=x)
-            obj_name, obj_value = self.simulation.objective_function(results=Y)
+            evaluator = self.simulation.dispatch(theta=x)
+            evaluator()
+            obj_name, obj_value = self.simulation.objective_function(
+                results=evaluator.results
+            )
             return obj_value
         return f
 
@@ -73,6 +50,10 @@ class PymooBackend:
         bounds = []
         names = []
         for v in variables:
+            if v.min is None or v.max is None:
+                raise ValueError(
+                    f"Bounds are not fully defined in Param({v}). Bounds (min, max) "
+                    "must be defined when using the pymoo backend.")
             bounds.append([v.min, v.max])
             names.append(v.name)
 
@@ -89,18 +70,16 @@ class PymooBackend:
 
         return transform
     
-    def store_results(self):
-        res = self.result
-
-        params = list(self.transform(X_scaled=np.array(res.X, ndmin=2)) )[0]
+    def store_results(self, results):
+        params = list(self.transform(X_scaled=np.array(results.X, ndmin=2)) )[0]
 
         res_dict = {
-            "f": res.f,
-            "cv": res.cv,
+            "f": results.f,
+            "cv": results.cv,
             "X": params
         }
         
-        file = f"{self.simulation.output_path}/pymoo_params.json"
+        file = f"{self.config.case_study.output_path}/pymoo_params.json"
         with open(file, "w") as fp:
             json.dump(res_dict, fp, indent=4)
 
@@ -108,14 +87,14 @@ class PymooBackend:
 
     def run(self):
         """Implements the parallelization in pymoo"""
-        n_cores = self.simulation.n_cores
+        n_cores = self.config.multiprocessing.n_cores
         print(f"Using {n_cores} CPU cores")
 
         if n_cores == 1:
             self.optimize()
         elif n_cores > 1:
             with mp.ProcessingPool(n_cores) as pool:
-                self.pool = pool  # assign pool so it can be accessed by _evaluate
+                self.pool = pool  # type: ignore # assign pool so it can be accessed by _evaluate
                 self.optimize()
 
 
@@ -123,28 +102,28 @@ class PymooBackend:
 
         reference_directions = get_reference_directions(
             name="energy", 
-            n_dim=self.simulation.n_objectives, 
-            n_points=self.population_size,
-            seed=self.seed + 1
+            n_dim=self.config.inference.n_objectives, 
+            n_points=self.config.inference_pymoo.population_size,
+            seed=self.config.simulation.seed + 1
         )
 
         algorithm = UNSGA3(
             ref_dirs=reference_directions,
-            pop_size=self.population_size
+            pop_size=self.config.inference_pymoo.population_size
         )
 
         termination = DefaultMultiObjectiveTermination(
-            xtol=self.xtol,
-            cvtol=self.cvtol,
-            ftol=self.ftol,
-            n_max_gen=self.max_nr_populations,
+            xtol=self.config.inference_pymoo.xtol,
+            cvtol=self.config.inference_pymoo.cvtol,
+            ftol=self.config.inference_pymoo.ftol,
+            n_max_gen=self.config.inference_pymoo.max_nr_populations,
         )
 
         # prepare the algorithm to solve the specific problem (same arguments as for the minimize function)
         algorithm.setup(
             problem=self.problem, 
             termination=termination,
-            seed=self.seed, 
+            seed=self.config.simulation.seed, 
             verbose=True,
         )
 
@@ -156,7 +135,7 @@ class PymooBackend:
             pop = algorithm.ask()
 
             # evaluate the individuals using the algorithm's evaluator (necessary to count evaluations for termination)
-            algorithm.evaluator.eval(self.problem, pop)
+            algorithm.evaluator.eval(self.problem, pop) # type: ignore
 
             # returned the evaluated individuals which have been evaluated or even modified
             algorithm.tell(infills=pop)
@@ -167,8 +146,11 @@ class PymooBackend:
         res = algorithm.result()
 
         # save the results
-        self.result = res
-        self.store_results()
+        self.results = res
+        # TODO: Store results to idata (although it seems pointless),
+        # extra dimensions for individuals and generations, one draw nevertheless
+
+        self.store_results(results=res)
 
     def post_processing(self, pop):
         F = pop.get("F")
@@ -182,7 +164,7 @@ class PymooBackend:
         # )
 
     def load_results(self):
-        with open(f"{self.simulation.output_path}/pymoo_params.json", "r") as fp:
+        with open(f"{self.config.case_study.output_path}/pymoo_params.json", "r") as fp:
             self.result = json.load(fp)
             
     def plot_predictions(

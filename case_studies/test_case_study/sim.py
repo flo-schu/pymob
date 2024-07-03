@@ -1,25 +1,24 @@
 import numpy as np
 import xarray as xr
-from mod import lotka_volterra, solve, solve_jax
-from plot import plot_trajectory
 from pymob.simulation import SimulationBase
-import prob
+from test_case_study.mod import lotka_volterra, solve, solve_jax
+from test_case_study.plot import plot_trajectory
+from test_case_study import prob
 
 class Simulation(SimulationBase):
     solver = solve_jax
     model = lotka_volterra
-    prob = prob
+    _prob = prob
 
     def initialize(self, input):
         self.model_parameters["parameters"] =  dict(
-            alpha = 0.1,  # Prey birth rate
+            alpha = 0.5,  # Prey birth rate
             beta = 0.02,  # Rate at which predators decrease prey population
             gamma = 0.3,  # Predator reproduction rate
             delta = 0.01,  # Predator death rate
         )
-        if self.config.getint("simulation", "replicated"):
-            rng = np.random.default_rng(1)
-            self.model_parameters["y0"] = rng.integers(1, 50, size=(10, 2))
+        if self.config.simulation.replicated:
+            self.model_parameters["y0"] = self.RNG.integers(1, 50, size=(10, 2))
         else:
             self.model_parameters["y0"] = np.array([40, 9])  # initial population of prey and predator
 

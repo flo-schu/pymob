@@ -1,9 +1,11 @@
+import os
 import click
 import resource
 
 from pymob.utils import help
 from pymob.utils.store_file import prepare_casestudy, import_package
 from pymob.simulation import SimulationBase
+from pymob.sim.config import Config
 
 @click.command()
 @click.option("-c", "--case_study", type=str, default="test_case_study", 
@@ -21,21 +23,20 @@ from pymob.simulation import SimulationBase
 @click.option("--inference_backend", type=str, default="pymoo")
 def main(case_study, scenario, package, output, random_seed, n_cores, inference_backend):
     
-    config = prepare_casestudy(
-        case_study=(case_study, scenario), 
-        config_file="settings.cfg", 
-        pkg_dir=package
-    )
+    cfg = os.path.join(package, case_study, "scenarios", scenario, "settings.cfg")
+    config = Config(cfg)
+    config.case_study.name = case_study
+    config.case_study.scenario = scenario
+    config.import_casestudy_modules()
 
-    if n_cores is not None: config.set("multiprocessing", "cores", str(n_cores))
-    if random_seed is not None: config.set("simulation", "seed", str(random_seed))
-    if output is not None: config.set("case-study", "output", output)
-    
-    # import package        
-    pkg = import_package(package_path=config["case-study"]["package"])
-    Simulation: SimulationBase = getattr(
-        pkg.sim, config["case-study"].get("simulation", fallback="Simulation"))
+    if n_cores is not None: config.multiprocessing.cores = n_cores
+    if random_seed is not None: config.simulation.seed = random_seed
+    if output is not None: config.case_study.output = output
+
+    # import simulation      
+    Simulation = config.import_simulation_from_case_study()
     sim = Simulation(config)
+    sim.setup()
 
     sim.set_inferer(backend=inference_backend)
     sim.prior_predictive_checks()
