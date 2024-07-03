@@ -1,9 +1,10 @@
 import numpy as np
-from scipy.stats import norm
 
 from pymob.sim.config import Config
 from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
+
+rng = np.random.default_rng(1)
 
 def init_simulation_casestudy_api(scenario="test_scenario"):
     config = prepare_casestudy(
@@ -58,6 +59,6 @@ def linear_model():
 
     x = np.linspace(-5, 5, 50)
     y = model(x=x, a=parameters["a"], b=parameters["b"])
-    y_noise = norm(loc=y, scale=parameters["sigma_y"]).rvs()
+    y_noise = rng.normal(loc=y, scale=parameters["sigma_y"])
 
     return model, x, y, y_noise, parameters

@@ -1,6 +1,7 @@
 import pytest
 import tempfile
-from pymob.simulation import SimulationBase
+from pymob.simulation import SimulationBase, Config
+from pymob.sim.config import ArrayParam, FloatParam
 from pymob.utils.store_file import import_package
 import xarray as xr
 import os
@@ -14,6 +15,7 @@ def test_simulation():
     sim.config.case_study.observations = ["simulated_data.nc"]
     sim.config.simulation.data_variables = ["rabbits", "wolves"]
     sim.config.simulation.dimensions = ["time"]
+    sim.config.case_study.data_path = None
     
     sim.validate()
 
@@ -96,6 +98,79 @@ def test_standalone_casestudy():
         else:
             os.remove(p)
 
+def test_parameter_parsing():
+    config = Config()
+
+    io = "value=1.0 min=0.0 max=3.0 free=True"
+
+    # test scripting input
+    test = FloatParam(value=1.0, min=0.0, max=3.0)
+    config.model_parameters.test = test
+
+    # test dict input
+    config.model_parameters.test = test.model_dump(exclude_none=True)
+    assert config.model_parameters.test == test # type: ignore
+
+    # test validation
+    config.model_parameters.test = io
+    assert config.model_parameters.test == test # type: ignore
+
+    # test serialization
+    serialized = config.model_parameters.model_dump(mode="json")
+    assert serialized == {"test": io}
+
+
+def test_parameter_array():
+    config = Config()
+
+    io = "value=[1.0,2.0,3.0] free=True"
+
+    # test scripting input
+    test = ArrayParam(value=[1.0,2.0,3.0])
+    config.model_parameters.test = test
+
+    # test dict input
+    config.model_parameters.test = test.model_dump(exclude_none=True)
+    assert config.model_parameters.test == test # type: ignore
+
+    # test config file input
+    config.model_parameters.test = io
+    assert config.model_parameters.test == test  # type: ignore
+    
+    # test serialization
+    serialized = config.model_parameters.model_dump(mode="json")
+    assert serialized == {"test": io}
+
+
+def test_model_parameters():
+    config = Config()
+
+    a = FloatParam(value=1)
+    b = FloatParam(value=5, free=False)
+
+    config.model_parameters.a = a
+    config.model_parameters.b = b
+
+    frmp = config.model_parameters.free
+    fimp = config.model_parameters.fixed
+    almp = config.model_parameters.all
+
+    assert frmp == {"a": a}
+    assert fimp == {"b": b}
+    assert almp == {"a": a, "b":b}
+
+def test_error_model():
+    config = Config()
+
+    a = "lognorm(loc=1,scale=2)"
+    config.error_model.a = a
+
+    
+
 if __name__ == "__main__":
     # test_simulation()
+    test_error_model()
+    test_parameter_parsing()
+    test_parameter_array()
+    test_model_parameters()
     pass

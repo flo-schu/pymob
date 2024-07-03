@@ -1,23 +1,65 @@
 import os
+import re
 import sys
+from dataclasses import dataclass
 from glob import glob
 import configparser
 import warnings
 import importlib
 import logging
+import json
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Any, Literal, Callable
+from typing import List, Optional, Union, Dict, Any, Literal, Callable, Sequence
 from typing_extensions import Annotated
 from types import ModuleType
 import tempfile
 
 import numpy as np
+from numpy.typing import ArrayLike
 
-from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+from pydantic import (
+    BaseModel, Field, computed_field, field_validator, model_validator, 
+    ConfigDict, TypeAdapter, ValidationError
+)
 from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 
 from pymob.utils.store_file import scenario_file, converters
+
+
+class FloatParam(BaseModel):
+    name: Optional[str] = None
+    value: float = 0.0
+    min: Optional[float] = None
+    max: Optional[float] = None
+    step: Optional[float] = None
+    prior: Optional[str] = None
+    free: bool = True
+
+
+class ArrayParam(BaseModel):
+    name: Optional[str] = None
+    value: List[float] = [0.0]
+    min: Optional[List[float]] = None
+    max: Optional[List[float]] = None
+    step: Optional[List[float]] = None
+    prior: Optional[str] = None
+    free: bool = True
+
+class ParameterDict(dict):
+    def __init__(self, *args, **kwargs):
+        self.callback: Callable = kwargs.pop('callback', None)
+        super().__init__(*args, **kwargs)
+    
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if self.callback:
+            self.callback(self)
+    
+    def update(self, *args, **kwargs):
+        super().update(*args, **kwargs)
+        if self.callback:
+            self.callback(self)
 
 def string_to_list(option: Union[List, str]) -> List:
     if isinstance(option, (list, tuple)):
@@ -31,8 +73,64 @@ def string_to_list(option: Union[List, str]) -> List:
         return [i.strip() for i in option.split(" ")]
 
 
+def string_to_dict(
+        option: Union[Dict[str,str|float|int|List[float|int]], str]
+    ) -> Dict[str,str|float|int|List[float|int]]:
+    """Expects a string of this form 
+    e.g. 'value=1 max=10 min=0 prior=Lognormal(loc=2,scale=1)'
+    """
+    if isinstance(option, Dict):
+        return option
+    
+    else:
+        retdict = {}
+        for i in option.split(" "):
+            k, v = i.strip().split(sep="=", maxsplit=1)
+            parsed = False
+            if not parsed:
+                try:
+                    parsed_value = TypeAdapter(List[float]).validate_json(v)
+                    parsed = True
+                except ValidationError:
+                    pass
+
+            if not parsed:
+                try:
+                    parsed_value = TypeAdapter(float).validate_json(v)
+                    parsed = True
+                except ValidationError:
+                    pass
+
+            if not parsed:
+                parsed_value = v
+
+            retdict.update({k:parsed_value})
+                
+        return retdict
+
+
+def string_to_param(option:str|FloatParam|ArrayParam) -> FloatParam|ArrayParam:
+    if isinstance(option, FloatParam|ArrayParam):
+        return option
+    else:
+        param_dict = string_to_dict(option)
+        if isinstance(param_dict.get("value"), float):
+            return FloatParam.model_validate(param_dict, strict=False)
+        
+        else:
+            return ArrayParam.model_validate(param_dict, strict=False)
+    
+
+def dict_to_string(dct: Dict):
+    return " ".join([f"{k}={v}".replace(" ", "") for k, v in dct.items()])
+
+
 def list_to_string(lst: List):
     return " ".join([str(l) for l in lst])
+
+
+def param_to_string(prm: ArrayParam|FloatParam):
+    return dict_to_string(prm.model_dump(exclude_none=True))
 
 
 serialize_list_to_string = PlainSerializer(
@@ -41,29 +139,50 @@ serialize_list_to_string = PlainSerializer(
     when_used="json"
 )
 
+
+serialize_dict_to_string = PlainSerializer(
+    dict_to_string, 
+    return_type=str, 
+    when_used="json"
+)
+
+
+serialize_param_to_string = PlainSerializer(
+    param_to_string, 
+    return_type=str, 
+    when_used="json"
+)
+
+
 to_str = PlainSerializer(lambda x: str(x), return_type=str, when_used="json")
 
+
 OptionListStr = Annotated[
-    List[str], 
+    Sequence[str], 
     BeforeValidator(string_to_list), 
     serialize_list_to_string
 ]
+
+
+OptionDictStr = Annotated[
+    Dict[str,str|float|int|List[float|int]], 
+    BeforeValidator(string_to_dict), 
+    serialize_dict_to_string
+]
+
+
+OptionParam = Annotated[
+    FloatParam|ArrayParam, 
+    BeforeValidator(string_to_param), 
+    serialize_param_to_string
+]
+
 
 OptionListFloat = Annotated[
     List[float], 
     BeforeValidator(string_to_list), 
     serialize_list_to_string
 ]
-
-
-class FloatParam(BaseModel):
-    name: str
-    value: Optional[float]
-    min: Optional[float]
-    max: Optional[float]
-    step: Optional[float]
-    prior: Optional[str]
-
 
         
 class Casestudy(BaseModel):
@@ -75,7 +194,7 @@ class Casestudy(BaseModel):
     scenario: str = "unnamed_scenario"
     package: str = "case_studies"
     modules: OptionListStr = ["sim", "mod", "prob", "data", "plot"]
-    simulation: str = "Simulation"
+    simulation: str = Field(default="Simulation", description="Simulation Class defined in sim.py module in the case study.")
 
     output: Optional[str] = None
     data: Optional[str] = None
@@ -97,6 +216,10 @@ class Casestudy(BaseModel):
                 "results",
                 self.scenario,
             )
+    
+    @output_path.setter
+    def output_path(self, value) -> None:
+        self.output = value
 
     @computed_field
     @property
@@ -109,6 +232,10 @@ class Casestudy(BaseModel):
                 os.path.relpath(self.name),
                 "data"
             )
+        
+    @data_path.setter
+    def data_path(self, value) -> None:
+        self.data = value
     
     @computed_field
     @property
@@ -222,12 +349,12 @@ class Inference(BaseModel):
     objective_names: OptionListStr = []
     backend: Optional[str] = None
     extra_vars: OptionListStr = []
-    plot_function: Optional[str] = None
+    plot: Optional[str|Callable] = None
     n_predictions: Annotated[int, to_str] = 1
 
 class Multiprocessing(BaseModel):
     _name = "multiprocessing"
-    model_config = {"validate_assignment" : True, "extra": "ignore"}
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
 
     # TODO: Use as private field
     cores: Annotated[int, to_str] = 1
@@ -242,8 +369,37 @@ class Multiprocessing(BaseModel):
             return cpu_set
         
 class Modelparameters(BaseModel):
-    model_config = {"validate_assignment" : True, "extra": "allow"}
+    __pydantic_extra__: Dict[str,OptionParam]
+    model_config = ConfigDict(extra="allow", validate_assignment=True)
 
+    @property
+    def free(self) -> Dict[str,OptionParam]:
+        return {k:v for k, v in self.__pydantic_extra__.items() if v.free}
+
+    @property
+    def fixed(self) -> Dict[str,OptionParam]:
+        return {k:v for k, v in self.__pydantic_extra__.items() if not v.free}
+
+    @property
+    def all(self) -> Dict[str,OptionParam]:
+        return self.__pydantic_extra__
+
+    @property
+    def n_free(self) -> int:
+        return len(self.free)
+    
+    @property
+    def free_value_dict(self) -> Dict[str,float|List[float]]:
+        return {k:v.value for k, v in self.free.items()}
+    
+    @property
+    def value_dict(self) -> Dict[str,float|List[float]]:
+        return {k:v.value for k, v in self.all.items()}
+    
+
+class Errormodel(BaseModel):
+    __pydantic_extra__: Dict[str,str]
+    model_config = ConfigDict(extra="allow", validate_assignment=True)
 
 class Pyabc(BaseModel):
     model_config = {"validate_assignment" : True}
@@ -253,7 +409,6 @@ class Pyabc(BaseModel):
     minimum_epsilon: Annotated[float, to_str] = 0.0
     min_eps_diff: Annotated[float, to_str] = 0.0
     max_nr_populations: Annotated[int, to_str] = 1000
-    plot_function: Optional[str] = None
     
     # database configuration
     database_path: str = f"{tempfile.gettempdir()}/pyabc.db"
@@ -274,7 +429,7 @@ class Redis(BaseModel):
 
 
 class Pymoo(BaseModel):
-    model_config = {"validate_assignment" : True}
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
 
     algortihm: str = "UNSGA3"
     population_size: Annotated[int, to_str] = 100
@@ -285,7 +440,7 @@ class Pymoo(BaseModel):
     verbose: Annotated[bool, to_str] = True
     
 class Numpyro(BaseModel):
-    model_config = {"validate_assignment" : True}
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
     user_defined_probability_model: Optional[str] = None
     user_defined_preprocessing: Optional[str] = None
     gaussian_base_distribution: bool = False
@@ -339,7 +494,8 @@ class Config(BaseModel):
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
     simulation: Simulation = Field(default=Simulation())
     inference: Inference = Field(default=Inference())
-    model_parameters: Modelparameters = Field(default=Modelparameters(), alias="free-model-parameters")
+    model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters") #type: ignore
+    error_model: Errormodel = Field(default=Errormodel(), alias="error-model") # type: ignore
     multiprocessing: Multiprocessing = Field(default=Multiprocessing())
     inference_pyabc: Pyabc = Field(default=Pyabc(), alias="inference.pyabc")
     inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")
@@ -393,7 +549,7 @@ class Config(BaseModel):
             by_alias=True, 
             mode="json", 
             exclude_none=True,
-            exclude={"case_study": {"output_path", "data_path", "root", "init_root"}}
+            exclude={"case_study": {"output_path", "data_path", "root", "init_root", "default_settings_path"}}
         )
         self._config.update(**settings)
 
@@ -411,6 +567,31 @@ class Config(BaseModel):
             with open(file_path, "w") as f:
                 self._config.write(f)
 
+    def create_directory(self, directory: Literal["results", "scenario"], force=False):
+        if directory == "results":
+            p = os.path.abspath(self.case_study.output_path)
+        elif directory == "scenario":
+            p = os.path.abspath(self.case_study.scenario_path)
+        else:
+            raise NotImplementedError(
+                f"{directory.capitalize()} is not an expected directory in the "
+                "case study logic. Use one of 'results' or 'scenario'."
+            )
+
+        if os.path.exists(p):
+            print(f"{directory.capitalize()} directory exists at '{p}'.")
+            return
+        else:
+            if not force:
+                answer = input(f"Create {directory} directory at '{p}'? [Y/n]")
+            else:
+                answer = "y"
+
+            if answer.lower() == "y" or answer.lower() == "":
+                os.makedirs(p)
+                print(f"{directory.capitalize()} directory created at '{p}'.")
+            else:
+                print(f"No {directory} directory created.")
 
     def import_casestudy_modules(self):
         """
