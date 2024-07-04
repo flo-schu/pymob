@@ -2,7 +2,7 @@ from functools import partial, lru_cache
 import glob
 import re
 import warnings
-from typing import Tuple, Dict, Union, Optional, Callable, Literal
+from typing import Tuple, Dict, Union, Optional, Callable, Literal, List
 
 from tqdm import tqdm
 import numpy as np
@@ -723,7 +723,11 @@ class NumpyroBackend:
 
         seeded_model = numpyro.handlers.seed(model, key)
    
-        def log_density(theta, return_type="summed-by-site", check=True):
+        def log_density(
+            theta, 
+            return_type:Literal["joint-log-likelihood", "full", "summed-by-site", "summed-by-prior-data"]="joint-log-likelihood",
+            check=True
+        ):
             """Log density relies heavily on the substitute utility
             
             The log density is synonymous for log-likelihood (it is the log 
@@ -776,7 +780,7 @@ class NumpyroBackend:
                 params=theta
             )
 
-            joint_log_density = float(joint_log_density)
+            joint_log_density = joint_log_density
 
             if check:
                 sites_in_theta = {
@@ -839,6 +843,72 @@ class NumpyroBackend:
 
 
         return log_density
+
+    def check_log_likelihood(
+        self, 
+        theta: Optional[Dict[str, float|List[float]]]=None,
+    ):
+        log_density = self.create_log_likelihood(seed=self.config.simulation.seed)
+        
+        if theta is not None:
+            pass
+        elif self.config.inference_numpyro.gaussian_base_distribution:
+            theta = {f"{k}_norm": 0.0 for k, _ in self.config.model_parameters.free.items()}
+        else:
+            # TODO: replace by prior sample, or prior mean, ...
+            theta = self.config.model_parameters.value_dict
+            
+        
+        llsum, llpri, lldat = log_density(theta=theta, return_type="full", check=True)
+        if not np.isnan(llsum) and not np.isnan(llsum):
+            return llsum, llpri, lldat
+        
+        nanlogliks_pri = [k for k, g in llpri.items() if np.any(np.isnan(g)) or np.any(np.isinf(g))]
+        nanlogliks_dat = [k for k, g in lldat.items() if np.any(np.isnan(g)) or np.any(np.isinf(g))]
+        
+        if len(nanlogliks_dat + nanlogliks_pri) > 0:
+            warnings.warn(
+                f"Log-likelihoods {nanlogliks_dat + nanlogliks_pri} contained "
+                "NaN or inf values. The gradient based "
+                "samplers will not be able to sample from this model. Make sure "
+                "that all functions are numerically well behaved. "
+                "Inspect the model with `jax.debug.print('{}',x)` "
+                "https://jax.readthedocs.io/en/latest/notebooks/external_callbacks.html#exploring-debug-callback"
+                "Or look at the functions step by step to find the position where "
+                "jnp.grad(func)(x) evaluates to NaN"
+            )
+        return llsum, llpri, lldat
+
+    def check_gradients(
+        self, 
+        theta: Optional[Dict[str, float|List[float]]]=None,
+    ):
+        log_density = self.create_log_likelihood(seed=self.config.simulation.seed)
+        grad_func = partial(log_density, return_type="joint-log-likelihood", check=False)
+
+        if theta is not None:
+            pass
+        elif self.config.inference_numpyro.gaussian_base_distribution:
+            theta = {f"{k}_norm": 0.0 for k, _ in self.config.model_parameters.free.items()}
+        else:
+            # TODO: replace by prior sample, or prior mean, ...
+            theta = self.config.model_parameters.value_dict
+            
+        grads = jax.grad(grad_func)(theta)
+        nangrads = [k for k, g in grads.items() if np.isnan(g) or np.isinf(g)]
+        if len(nangrads) > 0:
+            warnings.warn(
+                f"Gradients {nangrads} contained NaN or infinity values. The gradient based "
+                "samplers will not be able to sample from this model. Make sure "
+                "that all functions are numerically well behaved. "
+                "Inspect the model with `jax.debug.print('{}',x)` "
+                "https://jax.readthedocs.io/en/latest/notebooks/external_callbacks.html#exploring-debug-callback"
+                "Or look at the functions step by step to find the position where "
+                "jnp.grad(func)(x) evaluates to NaN"
+            )
+
+        return grads
+
 
     @lru_cache
     def prior_predictions(self, n=100, seed=1):
