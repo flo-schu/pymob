@@ -895,10 +895,10 @@ class NumpyroBackend:
             theta = self.config.model_parameters.value_dict
             
         grads = jax.grad(grad_func)(theta)
-        nangrads = [k for k, g in grads.items() if np.isnan(g)]
+        nangrads = [k for k, g in grads.items() if np.isnan(g) or np.isinf(g)]
         if len(nangrads) > 0:
             warnings.warn(
-                f"Gradients {nangrads} contained NaN values. The gradient based "
+                f"Gradients {nangrads} contained NaN or infinity values. The gradient based "
                 "samplers will not be able to sample from this model. Make sure "
                 "that all functions are numerically well behaved. "
                 "Inspect the model with `jax.debug.print('{}',x)` "
