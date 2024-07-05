@@ -65,6 +65,9 @@ class DataVariable(BaseModel):
         Defaults to 'nan', which sets the maximum to the maximum of the 
         observations
 
+    observed: bool
+        If the data-variable was observed or not. Defaults to True
+
     dimensions_evaluator: List[str]
         Specifies the dimensions and their order returned by the evaluator.
         This is necessary to bring observations and results together, if for some
@@ -79,6 +82,7 @@ class DataVariable(BaseModel):
     dimensions: List[str]
     min: float = np.nan
     max: float = np.nan
+    observed: bool = True
     dimensions_evaluator: Optional[List[str]] = None
 
     @model_validator(mode="after")
@@ -412,9 +416,25 @@ class Datastructure(BaseModel):
     __pydantic_extra__: Dict[str,OptionDataVariable]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
+    def remove(self, key) -> None:
+        """Removes a data variable from the data structure"""
+        if key not in self.__pydantic_extra__:
+            warnings.warn(
+                f"'{key}' is not a data-variable. Data variables are: "
+                f"{self.data_variables}."
+            )
+            return
+        
+        deleted_var = self.__pydantic_extra__.pop(key)
+        print(f"Deleted '{key}' DataVariable({deleted_var}).")
+
     @property
     def data_variables(self) -> List[str]:
         return [k for k in self.__pydantic_extra__.keys()]
+    
+    @property
+    def observed_data_variables(self) -> List[str]:
+        return [k for k, v in self.__pydantic_extra__.items() if v.observed]
     
     @property
     def dimensions(self) -> List[str]:
@@ -438,6 +458,11 @@ class Datastructure(BaseModel):
     @property
     def dimdict(self) -> Dict[str, List[str]]:
         return {k: v.dimensions for k, v in self.__pydantic_extra__.items()}
+
+    @property
+    def observed_dimdict(self) -> Dict[str, List[str]]:
+        return {k: v.dimensions for k, v in self.__pydantic_extra__.items() if v.observed}
+
 
     @property
     def var_dim_mapper(self) -> Dict[str, List[str]]:
@@ -481,6 +506,15 @@ class Datastructure(BaseModel):
     @property
     def data_variables_max(self):
         return [v.max for v in self.__pydantic_extra__.values()]
+
+    @property
+    def observed_data_variables_min(self):
+        return [v.min for v in self.__pydantic_extra__.values() if v.observed]
+
+    @property
+    def observed_data_variables_max(self):
+        return [v.max for v in self.__pydantic_extra__.values() if v.observed]
+
 
 
 class Inference(BaseModel):
