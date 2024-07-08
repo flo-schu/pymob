@@ -1,5 +1,7 @@
 from typing import Callable, Dict, List, Optional, Sequence
 import inspect
+from frozendict import frozendict
+from copy import deepcopy
 import xarray as xr
 import numpy as np
 from pymob.solvers.base import mappar, SolverBase
@@ -57,8 +59,7 @@ class Evaluator:
     def __init__(
             self,
             model: Callable,
-            solver: Callable,
-            parameters: Dict,
+            solver: type|Callable,
             dimensions: Sequence[str],
             n_ode_states: int,
             var_dim_mapper: Dict,
@@ -68,6 +69,7 @@ class Evaluator:
             stochastic: bool,
             indices: Dict = {},
             post_processing: Optional[Callable] = None,
+            solver_kwargs: Dict = {},
             **kwargs
         ) -> None:
         """_summary_
@@ -107,8 +109,7 @@ class Evaluator:
             is performed
         """
         
-        self.model = model
-        self.parameters = parameters
+        self.parameters = {}
         self.dimensions = dimensions
         self.n_ode_states = n_ode_states
         self.var_dim_mapper = var_dim_mapper
@@ -117,26 +118,66 @@ class Evaluator:
         self.coordinates = coordinates
         self.is_stochastic = stochastic
         self.indices = indices
+        self.solver_kwargs = solver_kwargs
         
+        # can be initialized
         if post_processing is None:
             self.post_processing = lambda results, time, interpolation: results
         else: 
             self.post_processing = post_processing
                 
+        # can be initialized
         # set additional arguments of evaluator
         _ = [setattr(self, key, val) for key, val in kwargs.items()]
 
         self._signature = {}
 
-        if isinstance(solver, type):
-            self._solver = solver()
+        if callable(model):
+            if hasattr(model, "__func__"):
+                self.model = model.__func__
+            else:
+                self.model = model
         else:
-            self._solver = solver
+            raise NotImplementedError(
+                f"The model {model} must be provided as a callable."
+            )
 
-        self.get_call_signature()
+        # can be initialized
+        if isinstance(solver, type):
+            if issubclass(solver, SolverBase):
+                self._solver = solver(
+                    model=self.model,
+                    post_processing=self.post_processing,
+                    solver_kwargs=frozendict(solver_kwargs),
+                    
+                    coordinates=frozendict({k: tuple(v) for k, v in self.coordinates.items()}),
+                    dimensions=tuple(self.dimensions),
+                    data_variables=tuple(self.data_variables),
+                    
+                    indices=frozendict({k: tuple(v) for k, v in self.indices.items()}),
+                    n_ode_states=self.n_ode_states,
+                    is_stochastic=self.is_stochastic,
+                )
+            else:
+                raise NotImplementedError(
+                    f"If solver is passed as a class of type {type(solver)}. "
+                    "Must be a subclass of `pymob.solvers.base.SolverBase`. "
+                    "Alternatively pass a callable."
+                )
+        elif callable(solver):
+            if hasattr(solver, "__func__"):
+                self._solver = solver.__func__
+            else:
+                self._solver = solver
+            self.get_call_signature()
 
+        else:
+            raise NotImplementedError(
+                f"Solver {solver} is neither a subclass of "
+                "`pymob.solvers.base.SolverBase` nor a callable."
+            )
 
-
+    # can be initialized
     def get_call_signature(self):
         if isinstance(self._solver, SolverBase):
             signature = inspect.signature(self._solver.solve)
@@ -169,7 +210,12 @@ class Evaluator:
         if seed is not None:
             self._signature.update({"seed": seed})
 
-        Y_ = self._solver(**self._signature)
+        if isinstance(self._solver, SolverBase):
+            Y_ = self._solver(**self.parameters)
+
+        else:
+            self._signature["parameters"].update(self.parameters)
+            Y_ = self._solver(**self._signature)
         
         # TODO: Consider which elements may be abstracted from the solve methods 
         # implemented in mod.py below is an unsuccessful approach
@@ -205,3 +251,5 @@ class Evaluator:
                 "Results returned by the solver must be of type Dict or np.ndarray."
             )
     
+    def spawn(self):
+        return deepcopy(self)

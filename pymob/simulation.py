@@ -105,8 +105,8 @@ def get_return_arguments(func):
     return return_args
 
 class SimulationBase:
-    model: Callable
-    solver: Callable
+    model: Optional[Callable] = None
+    solver: Optional[Callable] = None
     _mod: ModuleType
     _prob: ModuleType
     _data: ModuleType
@@ -143,7 +143,7 @@ class SimulationBase:
         # simulation
         # self.setup()
         
-    def setup(self):
+    def setup(self, **evaluator_kwargs):
         """Simulation setup routine, when the following methods have been 
         defined:
         
@@ -173,6 +173,7 @@ class SimulationBase:
             model_parameters=copy.deepcopy(dict(self.model_parameters))
         )
         self.config.simulation.n_ode_states = self.infer_ode_states()
+        self.dispatch_constructor()
 
     @property
     def model_parameters(self) -> Dict[Literal["parameters","y0","x_in"],Any]:
@@ -329,18 +330,6 @@ class SimulationBase:
                     f"Missing modules can lead to unexpected behavior."
                 )
 
-
-
-
-    def load_functions(self):
-        _model = self.config.simulation.model
-        if _model is not None:
-            self.model = getattr(self._mod, _model)
-
-        _solver = self.config.simulation.solver
-        if _solver is not None:
-            self.solver = getattr(self._mod, _solver)
-
     def create_coordinates(self) -> Dict[str, np.ndarray]:
         coordinates = {}
         for dim in self.config.data_structure.dimensions:
@@ -426,7 +415,8 @@ class SimulationBase:
     def validate_model_input(model_input) -> DataArrayDict:
         if isinstance(model_input, xr.Dataset):
             model_input = {
-                k: dv.to_dict() for k, dv in model_input.data_vars.items()
+                k: {"data": dv.to_dict()["data"], "coords": dv.to_dict()["coords"]} 
+                for k, dv in model_input.data_vars.items()
             }
             return model_input # type: ignore
         
@@ -443,40 +433,39 @@ class SimulationBase:
         return data.where(mask, drop=True)
 
 
-    def dispatch(self, theta, **evaluator_kwargs):
-        """Dispatch an evaluator, which will compute the model at parameters
-        (theta). Evaluators are advantageous, because they are easier serialized
-        than the whole simulation object. Comparison can then happen back in 
-        the simulation.
+    def dispatch_constructor(self, **evaluator_kwargs):
+        """Construct the dispatcher and pass everything to the evaluator that is 
+        static."""
 
-        Theoretically, this could also be used to constrain coordinates etc, 
-        before evaluating.  
-        """
-        model_parameters = self.parameterize(dict(theta)) #type: ignore
-
-        if "y0" in model_parameters:
-            y0 = self.subset_by_batch_dimension(model_parameters["y0"])
-            y0 = self.validate_model_input(model_parameters["y0"])
-            model_parameters["y0"] = y0
-        
-        if "x_in" in model_parameters:
-            x_in = self.subset_by_batch_dimension(model_parameters["x_in"])
-            x_in = self.validate_model_input(model_parameters["x_in"])
-            model_parameters["x_in"] = x_in
-
-
-        # TODO: make sure the evaluator has all arguments required for solving
-        # model
-        # TODO: Check if model is bound. If yes extract
-        if hasattr(self.solver, "__func__"):
-            solver = self.solver.__func__
-        else:
-            solver = self.solver
-
-        if hasattr(self.model, "__func__"):
-            model = self.model.__func__
+        if self.model is None:
+            if self.config.simulation.model:
+                if not hasattr(self, "_mod"):
+                    self.load_modules()
+                model = getattr(self._mod, self.config.simulation.model)
+                self.model = model
+            else: 
+                raise ValueError(
+                    f"A model was not provided as a callable function nor was "
+                    "it specified in 'config.simulation.model', please specify "
+                    "Any of the two."
+                )
         else:
             model = self.model
+
+        if self.solver is None:
+            if self.config.simulation.solver:
+                if not hasattr(self, "_mod"):
+                    self.load_modules()
+                solver = getattr(self._mod, self.config.simulation.solver)
+                self.solver = solver
+            else: 
+                raise ValueError(
+                    f"A solver was not provided directly to 'sim.solver' nor was "
+                    "it specified in 'config.simulation.model', please specify "
+                    "Any of the two."
+                )
+        else:
+            solver = self.solver
         
         if self.solver_post_processing is not None:
             # TODO: Handle similar to solver and model
@@ -486,10 +475,10 @@ class SimulationBase:
 
         stochastic = self.config.simulation.modeltype
             
-        evaluator = Evaluator(
+        self.evaluator = Evaluator(
             model=model,
             solver=solver,
-            parameters=model_parameters,
+            # parameters=model_parameters,
             dimensions=self.dimensions,
             n_ode_states=self.config.simulation.n_ode_states,
             var_dim_mapper=self.var_dim_mapper,
@@ -503,6 +492,31 @@ class SimulationBase:
             **evaluator_kwargs
         )
 
+        # return evaluator
+
+    def dispatch(self, theta):
+        """Dispatch an evaluator, which will compute the model at parameters
+        (theta). Evaluators are advantageous, because they are easier serialized
+        than the whole simulation object. Comparison can then happen back in 
+        the simulation.
+
+        Theoretically, this could also be used to constrain coordinates etc, 
+        before evaluating.  
+        """
+        model_parameters = self.parameterize(dict(theta)) #type: ignore
+        # can be initialized
+        if "y0" in model_parameters:
+            y0 = self.subset_by_batch_dimension(model_parameters["y0"])
+            y0 = self.validate_model_input(model_parameters["y0"])
+            model_parameters["y0"] = y0
+        
+        if "x_in" in model_parameters:
+            x_in = self.subset_by_batch_dimension(model_parameters["x_in"])
+            x_in = self.validate_model_input(model_parameters["x_in"])
+            model_parameters["x_in"] = x_in
+
+        evaluator = self.evaluator.spawn()
+        evaluator.parameters = model_parameters
         return evaluator
 
     def parse_input(

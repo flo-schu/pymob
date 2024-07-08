@@ -36,6 +36,8 @@ def test_minimal_simulation():
     sim.config.model_parameters.a = FloatParam(value=10, free=False)
     sim.config.model_parameters.b = FloatParam(value=3, free=True , prior="normal(loc=0,scale=10)")
     sim.model_parameters["parameters"] = sim.config.model_parameters.value_dict
+
+    sim.dispatch_constructor()
     evaluator = sim.dispatch(theta={"b":3})
     evaluator()
     evaluator.results
