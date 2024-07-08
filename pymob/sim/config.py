@@ -9,12 +9,13 @@ import importlib
 import logging
 import json
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Literal, Callable
+from typing import List, Optional, Union, Dict, Literal, Callable, Tuple, TypedDict
 from typing_extensions import Annotated
 from types import ModuleType
 import tempfile
 
 import numpy as np
+import xarray as xr
 from numpy.typing import ArrayLike
 
 from pydantic import (
@@ -45,6 +46,18 @@ class ArrayParam(BaseModel):
     step: Optional[List[float]] = None
     prior: Optional[str] = None
     free: bool = True
+
+class DataArrayDict(TypedDict):
+    dims: Tuple
+    attrs: Dict
+    data: List
+    coords: Dict[str, List]
+    name: str
+
+class ModelParameterDict(TypedDict):
+    parameters: Dict[str, float|str|int]
+    y0: xr.Dataset
+    x_in: xr.Dataset
 
 class DataVariable(BaseModel):
     """Describe a data variable
@@ -407,7 +420,7 @@ class Simulation(BaseModel):
     input_files: OptionListStr = []
     # data_variables: OptionListStr = []
     n_ode_states: int = -1
-    replicated: bool = False
+    batch_dimension: Optional[str] = None
     modeltype: Literal["stochastic", "deterministic"] = "stochastic"
     solver_post_processing: Optional[str] = Field(default=None, validate_default=True)
     seed: Annotated[int, to_str] = 1

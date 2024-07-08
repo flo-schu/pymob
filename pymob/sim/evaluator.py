@@ -2,7 +2,7 @@ from typing import Callable, Dict, List, Optional, Sequence
 import inspect
 import xarray as xr
 import numpy as np
-from pymob.sim.solvetools import mappar
+from pymob.solvers.base import mappar, SolverBase
 
 def create_dataset_from_numpy(Y, Y_names, coordinates):
     DeprecationWarning(
@@ -66,7 +66,7 @@ class Evaluator:
             coordinates: Dict,
             data_variables: Sequence[str],
             stochastic: bool,
-            indices: Optional[Dict] = {},
+            indices: Dict = {},
             post_processing: Optional[Callable] = None,
             **kwargs
         ) -> None:
@@ -119,7 +119,7 @@ class Evaluator:
         self.indices = indices
         
         if post_processing is None:
-            self.post_processing = lambda results, time: results
+            self.post_processing = lambda results, time, interpolation: results
         else: 
             self.post_processing = post_processing
                 
@@ -138,7 +138,13 @@ class Evaluator:
 
 
     def get_call_signature(self):
-        signature = inspect.signature(self._solver)
+        if isinstance(self._solver, SolverBase):
+            signature = inspect.signature(self._solver.solve)
+        elif inspect.isfunction(self._solver) or inspect.ismethod(self._solver):
+            signature = inspect.signature(self._solver)
+        else:
+            raise TypeError(f"{self._solver} must be SolverBase class or a function")
+        
         model_args = list(signature.parameters.keys())
 
         for a in model_args:

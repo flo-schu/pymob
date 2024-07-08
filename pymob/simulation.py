@@ -24,7 +24,7 @@ from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
-from pymob.sim.config import Config, FloatParam, ArrayParam, ParameterDict, DataVariable
+from pymob.sim.config import Config, FloatParam, ArrayParam, ParameterDict, DataVariable, DataArrayDict
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -389,8 +389,10 @@ class SimulationBase:
         @benchmark
         def run_bench():
             for i in range(n):
+                evaluator = self.dispatch(theta=self.model_parameter_dict, **kwargs)
                 evaluator(seed=self.RNG.integers(100))
-        
+                evaluator.results
+
         print(f"\nBenchmarking with {n} evaluations")
         print(f"=================================")
         run_bench()
@@ -420,6 +422,27 @@ class SimulationBase:
 
         return n_ode_states
         
+    @staticmethod
+    def validate_model_input(model_input) -> DataArrayDict:
+        if isinstance(model_input, xr.Dataset):
+            model_input = {
+                k: dv.to_dict() for k, dv in model_input.data_vars.items()
+            }
+            return model_input # type: ignore
+        
+        raise NotImplementedError(
+            f"Model input of type {type(model_input)} "
+            "is not implemented. Use an xr.Dataset"
+        )
+
+    def subset_by_batch_dimension(self, data):
+        batch_dim = self.config.simulation.batch_dimension
+        if batch_dim is None:
+            return data
+        mask = data[batch_dim].isin(self.coordinates[batch_dim])
+        return data.where(mask, drop=True)
+
+
     def dispatch(self, theta, **evaluator_kwargs):
         """Dispatch an evaluator, which will compute the model at parameters
         (theta). Evaluators are advantageous, because they are easier serialized
@@ -430,7 +453,18 @@ class SimulationBase:
         before evaluating.  
         """
         model_parameters = self.parameterize(dict(theta)) #type: ignore
+
+        if "y0" in model_parameters:
+            y0 = self.subset_by_batch_dimension(model_parameters["y0"])
+            y0 = self.validate_model_input(model_parameters["y0"])
+            model_parameters["y0"] = y0
         
+        if "x_in" in model_parameters:
+            x_in = self.subset_by_batch_dimension(model_parameters["x_in"])
+            x_in = self.validate_model_input(model_parameters["x_in"])
+            model_parameters["x_in"] = x_in
+
+
         # TODO: make sure the evaluator has all arguments required for solving
         # model
         # TODO: Check if model is bound. If yes extract
@@ -921,7 +955,7 @@ class SimulationBase:
             )
 
     @staticmethod
-    def parameterize(free_parameters: Dict[str,float|str|int], model_parameters: Dict) -> dict:
+    def parameterize(free_parameters: Dict[str,float|str|int], model_parameters: Dict) -> Dict:
         """
         Optional. Set parameters and initial values of the model. 
         Must return a dictionary with the keys 'y0' and 'parameters'

@@ -46,7 +46,7 @@ def solve(model, parameters, coordinates, data_variables):
 def solve_jax(model, parameters, coordinates, data_variables, seed=None):
     time = jnp.array(coordinates["time"])
     params = parameters["parameters"]
-    y0 = parameters["y0"]
+    y0 = [y["data"] for k, y in parameters["y0"].items()]
     ode_args = mappar(model, params, exclude=["t", "y"])
 
     result = odesolve(model, tuple(y0), time, ode_args)
