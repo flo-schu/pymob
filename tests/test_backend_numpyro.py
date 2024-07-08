@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 from click.testing import CliRunner
 from matplotlib import pyplot as plt
+from pymob.solvers.diffrax import JaxSolver
 
 from tests.fixtures import init_simulation_casestudy_api
 
@@ -59,6 +60,27 @@ def test_convergence_user_defined_probability_model():
 def test_convergence_nuts_kernel():
     sim = init_simulation_casestudy_api("test_scenario")
 
+    sim.config.inference_numpyro.kernel = "nuts"
+    sim.set_inferer(backend="numpyro")
+    sim.inferer.run()
+    
+    posterior_mean = sim.inferer.idata.posterior.mean( # type: ignore
+        ("chain", "draw"))[sim.model_parameter_names]
+    true_parameters = sim.model_parameter_dict
+    
+    # tests if true parameters are close to recovered parameters from simulated
+    # data
+    np.testing.assert_allclose(
+        posterior_mean.to_dataarray().values,
+        np.array(list(true_parameters.values())),
+        rtol=1e-2, atol=1e-3
+    )
+
+def test_convergence_nuts_kernel_jaxsolver():
+    sim = init_simulation_casestudy_api("test_scenario")
+    sim.solver = JaxSolver
+    sim.dispatch_constructor()
+    
     sim.config.inference_numpyro.kernel = "nuts"
     sim.set_inferer(backend="numpyro")
     sim.inferer.run()
