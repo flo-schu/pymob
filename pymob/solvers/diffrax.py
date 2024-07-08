@@ -1,7 +1,8 @@
 from functools import partial
-from typing import Optional, List, Dict, Literal
+from typing import Optional, List, Dict, Literal, Tuple, OrderedDict
 from pymob.solvers.base import mappar, SolverBase
-from dataclasses import dataclass
+from frozendict import frozendict
+from dataclasses import dataclass, field
 import jax.numpy as jnp
 import jax
 from diffrax import (
@@ -19,7 +20,7 @@ from diffrax import (
 Mode = Literal['r', 'rb', 'w', 'wb']
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=True)
 class JaxSolver(SolverBase):
     """
     see https://jax.readthedocs.io/en/latest/faq.html#strategy-3-making-customclass-a-pytree
@@ -28,14 +29,13 @@ class JaxSolver(SolverBase):
     Parameters
     ----------
     """
-    batch_dimension: str = "batch_id"
-    x_dim: str = "time"
+
     diffrax_solver = Dopri5
 
+    @partial(jax.jit, static_argnames=["self"])
     def preprocess_x_in(self, x_in):
         X_in_list = []
         for x_in_var, x_in_vals in x_in.items():
-            x_in_dims = x_in_vals["dims"]
             x_in_coords = {k:v["data"] for k, v in x_in_vals["coords"].items()}
             x_in_x = jnp.array(x_in_coords[self.x_dim])
             x_in_y = jnp.array(x_in_vals["data"])
@@ -60,10 +60,10 @@ class JaxSolver(SolverBase):
 
         return X_in_list
     
+    @partial(jax.jit, static_argnames=["self"])
     def preprocess_y_0(self, y0):
         Y0 = []
         for y0_var, y0_vals in y0.items():
-            y0_dims = y0_vals["dims"]
             y0_coords = {k:v["data"] for k, v in y0_vals["coords"].items()}
             y0_data = jnp.array(y0_vals["data"], ndmin=1)
             
@@ -80,23 +80,21 @@ class JaxSolver(SolverBase):
             Y0.append(y0_batched)
         return Y0
 
-    def solve(self, model, post_processing, parameters, coordinates, indices, data_variables, n_ode_states, seed=None):
-        time = tuple(coordinates[self.x_dim])
-        params = parameters["parameters"]
-        x_in = parameters.get("x_in", {})
-        y_0 = parameters.get("y0", {})
+    @partial(jax.jit, static_argnames=["self"])
+    def solve(self, parameters: Dict, y0:Dict={}, x_in:Dict={}):
+        
 
         X_in = self.preprocess_x_in(x_in)
         x_in_flat = [x for xi in X_in for x in xi]
-        Y_0 = self.preprocess_y_0(y_0)
+        Y_0 = self.preprocess_y_0(y0)
 
-        ode_args = mappar(model, params, exclude=["t", "x_in", "y"])
-        pp_args = mappar(post_processing, params, exclude=["t", "time", "interpolation", "results"])
+        ode_args = mappar(self.model, parameters, exclude=["t", "x_in", "y"])
+        pp_args = mappar(self.post_processing, parameters, exclude=["t", "time", "interpolation", "results"])
         
         # simply broadcast the parameters along the batch dimension
         # if there is no other index provided
-        if len(indices) == 0:
-            batch_coordinates = coordinates.get(self.batch_dimension, [0])
+        if len(self.indices) == 0:
+            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
             n_batch = len(batch_coordinates)
             ode_args_indexed = [
                 jnp.tile(jnp.array(a, ndmin=1), n_batch)\
@@ -117,12 +115,12 @@ class JaxSolver(SolverBase):
 
         initialized_eval_func = partial(
             odesolve_splitargs,
-            model=model,
+            model=self.model,
             solver=self.diffrax_solver,
-            post_processing=post_processing,
-            time=time,
-            has_batch_dim=self.batch_dimension in coordinates,
-            odestates = tuple(y_0.keys()),
+            post_processing=self.post_processing,
+            time=self.x,
+            has_batch_dim=self.batch_dimension in self.coordinates,
+            odestates = tuple(y0.keys()),
             n_odeargs=len(ode_args_indexed),
             n_ppargs=len(pp_args_indexed),
             n_xin=len(x_in_flat)
@@ -131,7 +129,7 @@ class JaxSolver(SolverBase):
         loop_eval = jax.vmap(
             initialized_eval_func, 
             in_axes=(
-                *[0 for _ in range(n_ode_states)], 
+                *[0 for _ in range(self.n_ode_states)], 
                 *[0 for _ in range(len(ode_args_indexed))],
                 *[0 for _ in range(len(pp_args_indexed))],
                 *[0 for _ in range(len(x_in_flat))], 
@@ -139,7 +137,7 @@ class JaxSolver(SolverBase):
         )
         result = loop_eval(*Y_0, *ode_args_indexed, *pp_args_indexed, *x_in_flat)
         
-        if self.batch_dimension not in coordinates:    
+        if self.batch_dimension not in self.coordinates:    
             # this is not yet stable, because it may remove extra dimensions
             # if there is a batch dimension of explicitly one specified
             result = {v:val.squeeze() for v, val in result.items()}
@@ -197,3 +195,4 @@ def odesolve_splitargs(*args, model, solver, post_processing, time, has_batch_di
     res_dict = {v:val for v, val in zip(odestates, sol)}
 
     return post_processing(res_dict, jnp.array(time), interp, *ppargs)
+
