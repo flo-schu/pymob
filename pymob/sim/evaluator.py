@@ -109,7 +109,7 @@ class Evaluator:
             is performed
         """
         
-        self.parameters = {}
+        self._parameters = frozendict()
         self.dimensions = dimensions
         self.n_ode_states = n_ode_states
         self.var_dim_mapper = var_dim_mapper
@@ -186,7 +186,7 @@ class Evaluator:
         else:
             raise TypeError(f"{self._solver} must be SolverBase class or a function")
         
-        model_args = list(signature.parameters.keys())
+        model_args = [a for a in signature.parameters.keys() if a != "parameters"]
 
         for a in model_args:
             if a not in self.allowed_model_signature_arguments:
@@ -214,8 +214,7 @@ class Evaluator:
             Y_ = self._solver(**self.parameters)
 
         else:
-            self._signature["parameters"].update(self.parameters)
-            Y_ = self._solver(**self._signature)
+            Y_ = self._solver(parameters=self.parameters, **self._signature)
         
         # TODO: Consider which elements may be abstracted from the solve methods 
         # implemented in mod.py below is an unsuccessful approach
@@ -231,6 +230,28 @@ class Evaluator:
     @property
     def dimensionality(self):
         return {key: len(values) for key, values in self.coordinates.items()}
+
+    @property
+    def parameters(self) -> frozendict:
+        return self._parameters
+    
+    @parameters.setter
+    def parameters(self, value: Dict):
+        if len(self._parameters) == 0:
+            self._parameters = frozendict(value)
+        elif value == self._parameters:
+            pass
+        else:
+            raise ValueError(
+                "It is unsafe to change the parameters of an evaluator "
+                "After it has been created. Use 'sim.dispatch(theta=...)' "
+                "to create a new evaluator and initialize it with a new set "
+                "of parameters."
+                "If you really need to do it, use evaluator._parameters to "
+                "overwrite the parameters on your own risk."
+            )
+
+
 
     @property
     def results(self):
