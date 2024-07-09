@@ -112,12 +112,7 @@ class JaxSolver(SolverBase):
 
 
         initialized_eval_func = partial(
-            odesolve_splitargs,
-            model=self.model,
-            solver=self.diffrax_solver,
-            post_processing=self.post_processing,
-            time=self.x,
-            has_batch_dim=self.batch_dimension in self.coordinates,
+            self.odesolve_splitargs,
             odestates = tuple(y0.keys()),
             n_odeargs=len(ode_args_indexed),
             n_ppargs=len(pp_args_indexed),
@@ -143,54 +138,54 @@ class JaxSolver(SolverBase):
         return result
 
 
-@partial(jax.jit, static_argnames=["model","solver"])
-def odesolve(model, solver, y0, time, args, x_in):
-    f = lambda t, y, args: model(t, y, *args)
-    
-    if len(x_in) > 0:
-        interp = LinearInterpolation(ts=x_in[0], ys=x_in[1])
-        args=(interp, *args)
-    else:
-        interp = None
-        args=args
+    @partial(jax.jit, static_argnames=["self"])
+    def odesolve(self, y0, args, x_in):
+        f = lambda t, y, args: self.model(t, y, *args)
+        
+        if len(x_in) > 0:
+            interp = LinearInterpolation(ts=x_in[0], ys=x_in[1])
+            args=(interp, *args)
+        else:
+            interp = None
+            args=args
 
-    term = ODETerm(f)
-    solver = solver()
-    saveat = SaveAt(ts=time)
-    stepsize_controller = PIDController(rtol=1e-6, atol=1e-7)
-    t_min = jnp.float32(time).min()
-    t_max = jnp.float32(time).max()
-    
-    sol = diffeqsolve(
-        terms=term, 
-        solver=solver, 
-        t0=t_min, 
-        t1=t_max, 
-        dt0=0.1, 
-        y0=tuple(y0), 
-        args=args, 
-        saveat=saveat, 
-        stepsize_controller=stepsize_controller,
-        adjoint=RecursiveCheckpointAdjoint(),
-        max_steps=10**5,
-        # throw=False returns inf for all t > t_b, where t_b is the time 
-        # at which the solver broke due to reaching max_steps. This behavior
-        # happens instead of throwing an exception.
-        throw=False
-    )
-    
-    return list(sol.ys), interp
+        term = ODETerm(f)
+        solver = self.diffrax_solver()
+        saveat = SaveAt(ts=self.x)
+        stepsize_controller = PIDController(rtol=1e-6, atol=1e-7)
+        t_min = self.x[0]
+        t_max = self.x[-1]
+        
+        sol = diffeqsolve(
+            terms=term, 
+            solver=solver, 
+            t0=t_min, 
+            t1=t_max, 
+            dt0=0.1, 
+            y0=tuple(y0), 
+            args=args, 
+            saveat=saveat, 
+            stepsize_controller=stepsize_controller,
+            adjoint=RecursiveCheckpointAdjoint(),
+            max_steps=10**5,
+            # throw=False returns inf for all t > t_b, where t_b is the time 
+            # at which the solver broke due to reaching max_steps. This behavior
+            # happens instead of throwing an exception.
+            throw=False
+        )
+        
+        return list(sol.ys), interp
 
-@partial(jax.jit, static_argnames=["model", "solver", "post_processing", "time", "odestates", "n_odeargs", "n_ppargs", "n_xin"])
-def odesolve_splitargs(*args, model, solver, post_processing, time, has_batch_dim, odestates, n_odeargs, n_ppargs, n_xin):
-    n_odestates = len(odestates)
-    y0 = args[:n_odestates]
-    odeargs = args[n_odestates:n_odeargs+n_odestates]
-    ppargs = args[n_odeargs+n_odestates:n_odeargs+n_odestates+n_ppargs]
-    x_in = args[n_odestates+n_odeargs+n_ppargs:n_odestates+n_odeargs+n_ppargs+n_xin]
-    sol, interp = odesolve(model=model, solver=solver, y0=y0, time=time, args=odeargs, x_in=x_in)
-    
-    res_dict = {v:val for v, val in zip(odestates, sol)}
+    @partial(jax.jit, static_argnames=["self", "odestates", "n_odeargs", "n_ppargs", "n_xin"])
+    def odesolve_splitargs(self, *args, odestates, n_odeargs, n_ppargs, n_xin):
+        n_odestates = len(odestates)
+        y0 = args[:n_odestates]
+        odeargs = args[n_odestates:n_odeargs+n_odestates]
+        ppargs = args[n_odeargs+n_odestates:n_odeargs+n_odestates+n_ppargs]
+        x_in = args[n_odestates+n_odeargs+n_ppargs:n_odestates+n_odeargs+n_ppargs+n_xin]
+        sol, interp = self.odesolve(y0=y0, args=odeargs, x_in=x_in)
+        
+        res_dict = {v:val for v, val in zip(odestates, sol)}
 
-    return post_processing(res_dict, jnp.array(time), interp, *ppargs)
+        return self.post_processing(res_dict, jnp.array(self.x), interp, *ppargs)
 

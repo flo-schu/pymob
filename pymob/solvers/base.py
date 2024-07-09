@@ -1,3 +1,4 @@
+import numpy as np
 from typing import Callable, Dict, List, Optional, Sequence, Literal, Tuple
 from frozendict import frozendict
 from dataclasses import dataclass, field
@@ -13,12 +14,12 @@ class SolverBase:
     model: Callable
     dimensions: Tuple
     n_ode_states: int
-    coordinates: frozendict[str, Tuple]
+    coordinates: frozendict[str, Tuple] = field(repr=False)
     data_variables: Tuple
     is_stochastic: bool
+    post_processing: Callable
     solver_kwargs: frozendict = frozendict()
-    indices: frozendict[str, Tuple] = frozendict()
-    post_processing: Optional[Callable] = None
+    indices: frozendict[str, Tuple] = field(repr=False, default=frozendict())
 
     x_dim: str = "time"
     batch_dimension: str = "batch_id"
@@ -27,7 +28,12 @@ class SolverBase:
     x: Tuple[float] = field(init=False)
 
     def __post_init__(self, *args, **kwargs):
-        object.__setattr__(self, "x", tuple(self.coordinates[self.x_dim]))
+        x = self.coordinates[self.x_dim]
+        if not np.all(x[:-1] <= x[1:]):
+            raise ValueError(
+                f"x_dim '{self.x_dim}' must be sorted in ascending order."
+            )
+        object.__setattr__(self, "x", x)
 
     def __call__(self, **kwargs):
         return self.solve(**kwargs)
