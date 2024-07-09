@@ -14,6 +14,7 @@ from multiprocessing.pool import ThreadPool, Pool
 import re
 
 import numpy as np
+from numpy.typing import ArrayLike
 import xarray as xr
 import dpath as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -24,7 +25,7 @@ from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
-from pymob.sim.config import Config, FloatParam, ArrayParam, ParameterDict, DataVariable, DataArrayDict
+from pymob.sim.config import Config, FloatParam, ArrayParam, ParameterDict, DataVariable
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -412,11 +413,10 @@ class SimulationBase:
         return n_ode_states
         
     @staticmethod
-    def validate_model_input(model_input) -> DataArrayDict:
+    def validate_model_input(model_input) -> Dict[str, ArrayLike]:
         if isinstance(model_input, xr.Dataset):
             model_input = {
-                k: {"data": dv.to_dict()["data"], "coords": dv.to_dict()["coords"]} 
-                for k, dv in model_input.data_vars.items()
+                k: dv.values for k, dv in model_input.data_vars.items()
             }
             return model_input # type: ignore
         

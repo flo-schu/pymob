@@ -47,13 +47,6 @@ class ArrayParam(BaseModel):
     prior: Optional[str] = None
     free: bool = True
 
-class DataArrayDict(TypedDict):
-    dims: Tuple
-    attrs: Dict
-    data: List
-    coords: Dict[str, List]
-    name: str
-
 class ModelParameterDict(TypedDict):
     parameters: Dict[str, float|str|int]
     y0: xr.Dataset

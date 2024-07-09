@@ -36,18 +36,17 @@ class JaxSolver(SolverBase):
     def preprocess_x_in(self, x_in):
         X_in_list = []
         for x_in_var, x_in_vals in x_in.items():
-            x_in_coords = {k:v["data"] for k, v in x_in_vals["coords"].items()}
-            x_in_x = jnp.array(x_in_coords[self.x_dim])
-            x_in_y = jnp.array(x_in_vals["data"])
+            x_in_x = jnp.array(self.x)
+            x_in_y = jnp.array(x_in_vals)
 
             # broadcast x to y and add a dummy
-            batch_coordinates = x_in_coords.get(self.batch_dimension, [0])
+            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
             n_batch = len(batch_coordinates)
             X_in_x = jnp.tile(x_in_x, n_batch).reshape((n_batch, *x_in_x.shape))
 
             # wrap x_in y data in a dummy batch dim if the batch dim is not
             # included in the coordinates
-            if self.batch_dimension not in x_in_coords:
+            if self.batch_dimension not in self.coordinates:
                 X_in_y = jnp.tile(x_in_y, n_batch)\
                     .reshape((n_batch, *x_in_y.shape))
             else:
@@ -64,13 +63,12 @@ class JaxSolver(SolverBase):
     def preprocess_y_0(self, y0):
         Y0 = []
         for y0_var, y0_vals in y0.items():
-            y0_coords = {k:v["data"] for k, v in y0_vals["coords"].items()}
-            y0_data = jnp.array(y0_vals["data"], ndmin=1)
+            y0_data = jnp.array(y0_vals, ndmin=1)
             
             # wrap y0 data in a dummy batch dim if the batch dim is not
             # included in the coordinates
-            if self.batch_dimension not in y0_coords:
-                batch_coordinates = y0_coords.get(self.batch_dimension, [0])
+            if self.batch_dimension not in self.coordinates:
+                batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
                 n_batch = len(batch_coordinates)
                 y0_batched = jnp.tile(y0_data, n_batch)\
                     .reshape((n_batch, *y0_data.shape))
@@ -160,8 +158,8 @@ def odesolve(model, solver, y0, time, args, x_in):
     solver = solver()
     saveat = SaveAt(ts=time)
     stepsize_controller = PIDController(rtol=1e-6, atol=1e-7)
-    t_min = jnp.array(time).min()
-    t_max = jnp.array(time).max()
+    t_min = jnp.float32(time).min()
+    t_max = jnp.float32(time).max()
     
     sol = diffeqsolve(
         terms=term, 

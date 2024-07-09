@@ -24,7 +24,7 @@ class SolverBase:
     batch_dimension: str = "batch_id"
 
     # fields that are computed post_init
-    x: Tuple = field(init=False)
+    x: Tuple[float] = field(init=False)
 
     def __post_init__(self, *args, **kwargs):
         object.__setattr__(self, "x", tuple(self.coordinates[self.x_dim]))
