@@ -29,7 +29,8 @@ def test_benchmark_jaxsolver():
 
     # construct the dispatch again with a different solver
     sim.solver = JaxSolver
-    sim.dispatch_constructor()
+    from diffrax import Dopri5
+    sim.dispatch_constructor(diffrax_solver=Dopri5, rtol=1e-6)
     e = sim.dispatch({})
     e()
     b = e.results

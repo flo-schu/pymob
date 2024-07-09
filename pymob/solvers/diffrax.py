@@ -30,7 +30,10 @@ class JaxSolver(SolverBase):
     ----------
     """
 
+    extra_attributes = ["diffrax_solver", "rtol", "atol"]
     diffrax_solver = Dopri5
+    rtol = jnp.float32(1e-6)
+    atol = jnp.float32(1e-7)
 
     @partial(jax.jit, static_argnames=["self"])
     def preprocess_x_in(self, x_in):
@@ -152,7 +155,7 @@ class JaxSolver(SolverBase):
         term = ODETerm(f)
         solver = self.diffrax_solver()
         saveat = SaveAt(ts=self.x)
-        stepsize_controller = PIDController(rtol=1e-6, atol=1e-7)
+        stepsize_controller = PIDController(rtol=self.rtol, atol=self.atol)
         t_min = self.x[0]
         t_max = self.x[-1]
         

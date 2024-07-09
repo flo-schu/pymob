@@ -23,9 +23,10 @@ class SolverBase:
 
     x_dim: str = "time"
     batch_dimension: str = "batch_id"
+    extra_attributes = []
 
     # fields that are computed post_init
-    x: Tuple[float] = field(init=False)
+    x: Tuple[float] = field(init=False, repr=False)
 
     def __post_init__(self, *args, **kwargs):
         x = self.coordinates[self.x_dim]
@@ -34,6 +35,13 @@ class SolverBase:
                 f"x_dim '{self.x_dim}' must be sorted in ascending order."
             )
         object.__setattr__(self, "x", x)
+
+        # set extra attributes from solver_kwargs, which are specified through
+        # the dispatch_constructor. Those don't receive post-processing
+        for key in self.extra_attributes:
+            value = self.solver_kwargs.get(key, None)
+            if value is not None:
+                object.__setattr__(self, key, value)
 
     def __call__(self, **kwargs):
         return self.solve(**kwargs)

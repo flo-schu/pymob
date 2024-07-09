@@ -414,7 +414,7 @@ class Simulation(BaseModel):
     # data_variables: OptionListStr = []
     n_ode_states: int = -1
     batch_dimension: Optional[str] = None
-    modeltype: Literal["stochastic", "deterministic"] = "stochastic"
+    modeltype: Literal["stochastic", "deterministic"] = "deterministic"
     solver_post_processing: Optional[str] = Field(default=None, validate_default=True)
     seed: Annotated[int, to_str] = 1
 
