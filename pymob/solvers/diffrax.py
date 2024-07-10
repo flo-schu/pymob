@@ -109,8 +109,10 @@ class JaxSolver(SolverBase):
             ]
         else:
             idxs = list(self.indices.values())
-            ode_args_indexed = [jnp.array(a, ndmin=1)[*idxs] for a in ode_args]
-            pp_args_indexed = [jnp.array(a, ndmin=1)[*idxs] for a in pp_args]
+            # this was before used with [*idxs], which threw a syntax error
+            # https://chatgpt.com/c/c5de3adb-3232-4a25-b53d-b63edbb1f4a1
+            ode_args_indexed = [jnp.array(a, ndmin=1)[tuple(idxs)] for a in ode_args]
+            pp_args_indexed = [jnp.array(a, ndmin=1)[tuple(idxs)] for a in pp_args]
             raise RuntimeError("This is not yet implemented, it only looks like it")
 
 
