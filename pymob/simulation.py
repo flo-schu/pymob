@@ -125,6 +125,7 @@ class SimulationBase:
         self._observations: xr.Dataset = xr.Dataset()
         self._observations_copy: xr.Dataset = xr.Dataset()
         self._coordinates: Dict = {}
+        self._scaler = {}
 
         self._model_parameters: Dict[Literal["parameters","y0","x_in"],Any] =\
             ParameterDict(parameters={}, callback=self._on_params_updated)
@@ -805,25 +806,27 @@ class SimulationBase:
         else:
             raise NotImplementedError(f"Backend: {backend} is not implemented.")
 
-    def check_dimensions(self, dataset):
+    def check_dimensions(self, dataarray):
         """Check if dataset dimensions match the specified dimensions.
         TODO: Name datasets for referencing them in errormessages
         """
-        ds_dims = list(dataset.dims.keys())
-        in_dims = [k in self.dimensions for k in ds_dims]
+        ds_dims = dataarray.dims
+        specified_dims = self.config.data_structure[dataarray.name].dimensions
+        in_dims = [k in specified_dims for k in ds_dims]
         assert all(in_dims), IndexError(
             "Not all dataset dimensions, were not found in specified dimensions. "
-            f"Settings(dims={self.dimensions}) != dataset(dims={ds_dims})"
+            f"Settings(dims={specified_dims}) != dataset(dims={ds_dims})"
         )
         
-    def dataset_to_2Darray(self, dataset: xr.Dataset) -> xr.DataArray: 
-        self.check_dimensions(dataset=dataset)
-        array_2D = dataset.stack(multiindex=self.config.data_structure.dimensions)
-        return array_2D.to_array().transpose("multiindex", "variable")
+    def dataarray_to_1Darrayy(self, dataarray: xr.DataArray) -> xr.DataArray: 
+        self.check_dimensions(dataarray=dataarray)
+        arr_dims = self.config.data_structure[dataarray.name].dimensions
+        array_1D = dataarray.stack(multiindex=arr_dims)
+        return array_1D
 
-    def array2D_to_dataset(self, dataarray: xr.DataArray) -> xr.Dataset: 
-        dataset_2D = dataarray.to_dataset(dim="variable")      
-        return dataset_2D.unstack().transpose(*self.config.data_structure.dimensions)
+    def array1D_to_dataarray(self, dataarray: xr.DataArray) -> xr.DataArray: 
+        arr_dims = self.config.data_structure[dataarray.name].dimensions
+        return dataarray.unstack().transpose(*arr_dims)
 
     def create_data_scaler(self):
         """Creates a scaler for the data variables of the dataset over all
@@ -833,37 +836,43 @@ class SimulationBase:
         # make sure the dataset follows the order of variables specified in
         # the config file. This is important so also in the simulation results
         # the scalers are matched.
-        ordered_dataset = self.observations[self.config.data_structure.observed_data_variables]
-        obs_2D_array = self.dataset_to_2Darray(dataset=ordered_dataset)
-        # scaler = StandardScaler()
-        scaler = MinMaxScaler()
         
-        # add bounds to array of observations and fit scaler
-        lower_bounds = np.array(self.config.data_structure.observed_data_variables_min)
-        upper_bounds = np.array(self.config.data_structure.observed_data_variables_max)
-        stacked_array = np.row_stack([lower_bounds, upper_bounds, obs_2D_array])
-        scaler.fit(stacked_array)
+        for key in self.config.data_structure.observed_data_variables:
+            obs_1D_array = self.dataarray_to_1Darrayy(dataarray=self.observations[key])
 
-        self.scaler = scaler
+            # scaler = StandardScaler()
+            scaler = MinMaxScaler()
+            
+            # add bounds to array of observations and fit scaler
+            lower_bound = np.array(self.config.data_structure[key].min, ndmin=1)
+            upper_bound = np.array(self.config.data_structure[key].max, ndmin=1)
+            stacked_array = np.concatenate([lower_bound, upper_bound, obs_1D_array])
+            scaler.fit(stacked_array.reshape((len(stacked_array), -1)))
+
+            self._scaler.update({key: scaler})
+
         self.print_scaling_info()
 
         scaled_obs = self.scale_(self.observations)
         self.observations_scaled = scaled_obs
 
     def print_scaling_info(self):
-        scaler = type(self.scaler).__name__
-        for i, var in enumerate(self.config.data_structure.observed_data_variables):
+        for key in self.config.data_structure.observed_data_variables:
+            scaler = self._scaler[key]
             print(
-                f"{scaler}(variable={var}, "
-                f"min={self.scaler.data_min_[i]}, max={self.scaler.data_max_[i]})"
+                f"{type(scaler).__name__}(variable={key}, "
+                f"min={scaler.data_min_[0]}, max={scaler.data_max_[0]})"
             )
 
     def scale_(self, dataset: xr.Dataset):
-        ordered_dataset = dataset[self.config.data_structure.observed_data_variables]
-        data_2D_array = self.dataset_to_2Darray(dataset=ordered_dataset)
-        obs_2D_array_scaled = data_2D_array.copy() 
-        obs_2D_array_scaled.values = self.scaler.transform(data_2D_array) # type: ignore
-        return self.array2D_to_dataset(obs_2D_array_scaled)
+        obs_scaled = dataset.copy()
+        for key in self.config.data_structure.observed_data_variables:
+            obs_1D_array = self.dataarray_to_1Darrayy(dataarray=obs_scaled[key])
+            x = obs_1D_array.values.reshape((len(obs_1D_array), -1))
+            x_scaled = self._scaler[key].transform(x) 
+            obs_1D_array.values = x_scaled.reshape((len(x_scaled)))
+            obs_scaled[key] = self.array1D_to_dataarray(obs_1D_array)
+        return obs_scaled
 
     @property
     def results(self):
@@ -926,7 +935,7 @@ class SimulationBase:
         """
         max_scaled = scaled_results.max()
         min_scaled = scaled_results.min()
-        if isinstance(self.scaler, MinMaxScaler):
+        if isinstance(self._scaler, MinMaxScaler):
             for varkey, varval in max_scaled.variables.items():
                 if varval > 2:
                     warnings.warn(

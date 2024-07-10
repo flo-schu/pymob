@@ -434,6 +434,9 @@ class Datastructure(BaseModel):
         deleted_var = self.__pydantic_extra__.pop(key)
         print(f"Deleted '{key}' DataVariable({deleted_var}).")
 
+    def __getitem__(self, key):
+        return self.__pydantic_extra__[key]
+
     @property
     def data_variables(self) -> List[str]:
         return [k for k in self.__pydantic_extra__.keys()]
