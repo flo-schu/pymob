@@ -4,7 +4,7 @@ import copy
 import inspect
 import warnings
 import importlib
-from typing import Optional, List, Union, Literal, Any, LiteralString, Tuple
+from typing import Optional, List, Union, Literal, Any, Tuple
 from types import ModuleType
 import configparser
 from functools import partial

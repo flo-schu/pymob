@@ -26,6 +26,7 @@ dependencies=[
   "xarray ~= 2023.11.0",
   "sympy ~= 1.12",
   "pydantic ~= 2.5.2",
+  "frozendict ~= 2.3.10",
 ]
 license = {file = "LICENSE"}
 classifiers = [
