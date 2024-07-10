@@ -108,10 +108,10 @@ class JaxSolver(SolverBase):
                 for a in pp_args
             ]
         else:
-            raise RuntimeError("This is not yet implemented, it only looks like it")
-            idxs = list(indices.values())
+            idxs = list(self.indices.values())
             ode_args_indexed = [jnp.array(a, ndmin=1)[*idxs] for a in ode_args]
             pp_args_indexed = [jnp.array(a, ndmin=1)[*idxs] for a in pp_args]
+            raise RuntimeError("This is not yet implemented, it only looks like it")
 
 
         initialized_eval_func = partial(
