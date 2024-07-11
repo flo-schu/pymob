@@ -51,19 +51,21 @@ class SolverBase:
         return self.solve(**kwargs)
     
     def test_matching_batch_dims(self):
-        bc = self.coordinates[self.batch_dimension]
-        matching_batch_coords_if_present = [
-            v[self.batch_dimension] == bc 
-            for k, v in self.coordinates_input_vars.items() 
-            if self.batch_dimension in v
-        ]
+        bc = self.coordinates.get(self.batch_dimension, None)
 
-        if not all(matching_batch_coords_if_present):
-            raise IndexError(
-                f"Batch coordinates '{self.batch_dimension}' of input "
-                "variables do not have the same size "
-                "as the batch dimension of the observations."
-            )
+        if bc is not None:
+            matching_batch_coords_if_present = [
+                v[self.batch_dimension] == bc 
+                for k, v in self.coordinates_input_vars.items() 
+                if self.batch_dimension in v
+            ]
+
+            if not all(matching_batch_coords_if_present):
+                raise IndexError(
+                    f"Batch coordinates '{self.batch_dimension}' of input "
+                    "variables do not have the same size "
+                    "as the batch dimension of the observations."
+                )
 
     def solve(self):
         raise NotImplementedError("Solver must implement a solve method.")
