@@ -476,6 +476,13 @@ class SimulationBase:
 
         stochastic = self.config.simulation.modeltype
             
+        input_vars = ["x_in", "y0"]
+        coordinates_input_vars={
+            k: {ck: cv.values for ck, cv in v.coords.items()} 
+            for k, v in self.model_parameters.items() 
+            if k in input_vars
+        }
+
         self.evaluator = Evaluator(
             model=model,
             solver=solver,
@@ -486,6 +493,7 @@ class SimulationBase:
             data_structure=self.data_structure,
             data_variables=self.data_variables,
             coordinates=self.coordinates,
+            coordinates_input_vars=coordinates_input_vars,
             # TODO: pass the whole simulation settings section
             stochastic=True if stochastic == "stochastic" else False,
             indices=self.indices,

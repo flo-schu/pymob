@@ -30,7 +30,7 @@ class JaxSolver(SolverBase):
     ----------
     """
 
-    extra_attributes = ["diffrax_solver", "rtol", "atol"]
+    extra_attributes = ["diffrax_solver", "rtol", "atol", "batch_dimension"]
     diffrax_solver = Dopri5
     rtol = jnp.float32(1e-6)
     atol = jnp.float32(1e-7)
@@ -39,17 +39,17 @@ class JaxSolver(SolverBase):
     def preprocess_x_in(self, x_in):
         X_in_list = []
         for x_in_var, x_in_vals in x_in.items():
-            x_in_x = jnp.array(self.x)
+            x_in_x = jnp.array(self.coordinates_input_vars["x_in"][self.x_dim])
             x_in_y = jnp.array(x_in_vals)
 
             # broadcast x to y and add a dummy
-            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
+            batch_coordinates = self.coordinates_input_vars["x_in"].get(self.batch_dimension, [0])
             n_batch = len(batch_coordinates)
             X_in_x = jnp.tile(x_in_x, n_batch).reshape((n_batch, *x_in_x.shape))
 
             # wrap x_in y data in a dummy batch dim if the batch dim is not
             # included in the coordinates
-            if self.batch_dimension not in self.coordinates:
+            if self.batch_dimension not in self.coordinates_input_vars["x_in"]:
                 X_in_y = jnp.tile(x_in_y, n_batch)\
                     .reshape((n_batch, *x_in_y.shape))
             else:
@@ -70,13 +70,19 @@ class JaxSolver(SolverBase):
             
             # wrap y0 data in a dummy batch dim if the batch dim is not
             # included in the coordinates
-            if self.batch_dimension not in self.coordinates:
-                batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
-                n_batch = len(batch_coordinates)
+            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
+            n_batch = len(batch_coordinates)
+            
+            if self.batch_dimension not in self.coordinates_input_vars["y0"]:
                 y0_batched = jnp.tile(y0_data, n_batch)\
                     .reshape((n_batch, *y0_data.shape))
             else:
-                y0_batched = y0_data
+                if len(y0_data.shape) == 1:
+                    y0_batched = y0_data\
+                        .reshape((*y0_data.shape, 1))
+                else:
+                    y0_batched = y0_data
+                
 
             Y0.append(y0_batched)
         return Y0
@@ -135,10 +141,10 @@ class JaxSolver(SolverBase):
         )
         result = loop_eval(*Y_0, *ode_args_indexed, *pp_args_indexed, *x_in_flat)
         
-        if self.batch_dimension not in self.coordinates:    
-            # this is not yet stable, because it may remove extra dimensions
-            # if there is a batch dimension of explicitly one specified
-            result = {v:val.squeeze() for v, val in result.items()}
+        # if self.batch_dimension not in self.coordinates:    
+        # this is not yet stable, because it may remove extra dimensions
+        # if there is a batch dimension of explicitly one specified
+        result = {v:val.squeeze() for v, val in result.items()}
 
         return result
 

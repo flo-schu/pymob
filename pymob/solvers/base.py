@@ -15,6 +15,7 @@ class SolverBase:
     dimensions: Tuple
     n_ode_states: int
     coordinates: frozendict[str, Tuple] = field(repr=False)
+    coordinates_input_vars: frozendict[str, frozendict]
     data_variables: Tuple
     is_stochastic: bool
     post_processing: Callable
@@ -43,9 +44,27 @@ class SolverBase:
             if value is not None:
                 object.__setattr__(self, key, value)
 
+        self.test_matching_batch_dims()
+        
+
     def __call__(self, **kwargs):
         return self.solve(**kwargs)
     
+    def test_matching_batch_dims(self):
+        bc = self.coordinates[self.batch_dimension]
+        matching_batch_coords_if_present = [
+            v[self.batch_dimension] == bc 
+            for k, v in self.coordinates_input_vars.items() 
+            if self.batch_dimension in v
+        ]
+
+        if not all(matching_batch_coords_if_present):
+            raise IndexError(
+                f"Batch coordinates '{self.batch_dimension}' of input "
+                "variables do not have the same size "
+                "as the batch dimension of the observations."
+            )
+
     def solve(self):
         raise NotImplementedError("Solver must implement a solve method.")
 

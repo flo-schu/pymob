@@ -65,11 +65,11 @@ class Evaluator:
             var_dim_mapper: Dict,
             data_structure: Dict,
             coordinates: Dict,
+            coordinates_input_vars: Dict,
             data_variables: Sequence[str],
             stochastic: bool,
             indices: Dict = {},
             post_processing: Optional[Callable] = None,
-            solver_kwargs: Dict = {},
             **kwargs
         ) -> None:
         """_summary_
@@ -118,7 +118,6 @@ class Evaluator:
         self.coordinates = coordinates
         self.is_stochastic = stochastic
         self.indices = indices
-        self.solver_kwargs = solver_kwargs
         
         # can be initialized
         if post_processing is None:
@@ -145,12 +144,22 @@ class Evaluator:
         # can be initialized
         if isinstance(solver, type):
             if issubclass(solver, SolverBase):
+                frozen_coordinates_input_vars = frozendict({
+                    k: frozendict({ck: tuple(cv) for ck, cv  in v.items()}) 
+                    for k, v in coordinates_input_vars.items()
+                })
+
+                frozen_coordinates = frozendict({
+                    k: tuple(v) for k, v in self.coordinates.items()
+                })
+
                 self._solver = solver(
                     model=self.model,
                     post_processing=self.post_processing,
-                    solver_kwargs=frozendict(solver_kwargs),
+                    solver_kwargs=frozendict({k:v for k, v in kwargs.items() if k in solver.extra_attributes}),
                     
-                    coordinates=frozendict({k: tuple(v) for k, v in self.coordinates.items()}),
+                    coordinates=frozen_coordinates,
+                    coordinates_input_vars=frozen_coordinates_input_vars,
                     dimensions=tuple(self.dimensions),
                     data_variables=tuple(self.data_variables),
                     
