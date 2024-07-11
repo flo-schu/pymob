@@ -633,17 +633,30 @@ class Numpyro(BaseModel):
     user_defined_probability_model: Optional[str] = None
     user_defined_preprocessing: Optional[str] = None
     gaussian_base_distribution: bool = False
+    
+    # inference arguments
     kernel: str = "nuts"
     init_strategy: str = "init_to_uniform"
+     
+    # mcmc parameters
     chains: Annotated[int, to_str] = 1
     draws: Annotated[int, to_str] = 2000
     warmup: Annotated[int, to_str] = 1000
     thinning: Annotated[int, to_str] = 1
-    svi_iterations: Annotated[int, to_str] = 10_000
-    svi_learning_rate: Annotated[float, to_str] = 0.0001
+    
+    # nuts arguments
+    nuts_draws: Annotated[int, to_str] = 2000
+    nuts_step_size: Annotated[float, to_str] = 0.8
+    nuts_max_tree_depth: Annotated[int, to_str] = 10
+    nuts_target_accept_prob: Annotated[float, to_str] = 0.8
+    nuts_dense_mass: Annotated[bool, to_str] = True
+
+    # sa parameters
     sa_adapt_state_size: Optional[int] = None
 
-
+    # svi parameters
+    svi_iterations: Annotated[int, to_str] = 10_000
+    svi_learning_rate: Annotated[float, to_str] = 0.0001
 
 class Config(BaseModel):
     """Configuration manager for pymob."""
