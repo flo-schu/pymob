@@ -229,8 +229,8 @@ class NumpyroBackend:
         Tuple[Dict,Dict]
             Dictionaries of observations (data) and masks (missing values)
         """
-        obs = self.simulation.observations \
-            .transpose(*self.simulation.dimensions)
+        obs = self.simulation.observations #\
+            # .transpose(*self.simulation.dimensions)
         data_vars = self.config.data_structure.observed_data_variables + self.extra_vars
 
         masks = {}
