@@ -433,6 +433,15 @@ class SimulationBase:
         mask = data[batch_dim].isin(self.coordinates[batch_dim])
         return data.where(mask, drop=True)
 
+    @property
+    def coordinates_input_vars(self):
+        input_vars = ["x_in", "y0"]
+        return {
+            k: {ck: cv.values for ck, cv in v.coords.items()} 
+            for k, v in self.model_parameters.items() 
+            if k in input_vars
+        }
+
 
     def dispatch_constructor(self, **evaluator_kwargs):
         """Construct the dispatcher and pass everything to the evaluator that is 
@@ -476,12 +485,7 @@ class SimulationBase:
 
         stochastic = self.config.simulation.modeltype
             
-        input_vars = ["x_in", "y0"]
-        coordinates_input_vars={
-            k: {ck: cv.values for ck, cv in v.coords.items()} 
-            for k, v in self.model_parameters.items() 
-            if k in input_vars
-        }
+
 
         self.evaluator = Evaluator(
             model=model,
@@ -493,7 +497,7 @@ class SimulationBase:
             data_structure=self.data_structure,
             data_variables=self.data_variables,
             coordinates=self.coordinates,
-            coordinates_input_vars=coordinates_input_vars,
+            coordinates_input_vars=self.coordinates_input_vars,
             # TODO: pass the whole simulation settings section
             stochastic=True if stochastic == "stochastic" else False,
             indices=self.indices,
