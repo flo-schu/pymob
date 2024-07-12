@@ -1,6 +1,7 @@
 import numpy as np
+import pytest
 
-from pymob.sim.config import Config
+from pymob.sim.config import Config, DataVariable, FloatParam
 from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
 
@@ -30,6 +31,28 @@ def init_simulation_scripting_api(scenario="test_scenario"):
     Simulation = config.import_simulation_from_case_study()
     sim = Simulation(config)
     sim.setup()
+
+
+
+def init_bufferguts_casestudy(scenario="testing"):
+    """This is an external case study used for local testing. The test study
+    will eventually added also to the remote as an example, but until this happens
+    the test is skipped on the remote.
+    """
+    config = Config()
+    config.case_study.name = "bufferguts"
+    config.case_study.scenario = scenario
+    config.case_study.package = "../pollinator-tktd/case_studies"
+    config.case_study.simulation = "BuffergutsSimulation"
+    config.import_casestudy_modules()
+
+    Simulation = config.import_simulation_from_case_study()
+    sim = Simulation(config)
+
+    if hasattr(sim, "_mod"):       
+        return sim
+    else:
+        pytest.skip()
 
 
 def init_simulation_scripting_api_v2(scenario="test_scenario"):
