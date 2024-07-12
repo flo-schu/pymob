@@ -30,16 +30,31 @@ class JaxSolver(SolverBase):
     ----------
     """
 
-    extra_attributes = ["diffrax_solver", "rtol", "atol", "batch_dimension"]
+    extra_attributes = [
+        "batch_dimension",
+        "diffrax_solver", 
+        "rtol", 
+        "atol", 
+        "pcoeff",
+        "icoeff",
+        "dcoeff",
+        "max_steps",
+        "throw_exception"
+    ]
     diffrax_solver = Dopri5
     rtol = jnp.float32(1e-6)
     atol = jnp.float32(1e-7)
+    pcoeff = 0.0
+    icoeff = 1.0
+    dcoeff = 0.0
+    max_steps = int(1e5)
+    throw_exception = False
 
     @partial(jax.jit, static_argnames=["self"])
     def preprocess_x_in(self, x_in):
         X_in_list = []
         for x_in_var, x_in_vals in x_in.items():
-            x_in_x = jnp.array(self.coordinates_input_vars["x_in"][self.x_dim])
+            x_in_x = jnp.array(self.coordinates_input_vars["x_in"][self.x_dim], dtype=float)
             x_in_y = jnp.array(x_in_vals)
 
             # broadcast x to y and add a dummy
@@ -163,7 +178,10 @@ class JaxSolver(SolverBase):
         term = ODETerm(f)
         solver = self.diffrax_solver()
         saveat = SaveAt(ts=self.x)
-        stepsize_controller = PIDController(rtol=self.rtol, atol=self.atol)
+        stepsize_controller = PIDController(
+            rtol=self.rtol, atol=self.atol,
+            pcoeff=self.pcoeff, icoeff=self.icoeff, dcoeff=self.dcoeff, 
+        )
         t_min = self.x[0]
         t_max = self.x[-1]
         
@@ -178,11 +196,11 @@ class JaxSolver(SolverBase):
             saveat=saveat, 
             stepsize_controller=stepsize_controller,
             adjoint=RecursiveCheckpointAdjoint(),
-            max_steps=10**5,
+            max_steps=int(self.max_steps),
             # throw=False returns inf for all t > t_b, where t_b is the time 
             # at which the solver broke due to reaching max_steps. This behavior
             # happens instead of throwing an exception.
-            throw=False
+            throw=self.throw_exception
         )
         
         return list(sol.ys), interp
