@@ -178,12 +178,15 @@ class JaxSolver(SolverBase):
         term = ODETerm(f)
         solver = self.diffrax_solver()
         saveat = SaveAt(ts=self.x)
+        t_min = self.x[0]
+        t_max = self.x[-1]
+        # jump only those ts that are smaller than the last observations
+        jumps = x_in[0][self.coordinates_input_vars["x_in"][self.x_dim] < self.x[-1]]
         stepsize_controller = PIDController(
             rtol=self.rtol, atol=self.atol,
             pcoeff=self.pcoeff, icoeff=self.icoeff, dcoeff=self.dcoeff, 
+            jump_ts=jumps,
         )
-        t_min = self.x[0]
-        t_max = self.x[-1]
         
         sol = diffeqsolve(
             terms=term, 

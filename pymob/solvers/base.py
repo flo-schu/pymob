@@ -48,6 +48,7 @@ class SolverBase:
                 object.__setattr__(self, key, value)
 
         self.test_matching_batch_dims()
+        self.test_x_coordinates()
         
 
     def __call__(self, **kwargs):
@@ -69,6 +70,22 @@ class SolverBase:
                     "variables do not have the same size "
                     "as the batch dimension of the observations."
                 )
+
+    def test_x_coordinates(self):
+        x = self.coordinates[self.x_dim]
+        if "x_in" not in self.coordinates_input_vars:
+            return
+        
+        x_xin = self.coordinates_input_vars["x_in"][self.x_dim]
+
+        if np.max(x) > np.max(x_xin):
+            raise AssertionError(
+                f"The {self.x_dim}-coordinate on the observations (sim.coordinates) "
+                f"goes to a higher {self.x_dim} than the {self.x_dim}-coordinate "
+                "of the model_parameters['x_in']. "
+                "Make sure to run the simulation only until the provided x_in "
+                "values, or extend the x_in values until the required time"
+            )
 
     def solve(self):
         raise NotImplementedError("Solver must implement a solve method.")
