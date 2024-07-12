@@ -4,6 +4,8 @@ from typing import Callable, Dict, List, Optional, Sequence, Literal, Tuple
 from frozendict import frozendict
 from dataclasses import dataclass, field
 import inspect
+from scipy.ndimage import gaussian_filter1d
+from diffrax import rectilinear_interpolation
 
 @dataclass(frozen=True)
 class SolverBase:
@@ -85,10 +87,10 @@ def mappar(func, parameters, exclude=[], to:Literal["tuple","dict"]="tuple"):
     return model_args
 
 
-def create_interpolation(
+def jump_interpolation(
         x_in: xr.Dataset, 
-        x: str="time", 
-        factor: float=1e-4, 
+        x_dim: str="time", 
+        factor: float=0.001, 
         interpolation: Literal["fill-forward", "linear"] = "fill-forward",
     ) -> xr.Dataset:
     """Make the interpolation safe by adding a coordinate just before each 
@@ -102,7 +104,7 @@ def create_interpolation(
     x_in : xr.Dataset
         The input dataset which contains a coordinate (x) and a data variable
         (y)
-    x : str, optional
+    x_dim : str, optional
         The name of the x coordinate, by default "time"
     factor : float, optional
         The distance between the newly added points and the following existing
@@ -117,28 +119,218 @@ def create_interpolation(
     xr.Dataset
         The interpolated dataset
     """
-    xs = x_in.coords[x]
+    xs = x_in.coords[x_dim]
 
     # calculate x values that are located just a little bit smaller than the xs
     # where "just a little bit" is defined by the distance to the previous x
     # and a factor. This way the scale of the observations should not matter
     # and even very differently sized x-steps should be interpolated correctly
     fraction_before_xs = (
-        xs.isel({x:range(1, len(xs))}).values
-        - xs.diff(dim=x) * factor
+        xs.isel({x_dim:range(1, len(xs))})
+        - xs.diff(dim=x_dim) * factor
     )
 
     # create a sorted time vector
     xs = sorted([*fraction_before_xs.values, *xs.values])
 
     # add new time indices with NaN values 
-    x_in_reindexed = x_in.reindex({x:xs})
+    x_in_reindexed = x_in.reindex({x_dim:xs})
 
     if interpolation == "fill-forward":
         # then fill nan values with the previous value (forward-fill)
-        x_in_interpolated = x_in_reindexed.ffill(dim=x, limit=1)
+        x_in_interpolated = x_in_reindexed.ffill(dim=x_dim, limit=1)
 
     else:
-        x_in_interpolated = x_in_reindexed.interpolate_na(dim=x, method="linear")
+        x_in_interpolated = x_in_reindexed.interpolate_na(dim=x_dim, method="linear")
+
+    return x_in_interpolated
+
+
+def smoothed_interpolation(
+    x_in: xr.Dataset, 
+    x_dim: str="time", 
+    factor: float=0.001, 
+    sigma: int = 20,
+) -> xr.Dataset:
+    """Smooth the interpolation by first creating a dense x vector and forward
+    filling all ys. Following this the values are smoothed by a gaussian filter.
+
+    Parameters
+    ----------
+    x_in : xr.Dataset
+        The input dataset which contains a coordinate (x) and a data variable
+        (y)
+    x_dim : str, optional
+        The name of the x coordinate, by default "time"
+    factor : float, optional
+        The distance between the newly added points and the following existing
+        points on the x-scale, by default 1e-4
+
+    Returns
+    -------
+    xr.Dataset
+        The interpolated dataset
+    """
+    xs = x_in.coords[x_dim]
+    assert factor > 0, "Factor must be larger than zero, to ensure correct ordering"
+    
+    xs_extra = np.arange(xs.values.min(), xs.values.max()+factor, step=factor)
+    xs_ = np.sort(np.unique(np.concatenate([xs.values, xs_extra])))
+
+    # add new time indices with NaN values 
+    x_in_reindexed = x_in.reindex({x_dim:xs_})
+
+    # then fill nan values with the previous value (forward-fill)
+    x_in_interpolated = x_in_reindexed.ffill(dim=x_dim)
+
+    # Apply Gaussian smoothing
+    sigma = 20  # Adjust sigma for desired smoothness
+    for k in x_in_interpolated.data_vars.keys():
+        y = x_in_interpolated[k]
+        y_smoothed = gaussian_filter1d(y.values, sigma, axis=list(y.dims).index(x_dim))
+
+        x_in_interpolated[k].values = y_smoothed
+
+    return x_in_interpolated
+
+
+def radius_interpolation(
+    x_in: xr.Dataset, 
+    x_dim: str="time", 
+    radius: float=0.1, 
+    num_points: int=10,
+    rectify=True
+) -> xr.Dataset:
+    """Smooth the interpolation by first creating a dense x vector and forward
+    filling all ys. Following this the values are smoothed by a gaussian filter.
+
+    WARNING! It is very pretty but does not work with diffrax
+
+    Parameters
+    ----------
+    x_in : xr.Dataset
+        The input dataset which contains a coordinate (x) and a data variable
+        (y)
+    x_dim : str, optional
+        The name of the x coordinate, by default "time"
+    radius : float, optional
+        The radius of the quarter-circle to curve the jump transition. 
+        By default 0.1
+    num_points : int, optional
+        The number of points to interpolate each jump with. Default: 10
+    rectify : bool
+        Whether the input should be converted to a stepwise pattern. Default 
+        is True. This is typically applied if an unprocessed signal is included.
+        E.g. the signal was observed y_i 
+        
+    Returns
+    -------
+    xr.Dataset
+        The interpolated dataset
+    """
+    x = x_in.coords[x_dim] 
+    assert radius <= np.diff(np.unique(x)).min() / 2
+
+    if rectify:
+        x = np.concatenate([[x[0]], *[[x_i-0.00, x_i] for x_i in x[1:]]])
+
+    data_arrays = []
+    for k in x_in.data_vars.keys():
+        y = x_in[k]
+        if rectify:
+            yvals = np.concatenate([*[[y_i, y_i] for y_i in y[:-1]], [y[-1]]])
+        else:
+            yvals = y.values
+
+        x_interpolated = [np.array(x[0],ndmin=1)]
+        y_interpolated = [np.array(yvals[0], ndmin=2)]
+        for i in range(0, len(x) - 1):
+            x_, y_, = curve_jumps(x, yvals, i, r=radius, n=num_points)
+
+            x_interpolated.append(x_)
+            y_interpolated.append(y_)
+    
+        x_interpolated = np.concatenate(x_interpolated)
+        x_uniques = np.where(np.diff(x_interpolated) != 0)
+        x_interpolated = x_interpolated[x_uniques]
+
+        y_interpolated = np.row_stack(y_interpolated)[x_uniques]
+        
+        coords = {x_dim: x_interpolated}
+        coords.update({d: y.coords[d].values for d in y.dims if d != x_dim})
+
+        y_reindexed = xr.DataArray(
+            y_interpolated, 
+            coords=coords,
+            name=y.name
+        )
+        data_arrays.append(y_reindexed)
+
+    x_in_interpolated = xr.combine_by_coords(data_objects=data_arrays)
+    
+    # there will be nans if the data variables have different steps
+    # x_in_interpolated = x_in_interpolated.interpolate_na(
+    #     dim="time", method="linear"
+    # )
+
+    return x_in_interpolated # type: ignore
+
+
+def curve_jumps(x, y, i, r, n):
+    x_i = x[i] # jump start
+    y_i = y[i] # jump start
+    y_im1 = y[i-1] # jump start
+    y_ip1 = y[i+1] # jump end
+
+    def circle_func(x, r, a): 
+        # using different radii does not work, because this would also require different x_values
+        arc = r**2 - (x - a)**2
+        return np.sqrt(np.where(arc >= 0, arc, 0))
+    
+    # end of jump
+    dy_im1 = y_i - y_im1 # jump difference to previous point
+    if np.all(dy_im1 == 0):
+        dyj = y_ip1 - y_i
+        sj = np.where(np.abs(dyj) > r, np.sign(dyj), dyj / 2 / r) # direction and size of the jump, scaled by the radius
+        # sj = np.clip((y_ip1 - y_i)/r/2, -1, 1) # direction and size of the jump, scaled by the radius
+        xc = np.linspace(x_i-r, x_i-r*0.001, num=n)
+        yc = y_i + (np.einsum("k,x->xk",  -sj, circle_func(x=xc, r=r, a=x_i-r)) + sj * r)
+    else:
+        dyj = y_i - y_im1
+        sj = np.where(np.abs(dyj) > r, np.sign(dyj), dyj / 2 / r) # direction and size of the jump, scaled by the radius
+        xc = np.linspace(x_i+ r*0.001, x_i+r, num=n)
+        yc = y_i + (np.einsum("k,x->xk",  sj, circle_func(x=xc, r=r, a=x_i+r)) - sj * r)
+    
+    return xc, yc
+
+
+def rect_interpolation(
+    x_in: xr.Dataset, 
+    x_dim: str="time", 
+):  
+    """Use diffrax' rectilinear_interpolation. To add values and interpolate
+    one more step after the end of the timeseries
+    """
+    data_arrays = []
+    for k in x_in.data_vars.keys():
+        v = x_in[k]
+        x = v[x_dim].values
+        y = v.values
+        xs, ys = rectilinear_interpolation(
+            ts=np.concatenate([x, np.array(x[-1]+1, ndmin=1)]), # type:ignore
+            ys=np.row_stack([y, np.array(y[-1], ndmin=2)]) # type: ignore
+        )
+
+        coords = {x_dim: xs}
+        coords.update({d: v.coords[d].values for d in v.dims if d != x_dim})
+
+        y_reindexed = xr.DataArray(
+            ys, 
+            coords=coords,
+            name=v.name
+        )
+        data_arrays.append(y_reindexed)
+
+    x_in_interpolated = xr.combine_by_coords(data_objects=data_arrays)
 
     return x_in_interpolated
