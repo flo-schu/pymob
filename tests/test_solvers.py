@@ -4,7 +4,7 @@ import numpy as np
 
 from pymob.solvers.diffrax import JaxSolver
 from pymob.solvers.base import rect_interpolation, radius_interpolation, smoothed_interpolation, jump_interpolation
-from fixtures import init_simulation_casestudy_api, init_bufferguts_casestudy
+from tests.fixtures import init_simulation_casestudy_api, init_bufferguts_casestudy
 from diffrax import Heun, Euler, Tsit5, Dopri5
 
 from pymob.sim.evaluator import Evaluator
@@ -150,5 +150,5 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    test_rect_interpolation()
+    # test_rect_interpolation()
     # test_benchmark_jaxsolver()

@@ -171,9 +171,11 @@ class JaxSolver(SolverBase):
         if len(x_in) > 0:
             interp = LinearInterpolation(ts=x_in[0], ys=x_in[1])
             args=(interp, *args)
+            jumps = x_in[0][self.coordinates_input_vars["x_in"][self.x_dim] < self.x[-1]]
         else:
             interp = None
             args=args
+            jumps = None
 
         term = ODETerm(f)
         solver = self.diffrax_solver()
@@ -181,7 +183,6 @@ class JaxSolver(SolverBase):
         t_min = self.x[0]
         t_max = self.x[-1]
         # jump only those ts that are smaller than the last observations
-        jumps = x_in[0][self.coordinates_input_vars["x_in"][self.x_dim] < self.x[-1]]
         stepsize_controller = PIDController(
             rtol=self.rtol, atol=self.atol,
             pcoeff=self.pcoeff, icoeff=self.icoeff, dcoeff=self.dcoeff, 
