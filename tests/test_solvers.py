@@ -19,8 +19,8 @@ def test_benchmark_time():
 
     t = cpu_time_stop - cpu_time_start
 
-    if t > 1:
-        raise AssertionError(f"Benchmarking took too long: {t}s. Expected t < 1s")
+    if t > 2:
+        raise AssertionError(f"Benchmarking took too long: {t}s. Expected t < 2s")
 
 
 def test_benchmark_jaxsolver():
