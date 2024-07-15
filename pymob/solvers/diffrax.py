@@ -28,6 +28,13 @@ class JaxSolver(SolverBase):
 
     Parameters
     ----------
+
+    throw_exceptions: bool
+        Default is True. The JaxSolver will throw an exception if it runs into a problem
+        with the step size and return infinity. This is done, because likelihood based inference
+        algorithms can deal with infinity values and consider the tested parameter
+        combination impossible. If used without caution, this can lead to severely
+        biased parameter estimates.
     """
 
     extra_attributes = [
@@ -48,7 +55,7 @@ class JaxSolver(SolverBase):
     icoeff = 1.0
     dcoeff = 0.0
     max_steps = int(1e5)
-    throw_exception = False
+    throw_exception = True
 
     @partial(jax.jit, static_argnames=["self"])
     def preprocess_x_in(self, x_in):
