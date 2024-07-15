@@ -27,6 +27,8 @@ from pydantic.functional_serializers import PlainSerializer
 
 from pymob.utils.store_file import scenario_file, converters
 
+# this loads at the import of the module
+default_path = sys.path.copy()
 
 class FloatParam(BaseModel):
     name: Optional[str] = None
@@ -797,13 +799,18 @@ class Config(BaseModel):
             else:
                 print(f"No {directory} directory created.")
 
-    def import_casestudy_modules(self):
+    def import_casestudy_modules(self, reset_path=False):
         """
         this script handles the import of a case study without the typical 
         __init__.py file. It iterates through all .py files in the root directory
         of the case study (typically: sim, mod, stats, plot, data, prior)
         and imports them with import_module(...)
         """
+
+        # reset the path to avoid importing modules form case-studies used
+        # before in the same session
+        if reset_path:
+            sys.path = default_path
 
         # append relevant paths to sys
         package = os.path.join(
@@ -824,6 +831,10 @@ class Config(BaseModel):
             print(f"Appended '{case_study}' to PATH")
 
         for module in self.case_study.modules:
+            # remove modules of a different case study that might have been
+            # loaded in the same session.
+            if module in sys.modules:
+                _ = sys.modules.pop(module)
             try:
                 m = importlib.import_module(module, package=case_study)
                 self._modules.update({module: m})
@@ -843,6 +854,9 @@ class Config(BaseModel):
                 f"Simulation class {self.case_study.simulation} "
                 "could not be found. Make sure the simulaton option is spelled "
                 "correctly or specify an class that exists in sim.py"
+                "If you are using pymob to work on different case-studies in "
+                "the same session, make sure to reset the path by "
+                "using `import_casestudy_modules(reset_path=True)`"
             )
         
         return Simulation

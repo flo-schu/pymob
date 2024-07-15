@@ -26,7 +26,7 @@ def init_simulation_scripting_api(scenario="test_scenario"):
     config.case_study.scenario = scenario
     config.case_study.package = "case_studies"
     config.case_study.simulation = "Simulation"
-    config.import_casestudy_modules()
+    config.import_casestudy_modules(reset_path=True)
 
     Simulation = config.import_simulation_from_case_study()
     sim = Simulation(config)
@@ -44,8 +44,7 @@ def init_bufferguts_casestudy(scenario="testing"):
     config.case_study.scenario = scenario
     config.case_study.package = "../pollinator-tktd/case_studies"
     config.case_study.simulation = "BuffergutsSimulation"
-    config.import_casestudy_modules()
-
+    config.import_casestudy_modules(reset_path=True)
     Simulation = config.import_simulation_from_case_study()
     sim = Simulation(config)
 
@@ -62,7 +61,7 @@ def init_simulation_scripting_api_v2(scenario="test_scenario"):
     config.case_study.scenario = scenario
     config.case_study.package = "case_studies"
     config.case_study.simulation = "Simulation"
-    config.import_casestudy_modules()
+    config.import_casestudy_modules(reset_path=True)
 
     # and this works as well,
     from test_case_study.sim import Simulation # type: ignore
