@@ -229,9 +229,9 @@ class NumpyroBackend:
         Tuple[Dict,Dict]
             Dictionaries of observations (data) and masks (missing values)
         """
-        obs = self.simulation.observations \
-            .transpose(*self.simulation.dimensions)
-        data_vars = self.config.data_structure.data_variables + self.extra_vars
+        obs = self.simulation.observations #\
+            # .transpose(*self.simulation.dimensions)
+        data_vars = self.config.data_structure.observed_data_variables + self.extra_vars
 
         masks = {}
         observations = {}
@@ -624,12 +624,12 @@ class NumpyroBackend:
         elif kernel == "nuts":
             sampler = infer.NUTS(
                 model, 
-                dense_mass=True, 
-                step_size=0.01,
+                dense_mass=self.config.inference_numpyro.nuts_dense_mass, 
+                step_size=self.config.inference_numpyro.nuts_step_size,
                 adapt_mass_matrix=True,
                 adapt_step_size=True,
-                max_tree_depth=10,
-                target_accept_prob=0.8,
+                max_tree_depth=self.config.inference_numpyro.nuts_max_tree_depth,
+                target_accept_prob=self.config.inference_numpyro.nuts_target_accept_prob,
                 init_strategy=self.init_strategy
             )
         else:

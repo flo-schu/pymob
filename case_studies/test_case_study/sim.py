@@ -1,6 +1,7 @@
 import numpy as np
 import xarray as xr
 from pymob.simulation import SimulationBase
+from pymob.solvers.diffrax import JaxSolver
 from test_case_study.mod import lotka_volterra, solve, solve_jax
 from test_case_study.plot import plot_trajectory
 from test_case_study import prob
@@ -17,16 +18,12 @@ class Simulation(SimulationBase):
             gamma = 0.3,  # Predator reproduction rate
             delta = 0.01,  # Predator death rate
         )
-        if self.config.simulation.replicated:
-            self.model_parameters["y0"] = self.RNG.integers(1, 50, size=(10, 2))
-        else:
-            self.model_parameters["y0"] = np.array([40, 9])  # initial population of prey and predator
-
         
         self.observations = xr.load_dataset(input[1])
         self.observations["wolves"] = self.observations["wolves"] + 1e-8
         self.observations["rabbits"] = self.observations["rabbits"] + 1e-8
 
+        self.model_parameters["y0"] = self.parse_input("y0", drop_dims=["time"])
         
     @staticmethod
     def parameterize(free_parameters: dict, model_parameters):

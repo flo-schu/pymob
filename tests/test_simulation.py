@@ -4,7 +4,7 @@ import numpy as np
 from click.testing import CliRunner
 
 from pymob.simulation import SimulationBase
-from pymob.sim.config import FloatParam
+from pymob.sim.config import FloatParam, DataVariable
 
 from tests.fixtures import init_simulation_casestudy_api, linear_model
 
@@ -36,6 +36,8 @@ def test_minimal_simulation():
     sim.config.model_parameters.a = FloatParam(value=10, free=False)
     sim.config.model_parameters.b = FloatParam(value=3, free=True , prior="normal(loc=0,scale=10)")
     sim.model_parameters["parameters"] = sim.config.model_parameters.value_dict
+
+    sim.dispatch_constructor()
     evaluator = sim.dispatch(theta={"b":3})
     evaluator()
     evaluator.results
@@ -67,7 +69,111 @@ def test_minimal_simulation():
     np.testing.assert_allclose(b, parameters["b"], atol=0.05, rtol=0.05)
     np.testing.assert_allclose(sigma_y, parameters["sigma_y"], atol=0.05, rtol=0.05)
 
+def test_input_parsing():
+    sim = SimulationBase()
+    sim.config.data_structure.A = DataVariable(dimensions=["x", "y"], observed=False)
 
+    sim.config.simulation.y0 = ["X=0"]
+    
+    try:
+        sim.parse_input(input="y0")
+        threw_error = False
+    except KeyError:
+        threw_error = True
+
+    assert threw_error        
+
+
+    sim.config.data_structure.X = DataVariable(dimensions=["x"])
+    test_coordinates = {"x": np.linspace(1, 10, 5), "y": np.array([1, 2])}
+    sim.coordinates = test_coordinates
+    
+    y0 = sim.parse_input(input="y0", drop_dims=[])
+    np.testing.assert_equal(y0.X.values, np.zeros(sim.dimension_sizes["x"]))
+
+    y0 = sim.parse_input(input="y0", drop_dims=["x"])
+    assert float(y0.X.values) == 0.0
+
+
+    sim.config.data_structure.X = DataVariable(dimensions=["y", "x"])
+    y0 = sim.parse_input(input="y0", drop_dims=[])
+    np.testing.assert_equal(y0.X.values, np.zeros((2, 5)))
+
+
+    sim.config.data_structure.X = DataVariable(dimensions=["x", "y"])
+    y0 = sim.parse_input(input="y0", drop_dims=[])
+    np.testing.assert_equal(y0.X.values, np.zeros((5, 2)))
+
+    # test if broadcasting is done correctly
+    sim.config.data_structure.X = DataVariable(dimensions=["x", "y"])
+    sim.config.simulation.y0 = ["X=Array([0, 1])"]
+    y0 = sim.parse_input(input="y0", drop_dims=[])
+    np.testing.assert_equal(y0.X.isel(y=0), np.zeros((5)))
+    np.testing.assert_equal(y0.X.isel(y=1), np.ones((5)))
+
+    # test if broadcasting is done correctly
+    sim.config.data_structure.X = DataVariable(dimensions=["y", "x"])
+    sim.config.simulation.y0 = ["X=Array([0, 1, 2, 3,4])"]
+    y0 = sim.parse_input(input="y0", drop_dims=[])
+    np.testing.assert_equal(y0.X.isel(y=0), np.arange(5))
+    np.testing.assert_equal(y0.X.isel(y=1), np.arange(5))
+
+    # test if broadcasting is done correctly
+    sim.config.data_structure.X = DataVariable(dimensions=["y", "x"])
+    sim.config.simulation.y0 = ["X=Array([[0,1,2,3,4],[1,2,3,4,5]])"]
+    y0 = sim.parse_input(input="y0", drop_dims=[])
+    np.testing.assert_equal(y0.X.isel(y=0), np.arange(5))
+    np.testing.assert_equal(y0.X.isel(y=1), np.arange(1, 6))
+
+    # test if broadcasting is done correctly
+    sim.config.data_structure.X = DataVariable(dimensions=["y", "x"])
+    sim.config.simulation.y0 = ["X=Array([[0,1,2,3,4],[1,2,3,4,5]])"]
+    y0 = sim.parse_input(input="y0", drop_dims=[])
+    np.testing.assert_equal(y0.X.isel(y=0), np.arange(5))
+    np.testing.assert_equal(y0.X.isel(y=1), np.arange(1, 6))
+
+    # test if broadcasting is done correctly
+    sim.config.data_structure.X = DataVariable(dimensions=["y", "x"])
+    sim.config.simulation.y0 = ["X=Array([0, 1])"]
+    y0 = sim.parse_input(input="y0", drop_dims=["x"])
+    np.testing.assert_equal(y0.X.values, np.array([0,1]))
+
+    sim.config.data_structure.X = DataVariable(dimensions=["y", "x"])
+    sim.config.simulation.y0 = ["X=0"]
+    y0 = sim.parse_input(input="y0", drop_dims=["y"])
+    np.testing.assert_equal(y0.X.values, np.array([0,0,0,0,0]))
+
+    sim.config.data_structure.X = DataVariable(dimensions=["y", "x"])
+    sim.config.simulation.y0 = ["X=0"]
+    y0 = sim.parse_input(input="y0", drop_dims=["x","y"])
+    assert float(y0.X.values) == 0.0
+
+    X = xr.DataArray(
+        data=np.random.normal(size=(5,2)), 
+        coords=sim.coordinates
+    ).to_dataset(name="X")
+
+    # test addition of observations when data variables had been specified
+    # before
+    sim.config.data_structure.X = DataVariable(dimensions=["y", "x"])
+    sim.observations = X
+    assert all([np.all(sc == tc) for (sk,sc), (tk,tc) in 
+                zip(sim.coordinates.items(), test_coordinates.items())])
+
+    sim.config.data_structure.remove("X")
+    sim.observations = X
+
+    sim.config.simulation.y0 = ["X=X"]
+    y0 = sim.parse_input(input="y0", reference_data=X.isel(y=0), drop_dims=["y"])
+    np.testing.assert_equal(y0.X.values, X.isel(y=0).X.values)
+    
+    sim.config.simulation.y0 = ["X=2*X"]
+    y0 = sim.parse_input(input="y0", reference_data=X.isel(y=0), drop_dims=["y"])
+    np.testing.assert_equal(y0.X.values, X.isel(y=0).X.values * 2)
+
+    sim.config.simulation.y0 = ["X=exp(X)"]
+    y0 = sim.parse_input(input="y0", reference_data=X.isel(y=0, x=0), drop_dims=["y", "x"])
+    np.testing.assert_equal(y0.X.values, np.exp(X.isel(y=0, x=0).X.values))
 
 def test_indexing_simulation():
     pytest.skip()

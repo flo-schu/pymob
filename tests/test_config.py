@@ -3,6 +3,7 @@ import tempfile
 from pymob.simulation import SimulationBase, Config
 from pymob.sim.config import ArrayParam, FloatParam, DataVariable, Datastructure
 from pymob.utils.store_file import import_package
+from pymob.solvers.scipy import solve_ivp_1d
 import xarray as xr
 import os
 
@@ -50,6 +51,11 @@ def test_simulation():
 
     sim.config.case_study.output = None
 
+    # sim.config.import_casestudy_modules()
+    # sim.load_modules()
+    sim.config.simulation.model = "lotka_volterra"
+
+    sim.solver = solve_ivp_1d
     sim.setup()
     sim.config.save(
         fp=f"{scenario}/test_settings.cfg",

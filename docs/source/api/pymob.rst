@@ -9,6 +9,7 @@ Subpackages
 
    pymob.inference
    pymob.sim
+   pymob.solvers
    pymob.utils
 
 Submodules

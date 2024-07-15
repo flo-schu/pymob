@@ -9,12 +9,13 @@ import importlib
 import logging
 import json
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Literal, Callable
+from typing import List, Optional, Union, Dict, Literal, Callable, Tuple, TypedDict
 from typing_extensions import Annotated
 from types import ModuleType
 import tempfile
 
 import numpy as np
+import xarray as xr
 from numpy.typing import ArrayLike
 
 from pydantic import (
@@ -26,6 +27,8 @@ from pydantic.functional_serializers import PlainSerializer
 
 from pymob.utils.store_file import scenario_file, converters
 
+# this loads at the import of the module
+default_path = sys.path.copy()
 
 class FloatParam(BaseModel):
     name: Optional[str] = None
@@ -46,6 +49,11 @@ class ArrayParam(BaseModel):
     prior: Optional[str] = None
     free: bool = True
 
+class ModelParameterDict(TypedDict):
+    parameters: Dict[str, float|str|int]
+    y0: xr.Dataset
+    x_in: xr.Dataset
+
 class DataVariable(BaseModel):
     """Describe a data variable
 
@@ -65,6 +73,9 @@ class DataVariable(BaseModel):
         Defaults to 'nan', which sets the maximum to the maximum of the 
         observations
 
+    observed: bool
+        If the data-variable was observed or not. Defaults to True
+
     dimensions_evaluator: List[str]
         Specifies the dimensions and their order returned by the evaluator.
         This is necessary to bring observations and results together, if for some
@@ -79,6 +90,7 @@ class DataVariable(BaseModel):
     dimensions: List[str]
     min: float = np.nan
     max: float = np.nan
+    observed: bool = True
     dimensions_evaluator: Optional[List[str]] = None
 
     @model_validator(mode="after")
@@ -403,8 +415,8 @@ class Simulation(BaseModel):
     input_files: OptionListStr = []
     # data_variables: OptionListStr = []
     n_ode_states: int = -1
-    replicated: bool = False
-    modeltype: Literal["stochastic", "deterministic"] = "stochastic"
+    batch_dimension: Optional[str] = None
+    modeltype: Literal["stochastic", "deterministic"] = "deterministic"
     solver_post_processing: Optional[str] = Field(default=None, validate_default=True)
     seed: Annotated[int, to_str] = 1
 
@@ -412,9 +424,28 @@ class Datastructure(BaseModel):
     __pydantic_extra__: Dict[str,OptionDataVariable]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
+    def remove(self, key) -> None:
+        """Removes a data variable from the data structure"""
+        if key not in self.__pydantic_extra__:
+            warnings.warn(
+                f"'{key}' is not a data-variable. Data variables are: "
+                f"{self.data_variables}."
+            )
+            return
+        
+        deleted_var = self.__pydantic_extra__.pop(key)
+        print(f"Deleted '{key}' DataVariable({deleted_var}).")
+
+    def __getitem__(self, key):
+        return self.__pydantic_extra__[key]
+
     @property
     def data_variables(self) -> List[str]:
         return [k for k in self.__pydantic_extra__.keys()]
+    
+    @property
+    def observed_data_variables(self) -> List[str]:
+        return [k for k, v in self.__pydantic_extra__.items() if v.observed]
     
     @property
     def dimensions(self) -> List[str]:
@@ -438,6 +469,11 @@ class Datastructure(BaseModel):
     @property
     def dimdict(self) -> Dict[str, List[str]]:
         return {k: v.dimensions for k, v in self.__pydantic_extra__.items()}
+
+    @property
+    def observed_dimdict(self) -> Dict[str, List[str]]:
+        return {k: v.dimensions for k, v in self.__pydantic_extra__.items() if v.observed}
+
 
     @property
     def var_dim_mapper(self) -> Dict[str, List[str]]:
@@ -481,6 +517,15 @@ class Datastructure(BaseModel):
     @property
     def data_variables_max(self):
         return [v.max for v in self.__pydantic_extra__.values()]
+
+    @property
+    def observed_data_variables_min(self):
+        return [v.min for v in self.__pydantic_extra__.values() if v.observed]
+
+    @property
+    def observed_data_variables_max(self):
+        return [v.max for v in self.__pydantic_extra__.values() if v.observed]
+
 
 
 class Inference(BaseModel):
@@ -590,17 +635,30 @@ class Numpyro(BaseModel):
     user_defined_probability_model: Optional[str] = None
     user_defined_preprocessing: Optional[str] = None
     gaussian_base_distribution: bool = False
+    
+    # inference arguments
     kernel: str = "nuts"
     init_strategy: str = "init_to_uniform"
+     
+    # mcmc parameters
     chains: Annotated[int, to_str] = 1
     draws: Annotated[int, to_str] = 2000
     warmup: Annotated[int, to_str] = 1000
     thinning: Annotated[int, to_str] = 1
-    svi_iterations: Annotated[int, to_str] = 10_000
-    svi_learning_rate: Annotated[float, to_str] = 0.0001
+    
+    # nuts arguments
+    nuts_draws: Annotated[int, to_str] = 2000
+    nuts_step_size: Annotated[float, to_str] = 0.8
+    nuts_max_tree_depth: Annotated[int, to_str] = 10
+    nuts_target_accept_prob: Annotated[float, to_str] = 0.8
+    nuts_dense_mass: Annotated[bool, to_str] = True
+
+    # sa parameters
     sa_adapt_state_size: Optional[int] = None
 
-
+    # svi parameters
+    svi_iterations: Annotated[int, to_str] = 10_000
+    svi_learning_rate: Annotated[float, to_str] = 0.0001
 
 class Config(BaseModel):
     """Configuration manager for pymob."""
@@ -741,13 +799,18 @@ class Config(BaseModel):
             else:
                 print(f"No {directory} directory created.")
 
-    def import_casestudy_modules(self):
+    def import_casestudy_modules(self, reset_path=False):
         """
         this script handles the import of a case study without the typical 
         __init__.py file. It iterates through all .py files in the root directory
         of the case study (typically: sim, mod, stats, plot, data, prior)
         and imports them with import_module(...)
         """
+
+        # reset the path to avoid importing modules form case-studies used
+        # before in the same session
+        if reset_path:
+            sys.path = default_path
 
         # append relevant paths to sys
         package = os.path.join(
@@ -768,6 +831,10 @@ class Config(BaseModel):
             print(f"Appended '{case_study}' to PATH")
 
         for module in self.case_study.modules:
+            # remove modules of a different case study that might have been
+            # loaded in the same session.
+            if module in sys.modules:
+                _ = sys.modules.pop(module)
             try:
                 m = importlib.import_module(module, package=case_study)
                 self._modules.update({module: m})
@@ -787,6 +854,9 @@ class Config(BaseModel):
                 f"Simulation class {self.case_study.simulation} "
                 "could not be found. Make sure the simulaton option is spelled "
                 "correctly or specify an class that exists in sim.py"
+                "If you are using pymob to work on different case-studies in "
+                "the same session, make sure to reset the path by "
+                "using `import_casestudy_modules(reset_path=True)`"
             )
         
         return Simulation
