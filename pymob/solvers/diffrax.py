@@ -117,8 +117,8 @@ class JaxSolver(SolverBase):
         x_in_flat = [x for xi in X_in for x in xi]
         Y_0 = self.preprocess_y_0(y0)
 
-        ode_args = mappar(self.model, parameters, exclude=["t", "x_in", "y"])
-        pp_args = mappar(self.post_processing, parameters, exclude=["t", "time", "interpolation", "results"])
+        ode_args = mappar(self.model, parameters, exclude=self.exclude_kwargs_model)
+        pp_args = mappar(self.post_processing, parameters, exclude=self.exclude_kwargs_postprocessing)
         
         # simply broadcast the parameters along the batch dimension
         # if there is no other index provided

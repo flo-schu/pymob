@@ -28,6 +28,8 @@ class SolverBase:
     x_dim: str = "time"
     batch_dimension: str = "batch_id"
     extra_attributes = []
+    exclude_kwargs_model = ["t", "x_in", "y", "X"]
+    exclude_kwargs_postprocessing = ["t", "time", "interpolation", "results"]
 
     # fields that are computed post_init
     x: Tuple[float] = field(init=False, repr=False)
