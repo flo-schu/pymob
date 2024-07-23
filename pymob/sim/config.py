@@ -678,6 +678,7 @@ class Config(BaseModel):
                 converters=converters,
                 interpolation=interp
             )        
+            _config.optionxform = str
             _cfg_file_paths = _config.read(config)
             _cfg_fp = _cfg_file_paths[0]
         elif isinstance(config, configparser.ConfigParser):
@@ -687,6 +688,8 @@ class Config(BaseModel):
                 converters=converters,
                 interpolation=interp
             )
+            _config.optionxform = str
+
         # pass arguments to config
 
         if _cfg_fp is not None: _config.set("case-study", "settings_path", _cfg_fp)
