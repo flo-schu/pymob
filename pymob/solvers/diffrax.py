@@ -46,7 +46,9 @@ class JaxSolver(SolverBase):
         "icoeff",
         "dcoeff",
         "max_steps",
-        "throw_exception"
+        "throw_exception",
+        "exclude_kwargs_model",
+        "exclude_kwargs_postprocessing",
     ]
     diffrax_solver = Dopri5
     rtol = jnp.float32(1e-6)

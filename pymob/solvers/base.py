@@ -27,7 +27,7 @@ class SolverBase:
 
     x_dim: str = "time"
     batch_dimension: str = "batch_id"
-    extra_attributes = []
+    extra_attributes = ["exclude_kwargs_model", "exclude_kwargs_postprocessing"]
     exclude_kwargs_model = ["t", "x_in", "y", "X"]
     exclude_kwargs_postprocessing = ["t", "time", "interpolation", "results"]
 
