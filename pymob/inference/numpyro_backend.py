@@ -246,8 +246,15 @@ class NumpyroBackend:
     @staticmethod
     def parse_parameter(parname: str, prior: str, distribution_map: Dict[str,Tuple]) -> Tuple[str,dist.Distribution,Dict[str,Callable]]:
 
+        pattern = r'\[(.*?)\]'
+        # Function to replace commas with spaces within the match
+        def replace_commas(match):
+            return '[' + match.group(1).replace(',', ' ') + ']'
+
         distribution, cluttered_arguments = prior.split("(", 1)
-        param_strings = cluttered_arguments.split(")", 1)[0].split(",")
+        argument_string = cluttered_arguments.split(")", 1)[0]
+        argument_string = re.sub(pattern, replace_commas, argument_string)
+        param_strings = argument_string.split(",")
 
         distribution_mapping = distribution_map[distribution]
 

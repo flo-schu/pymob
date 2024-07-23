@@ -163,6 +163,28 @@ def test_parameter_array():
     serialized = config.model_parameters.model_dump(mode="json")
     assert serialized == {"test": io}
 
+def test_parameter_array_with_prior():
+    config = Config()
+
+    io = "value=[1.0,2.0,3.0] prior=lognorm(scale=[1.0,1.0,1.0],s=1) free=True"
+    test = ArrayParam(value=[1.0,2.0,3.0], prior="lognorm(scale=[1.0,1.0,1.0],s=1)")
+
+    # test config file input
+    config.model_parameters.test = io
+    assert config.model_parameters.test == test  # type: ignore
+    
+    # test scripting input
+    config.model_parameters.test = test
+
+    # test dict input
+    config.model_parameters.test = test.model_dump(exclude_none=True)
+    assert config.model_parameters.test == test # type: ignore
+
+    # test serialization
+    serialized = config.model_parameters.model_dump(mode="json")
+    assert serialized == {"test": io}
+
+
 
 def test_model_parameters():
     config = Config()
@@ -207,4 +229,5 @@ def test_data_variables():
 
 if __name__ == "__main__":
     # test_data_variables()
+    test_load_generated_settings()
     pass

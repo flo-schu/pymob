@@ -163,7 +163,7 @@ class Evaluator:
                     dimensions=tuple(self.dimensions),
                     data_variables=tuple(self.data_variables),
                     
-                    indices=frozendict({k: tuple(v) for k, v in self.indices.items()}),
+                    indices=frozendict({k: tuple(v.values) for k, v in self.indices.items()}),
                     n_ode_states=self.n_ode_states,
                     is_stochastic=self.is_stochastic,
                 )

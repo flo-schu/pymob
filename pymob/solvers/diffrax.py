@@ -46,7 +46,9 @@ class JaxSolver(SolverBase):
         "icoeff",
         "dcoeff",
         "max_steps",
-        "throw_exception"
+        "throw_exception",
+        "exclude_kwargs_model",
+        "exclude_kwargs_postprocessing",
     ]
     diffrax_solver = Dopri5
     rtol = jnp.float32(1e-6)
@@ -56,6 +58,10 @@ class JaxSolver(SolverBase):
     dcoeff = 0.0
     max_steps = int(1e5)
     throw_exception = True
+
+    def __post_init__(self, *args, **kwargs):
+        super().__post_init__(*args, **kwargs)
+        hash(self)
 
     @partial(jax.jit, static_argnames=["self"])
     def preprocess_x_in(self, x_in):
@@ -117,8 +123,8 @@ class JaxSolver(SolverBase):
         x_in_flat = [x for xi in X_in for x in xi]
         Y_0 = self.preprocess_y_0(y0)
 
-        ode_args = mappar(self.model, parameters, exclude=["t", "x_in", "y"])
-        pp_args = mappar(self.post_processing, parameters, exclude=["t", "time", "interpolation", "results"])
+        ode_args = mappar(self.model, parameters, exclude=self.exclude_kwargs_model)
+        pp_args = mappar(self.post_processing, parameters, exclude=self.exclude_kwargs_postprocessing)
         
         # simply broadcast the parameters along the batch dimension
         # if there is no other index provided
@@ -137,11 +143,15 @@ class JaxSolver(SolverBase):
             ]
         else:
             idxs = list(self.indices.values())
-            # this was before used with [*idxs], which threw a syntax error
-            # https://chatgpt.com/c/c5de3adb-3232-4a25-b53d-b63edbb1f4a1
-            ode_args_indexed = [jnp.array(a, ndmin=1)[tuple(idxs)] for a in ode_args]
-            pp_args_indexed = [jnp.array(a, ndmin=1)[tuple(idxs)] for a in pp_args]
-            raise RuntimeError("This is not yet implemented, it only looks like it")
+            n_index = len(idxs[0])
+            ode_args_indexed = [
+                jnp.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
+                for a in ode_args
+            ]
+            pp_args_indexed = [
+                jnp.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
+                for a in pp_args
+            ]
 
 
         initialized_eval_func = partial(
