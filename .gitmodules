@@ -1,0 +1,3 @@
+[submodule "case_studies/tktd_rna_pulse"]
+	path = case_studies/tktd_rna_pulse
+	url = git@github.com:flo-schu/tktd_rna_pulse
