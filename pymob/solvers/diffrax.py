@@ -57,6 +57,10 @@ class JaxSolver(SolverBase):
     max_steps = int(1e5)
     throw_exception = True
 
+    def __post_init__(self, *args, **kwargs):
+        super().__post_init__(*args, **kwargs)
+        hash(self)
+
     @partial(jax.jit, static_argnames=["self"])
     def preprocess_x_in(self, x_in):
         X_in_list = []
