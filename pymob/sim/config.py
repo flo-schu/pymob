@@ -182,7 +182,7 @@ def string_to_dict(
                 except ValidationError:
                     pass
 
-            if not parsed and  "[" in v and "]" in v:
+            if not parsed and  v[0]=="[" and v[-1]=="]" in v:
                 try:
                     v_ = v.strip("[]").split(",")
                     # remove double quotes
