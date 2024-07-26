@@ -115,7 +115,7 @@ class SymbolicSolver(SolverBase):
                 sol_fin = sp.simplify(sol_pre.expand()) # type: ignore
                 final_solutions.append(sol_fin)
 
-        return final_solutions, integration_constants
+        return final_solutions, solved_ics
 
     def solve_for_t0(
         self, 
