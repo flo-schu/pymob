@@ -524,12 +524,16 @@ class SimulationBase:
             y0 = self.subset_by_batch_dimension(model_parameters["y0"])
             y0 = self.validate_model_input(model_parameters["y0"])
             model_parameters["y0"] = y0
+        else:
+            model_parameters["y0"] = {}
         
         if "x_in" in model_parameters:
             x_in = self.subset_by_batch_dimension(model_parameters["x_in"])
             x_in = self.validate_model_input(model_parameters["x_in"])
             model_parameters["x_in"] = x_in
-
+        else:
+            model_parameters["x_in"] = {}
+        
         evaluator = self.evaluator.spawn()
         evaluator.parameters = model_parameters
         return evaluator
