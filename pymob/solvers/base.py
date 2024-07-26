@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.typing import ArrayLike
 import xarray as xr
 from typing import Callable, Dict, List, Optional, Sequence, Literal, Tuple
 from frozendict import frozendict
@@ -92,18 +93,23 @@ class SolverBase:
     def solve(self):
         raise NotImplementedError("Solver must implement a solve method.")
 
-def mappar(func, parameters, exclude=[], to:Literal["tuple","dict"]="tuple"):
+def mappar(
+    func, 
+    parameters: Dict[str,float|int|List|Tuple], 
+    exclude=[], 
+    to:Literal["tuple","dict","names"]="tuple"
+) -> Tuple|Dict:
     func_signature = inspect.signature(func).parameters.keys()
     model_param_signature = [p for p in func_signature if p not in exclude]
     if to == "tuple":
         model_args = [parameters.get(k) for k in model_param_signature]
-        model_args = tuple(model_args)
+        return tuple(model_args)
     elif to == "dict":
-        model_args = {k: parameters.get(k) for k in model_param_signature}
-    else:
-        raise NotImplementedError(f"'to={to}' is not implemented for 'mappar'")
+        return {k: parameters.get(k) for k in model_param_signature}
+    elif to == "names":
+        return tuple(model_param_signature)
 
-    return model_args
+    raise NotImplementedError(f"'to={to}' is not implemented for 'mappar'")
 
 
 def jump_interpolation(
