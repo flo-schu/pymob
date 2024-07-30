@@ -583,6 +583,17 @@ class Modelparameters(BaseModel):
     def value_dict(self) -> Dict[str,float|List[float]]:
         return {k:v.value for k, v in self.all.items()}
     
+    def remove(self, key) -> None:
+        """Removes a Parameter"""
+        if key not in self.all:
+            warnings.warn(
+                f"'{key}' is not a parameter. Data variables are: "
+                f"{list(self.all.keys())}."
+            )
+            return
+        
+        deleted_par = self.__pydantic_extra__.pop(key)
+        print(f"Deleted '{key}' Param({deleted_par}).")
 
 class Errormodel(BaseModel):
     __pydantic_extra__: Dict[str,str]
