@@ -341,10 +341,19 @@ def rect_interpolation(
         v = x_in[k]
         x = v[x_dim].values
         y = v.values
-        xs, ys = rectilinear_interpolation(
-            ts=np.concatenate([x, np.array(x[-1]+1, ndmin=1)]), # type:ignore
-            ys=np.row_stack([y, np.array(y[-1], ndmin=2)]) # type: ignore
-        )
+
+        ts_ = np.concatenate([x, np.array(x[-1]+1, ndmin=1)]) 
+        if y.ndim == 1:
+            ys_ = np.concatenate([y, np.array(y[-1], ndmin=1)])
+        elif y.ndim == 2:
+            ys_ = np.row_stack([y, np.array(y[-1], ndmin=2)]) 
+        else:
+            raise NotImplementedError(
+                "Dimensions of interpolation > 2 or 0 are not implemented"
+            )
+
+        xs, ys = rectilinear_interpolation(ts=ts_, ys=ys_) # type:ignore
+            
 
         coords = {x_dim: xs}
         coords.update({d: v.coords[d].values for d in v.dims if d != x_dim})
