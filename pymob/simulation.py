@@ -436,6 +436,19 @@ class SimulationBase:
     @property
     def coordinates_input_vars(self):
         input_vars = ["x_in", "y0"]
+
+        # This is a function that could replace the below, to return always
+        # dictionaries for any possible input vars. Default: Empty dict
+        # coordinates = {}
+        # for k in input_vars:
+        #     if k in self.model_parameters:
+        #         v = self.model_parameters[k]
+        #         coords = {ck: cv.values for ck, cv in v.coords.items()}
+        #     else:
+        #         coords = {}
+
+        #     coordinates.update({k: coords})
+        # return coordinates
         return {
             k: {ck: cv.values for ck, cv in v.coords.items()} 
             for k, v in self.model_parameters.items() 
