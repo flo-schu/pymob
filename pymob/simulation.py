@@ -20,7 +20,7 @@ import dpath as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from toopy import param, benchmark
 
-from pymob.utils.config import lambdify_expression, lookup_args
+from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
 from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
@@ -91,19 +91,7 @@ def update_parameters_dict(config, x, parnames):
             )
     return config
 
-def get_return_arguments(func):
-    ode_model_source = inspect.getsource(func)
-    
-    # extracts last return statement of source
-    return_statement = ode_model_source.split("\n")[-2]
 
-    # extract arguments returned by ode_func
-    return_args = return_statement.split("return")[1]
-
-    # strip whitespace and separate by comma
-    return_args = return_args.replace(" ", "").split(",")
-
-    return return_args
 
 class SimulationBase:
     model: Optional[Callable] = None

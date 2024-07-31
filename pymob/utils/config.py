@@ -1,3 +1,4 @@
+import inspect
 import json
 import re
 import sympy
@@ -72,3 +73,31 @@ def lookup(val, *indexable_objects):
 
 def lookup_args(args, *objects_to_search):
     return {k: lookup(k, *objects_to_search) for k in args}
+
+def get_return_arguments(func):
+    ode_model_source = inspect.getsource(func)
+    
+    # extracts last return statement of source
+    return_statement = ode_model_source.split("\n")[-2]
+
+    # extract arguments returned by ode_func
+    return_args = return_statement.split("return")[1]
+
+    # strip whitespace and separate by comma
+    return_args = return_args.replace(" ", "").split(",")
+
+    return return_args
+
+def dX_dt2X(expr: str):
+    expr = expr.split("_dt", 1)[0]
+    expr = expr.split("_dx", 1)[0]
+
+    if len(expr) == 2:
+        if expr[0] == "d":
+            expr = expr[1]
+            return expr
+
+    raise NotImplementedError(
+        "Derviatives returned by an ODE model should follow the form "
+        "'dX_dt' or 'dX_dx' or 'dX' where 'X' denotes the variable."
+    )

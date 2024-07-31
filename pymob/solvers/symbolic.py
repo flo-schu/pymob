@@ -1,6 +1,18 @@
-from typing import List, Dict, Callable
-from pymob.solvers.base import SolverBase
+import os
+import ast
+import importlib
+from datetime import datetime
+from pathlib import Path
+import tempfile
+import inspect
+from dataclasses import dataclass, field
+from typing import List, Dict, Callable, Tuple, Optional
+from pymob.solvers.base import SolverBase, mappar
 import sympy as sp
+from sympy.printing.codeprinter import CodePrinter
+from sympy.printing.numpy import NumPyPrinter, JaxPrinter
+from sympy.printing.python import PythonPrinter
+from sympy.printing.pycode import PythonCodePrinter
 
 def recurse_variables(X, func):
     X_ = []
@@ -14,15 +26,33 @@ def recurse_variables(X, func):
     return X_
 
 
-def flatten(x) -> List[sp.Symbol|sp.Function]:
-    try:
-        iter(x)
+def flatten(x) -> List:
+    if isinstance(x, list|tuple):
         return [a for i in x for a in flatten(i)]
-    except:
+    else:
         return [x]
+    
 
+def get_source_and_docs(func) -> Tuple[str,str]:
+    complete_source = inspect.getsource(func)
+    docstring = inspect.getdoc(func)
+    if docstring is None:
+        docstring = ""
+    source = complete_source.replace(
+        f'\n    """{docstring}"""', ''
+    )
+    return source, docstring
 
+@dataclass(frozen=True)
 class SymbolicSolver(SolverBase):
+    extra_attributes = [
+        "output_path",
+        "scenario_path",
+    ]
+
+    output_path: str = tempfile.gettempdir()
+    scenario_path: str = tempfile.gettempdir()
+
     def define_symbols(self):
         raise NotImplementedError(
             "Must define a method to create the needed symbols in the ODE system "
@@ -143,6 +173,73 @@ class SymbolicSolver(SolverBase):
 
         return solutions, integration_constants
 
+
+    def compile(self, func_name="f", force_compile=False):
+        """Compiles an ODE model to source code or reads it from disk if unchanged"""
+        source, docs = get_source_and_docs(self.model)
+
+        compiled_function = self.load_compiled_code(self.model.__name__, func_name)        
+        
+        if compiled_function is None:
+            compile_new = True
+        
+        else:
+            _, docs_c = get_source_and_docs(compiled_function)
+
+            if (
+                docs_c.split("### SOURCE ###")[1].strip("\n") 
+                == source.strip("\n")
+            ):
+                compile_new = False
+            else:
+                compile_new = True
+
+        if compile_new or force_compile:
+            # get the ode arguments and names
+            symbols = self.define_symbols()
+            t, Y, Y_0, theta = symbols
+
+            # solve system of differential equations algebraically
+            solutions, integ_constants = self.solve_for_t0(
+                self.model,
+                t=t,
+                Y=list(Y.values()),
+                Y_0=list(Y_0.values()),
+                theta=list(theta.values())
+            )
+
+            docstring = self.generate_docstring(self.model)
+
+            python_code = FunctionPythonCode(
+                func_name=func_name,
+                x="t",
+                lhs_0=("Y_0", tuple(Y_0.keys())),
+                lhs=tuple(Y.keys()),
+                rhs=tuple([sol.rhs for sol in solutions]),
+                theta=("θ", tuple(theta.keys())),
+                expand_arguments=False,
+                printer=NumPyPrinter(),
+                modules=("numpy",),
+                docstring=docstring
+            )
+
+            python_module = ModulePythonCode(
+                functions=(python_code,),
+            )
+
+            code_file = Path(self.output_path, f"{self.model.__name__}.py")
+            with open(code_file, "w") as f:
+                f.writelines(str(python_module))
+
+            compiled_function = self.load_compiled_code(
+                self.model.__name__, func_name
+            )
+
+        else:
+            pass
+
+        return compiled_function
+
     def to_latex(self, solutions):
         latex = []
         for sol in solutions:
@@ -162,3 +259,198 @@ class SymbolicSolver(SolverBase):
 
         return latex
 
+    @staticmethod
+    def generate_docstring(func):
+        source_with_comments, ode_docstring = get_source_and_docs(func)
+
+        # create docstring
+        python_time = f"Function compiled at: {datetime.now()}\n"
+        python_ode_docstring = f"ODE DOCSTRING: {ode_docstring}\n"
+        python_docstring = (
+            '"""\n'
+            +python_ode_docstring
+            +python_time
+            +'### SOURCE ###'
+            +'\n'
+            +'\n'.join(source_with_comments.splitlines())
+            +'\n### SOURCE ###'
+            +'\n"""\n'
+        )
+
+        return python_docstring
+    
+    def load_compiled_code(self, module_name, func_name):
+        # Create a module spec from the file location
+        code_file = Path(self.output_path, f"{module_name}.py")
+
+        if code_file.exists():
+            spec = importlib.util.spec_from_file_location( # type: ignore
+                f"{module_name}.py", 
+                code_file
+            )
+
+            # Create a module object from the spec
+            module = importlib.util.module_from_spec(spec) # type: ignore
+            spec.loader.exec_module(module)
+        else:
+            module = None
+
+        if module is not None:
+            try:
+                compiled_function = getattr(module, func_name)
+            except AttributeError as err:
+                raise AttributeError(
+                    f"{err}. Try setting 'func_name' to one of: "
+                    f"{[k for k, v in inspect.getmembers(module, inspect.isfunction)]}"
+                )
+        else:
+            compiled_function = None
+
+        return compiled_function
+    
+    def jump_solution(self):
+        # this is the master equation for solving until certain time t_jump and then
+        # continuing the solve from there. This is generic. It just needs a
+        # function to determine the jump location from the initial conditions
+
+        t_, theta_, Y_ = sp.symbols("t theta Y", positive=True)
+        F, t_jump = sp.symbols("F t_jump", cls=sp.Function)
+
+        F_master = sp.Piecewise(
+            (
+                F(t_ - t_jump(Y_, theta_), F(t_jump(Y_, theta_), Y_, theta_), theta_), 
+                ((0 < t_jump(Y_, theta_)) & (t_jump(Y_, theta_) < t_))
+            ), 
+            (
+                F(t_, Y_, theta_), 
+                True
+            )
+        )
+
+        # This can be converted into code, by writing the code for F to disc
+        # and the code for t_jump and then then afterwards defining the master
+        # equation.
+
+        return F_master
+
+@dataclass
+class FunctionPythonCode:
+    func_name: str = "f"
+    x: Optional[str] = None
+    theta: Tuple[Optional[str],Tuple] = (None, ()) 
+    lhs_0: Tuple[Optional[str],Tuple] = (None, ())
+    lhs: Tuple = ()
+    rhs: Tuple = ()
+    expand_arguments: bool = True
+    docstring: str = ""
+    modules: Tuple[str, ...] = ()
+    printer: CodePrinter = NumPyPrinter()
+    extra_indent: int = 0
+
+    def __str__(self):
+        source = (
+            self._indent(self.signature, n=0)
+            + self._indent(self.docstring)
+            + self._indent(self.body)
+            + self._indent(self.return_statement)
+        )
+
+        return self._indent(source, n=self.extra_indent, eol="\n")
+    
+    @staticmethod
+    def _indent(expr, n=4, eol="\n"):
+        if len(expr) == 0:
+            return expr
+        exprs = expr.split("\n")
+        exprs = [" " * n + expr + eol for expr in exprs]
+        return "".join(exprs)
+    
+    @property
+    def signature(self):
+        definition = f"def {self.func_name}"
+        args = []
+
+        if self.x is not None:
+            args.append(self.x)
+        if self.lhs_signature is not None:
+            args.append(self.lhs_signature)
+        if self.theta_signature is not None:
+            args.append(self.theta_signature)
+        
+        args = ", ".join(args)
+        return f"{definition}({args}):"
+    
+    @property
+    def lhs_signature(self):
+        if self.expand_arguments:
+            if len(self.lhs_0[1]) == 0:
+                return None
+            return ", ".join(self.lhs_0[1])
+        else:
+            if len(self.lhs_0[1]) == 0:
+                return None
+            return self.lhs_0[0]
+
+    @property
+    def theta_signature(self):
+        if self.expand_arguments:
+            if len(self.theta[1]) == 0:
+                return None
+            return ", ".join(self.theta[1])
+        else:
+            if len(self.theta[1]) == 0:
+                return None
+            return self.theta[0]
+
+    @property
+    def body(self):
+        funcbody = []
+        if not self.expand_arguments:
+            if len(self.lhs_0[1]) > 0:
+                lhs_0 = f"{', '.join(self.lhs_0[1])} = {self.lhs_0[0]}"
+                funcbody.append("# extract variable")
+                funcbody.append(lhs_0)
+
+        if not self.expand_arguments:
+            if len(self.theta[1]) > 0:
+                theta = f"{', '.join(self.theta[1])} = {self.theta[0]}"
+                funcbody.append("# extract parameters (theta)")
+                funcbody.append(theta)
+
+        assert len(self.lhs) == len(self.rhs)
+        if len(self.lhs) > 0:
+            F = self.printer.doprint(
+                expr=[eq.expand() for eq in self.rhs], 
+                assign_to=self.lhs
+            )
+            funcbody.append("# compute equation")
+            funcbody.append(str(F))
+
+        return "\n".join(funcbody)
+    
+    @property
+    def return_statement(self):
+        return f"return {', '.join(self.lhs)}"
+    
+@dataclass
+class ModulePythonCode:
+    functions: Tuple[FunctionPythonCode, ...] = ()
+
+    def __str__(self):
+        imports = "\n".join(self.import_statements)
+        funcs = "\n\n\n".join(self.function_definitions)
+
+        return f"{imports}\n\n\n{funcs}"
+
+    @property
+    def function_definitions(self):
+        return [str(f) for f in self.functions]
+
+    @property
+    def import_statements(self) -> List[str]:
+        imports = []
+        for f in self.functions:
+            for i in f.modules:
+                imports.append(f"import {i}")
+        return imports
+    
