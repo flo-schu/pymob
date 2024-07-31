@@ -300,6 +300,11 @@ class SymbolicODESolver(SolverBase):
             docstring=docstring
         )
 
+        tex = self.to_latex(solutions=solutions)
+        code_file = Path(self.output_path, f"{func_name}.tex")
+        with open(code_file, "w") as f:
+            f.writelines(tex)
+
         solutions = {k: sol for k, sol in zip(Y.keys(), solutions)}
         return solutions, python_code
 
@@ -408,6 +413,11 @@ class PiecewiseSymbolicODESolver(SymbolicODESolver):
             modules=("numpy",),
             docstring=""
         )
+
+        tex = sp.latex(sp.Eq(sp.Symbol(func_name), F_master))
+        code_file = Path(self.output_path, f"{func_name}.tex")
+        with open(code_file, "w") as f:
+            f.writelines(tex)
 
         return F_master, python_code
     
