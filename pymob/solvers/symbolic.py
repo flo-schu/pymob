@@ -1,5 +1,4 @@
-import os
-import ast
+import warnings
 import importlib
 from datetime import datetime
 from pathlib import Path
@@ -44,7 +43,7 @@ def get_source_and_docs(func) -> Tuple[str,str]:
     return source, docstring
 
 @dataclass(frozen=True)
-class SymbolicSolver(SolverBase):
+class SymbolicODESolver(SolverBase):
     extra_attributes = [
         "output_path",
         "scenario_path",
@@ -174,71 +173,125 @@ class SymbolicSolver(SolverBase):
         return solutions, integration_constants
 
 
-    def compile(self, func_name="f", force_compile=False):
-        """Compiles an ODE model to source code or reads it from disk if unchanged"""
-        source, docs = get_source_and_docs(self.model)
-
-        compiled_function = self.load_compiled_code(self.model.__name__, func_name)        
+    def compile(
+        self, 
+        functions: Dict[str,Tuple[Callable|None,Callable]], 
+        module_name: str = "symbolic_solution",
+        force_compile=False
+    ):
+        """Compiles an ODE model to source code or reads it from disk if 
+        unchanged. Compilation, writing to disk and re-loading the module again
+        has the fundamental advantage that the code can be debugged
+        """
+        python_module = ModulePythonCode()
         
-        if compiled_function is None:
-            compile_new = True
-        
-        else:
-            _, docs_c = get_source_and_docs(compiled_function)
+        compiled_functions = {}
+        for func_name, (func, func_compiler) in functions.items():
+            # try to load the module and function
+            compiled_module, compiled_func = self.load_compiled_code(
+                module_name=module_name, func_name=func_name
+            )        
+            
+            # get the source code and docstrings of the function that should
+            # be compiled
+            if func is not None:
+                source, docs = get_source_and_docs(func)
 
-            if (
-                docs_c.split("### SOURCE ###")[1].strip("\n") 
-                == source.strip("\n")
-            ):
-                compile_new = False
+                # if the function was not found, instruct to recompile
+                if compiled_func is None:
+                    compile_new = True
+                    python_code_c = None
+                
+                else:
+                    # otherwise see if there were changes in the source code 
+                    # and if not don't recompile
+                    python_code_c, docs_c = get_source_and_docs(compiled_func)
+
+                    if (
+                        docs_c.split("### SOURCE ###")[1].strip("\n") 
+                        == source.strip("\n")
+                    ):
+                        compile_new = False
+                    else:
+                        compile_new = True
             else:
                 compile_new = True
+                python_code_c = None
 
-        if compile_new or force_compile:
-            # get the ode arguments and names
-            symbols = self.define_symbols()
-            t, Y, Y_0, theta = symbols
+            # store loaded results in dictionary
+            results = {
+                "algebraic_solutions": None,
+                "python_code": python_code_c,
+                "compiled_function": compiled_func
+            }
 
-            # solve system of differential equations algebraically
-            solutions, integ_constants = self.solve_for_t0(
-                self.model,
-                t=t,
-                Y=list(Y.values()),
-                Y_0=list(Y_0.values()),
-                theta=list(theta.values())
-            )
+            if compile_new or force_compile:
+                func_solutions, func_code = func_compiler(
+                    func_name=func_name,
+                    compiled_functions=compiled_functions
+                )
 
-            docstring = self.generate_docstring(self.model)
+                # add the function to the python module
+                python_module.functions = tuple(
+                    flatten([python_module.functions, func_code])
+                )
 
-            python_code = FunctionPythonCode(
-                func_name=func_name,
-                x="t",
-                lhs_0=("Y_0", tuple(Y_0.keys())),
-                lhs=tuple(Y.keys()),
-                rhs=tuple([sol.rhs for sol in solutions]),
-                theta=("θ", tuple(theta.keys())),
-                expand_arguments=False,
-                printer=NumPyPrinter(),
-                modules=("numpy",),
-                docstring=docstring
-            )
+                results.update({
+                    "algebraic_solutions": func_solutions,
+                    "python_code": func_code,
+                })
 
-            python_module = ModulePythonCode(
-                functions=(python_code,),
-            )
 
-            code_file = Path(self.output_path, f"{self.model.__name__}.py")
-            with open(code_file, "w") as f:
-                f.writelines(str(python_module))
+                # write the whole module to disk and load the functions
+                # this is currently necessary, because definitions may depend
+                # on one another.
+                code_file = Path(self.output_path, f"{module_name}.py")
+                with open(code_file, "w") as f:
+                    f.writelines(str(python_module))
 
-            compiled_function = self.load_compiled_code(
-                self.model.__name__, func_name
-            )
+                compiled_func = self.load_compiled_code(
+                    module_name=module_name, func_name=func_name
+                )
 
-        else:
-            pass
+                results.update({"compiled_function": compiled_func})
+            else:
+                pass
 
-        return compiled_function
+            compiled_functions.update({func_name: results})
+
+        return compiled_functions
+
+    def compile_model(self, func_name="F", compiled_functions={}):
+        # get the ode arguments and names
+        symbols = self.define_symbols()
+        t, Y, Y_0, theta = symbols
+
+        # solve system of differential equations algebraically
+        solutions, integ_constants = self.solve_for_t0(
+            self.model,
+            t=t,
+            Y=list(Y.values()),
+            Y_0=list(Y_0.values()),
+            theta=list(theta.values())
+        )
+
+        docstring = self.generate_docstring(self.model)
+
+        python_code = FunctionPythonCode(
+            func_name=func_name,
+            x="t",
+            lhs_0=("Y_0", tuple(Y_0.keys())),
+            lhs=tuple(Y.keys()),
+            rhs=tuple([sol.rhs for sol in solutions]),
+            theta=("θ", tuple(theta.keys())),
+            expand_arguments=False,
+            printer=CustomNumpyPrinter(),
+            modules=("numpy",),
+            docstring=docstring
+        )
+
+        solutions = {k: sol for k, sol in zip(Y.keys(), solutions)}
+        return solutions, python_code
 
     def to_latex(self, solutions):
         latex = []
@@ -296,33 +349,36 @@ class SymbolicSolver(SolverBase):
             module = None
 
         if module is not None:
-            try:
-                compiled_function = getattr(module, func_name)
-            except AttributeError as err:
-                raise AttributeError(
-                    f"{err}. Try setting 'func_name' to one of: "
+            compiled_function = getattr(module, func_name, None)
+            if compiled_function is None:
+                warnings.warn(
+                    f"{func_name} was not found in {module}. "
+                    "Try setting 'func_name' to one of: "
                     f"{[k for k, v in inspect.getmembers(module, inspect.isfunction)]}"
                 )
+                
         else:
             compiled_function = None
 
-        return compiled_function
+        return module, compiled_function
     
-    def jump_solution(self):
+class PiecewiseSymbolicODESolver(SymbolicODESolver):
+    def jump_solution(self, func_name, funcnames="F t_jump", compiled_functions={}):
         # this is the master equation for solving until certain time t_jump and then
         # continuing the solve from there. This is generic. It just needs a
         # function to determine the jump location from the initial conditions
 
-        t_, theta_, Y_ = sp.symbols("t theta Y", positive=True)
-        F, t_jump = sp.symbols("F t_jump", cls=sp.Function)
+        t, θ, Y_0, ε = sp.symbols("t θ Y_0 ϵ", positive=True)
+        F, t_jump = sp.symbols(funcnames, cls=sp.Function)
+        
 
         F_master = sp.Piecewise(
             (
-                F(t_ - t_jump(Y_, theta_), F(t_jump(Y_, theta_), Y_, theta_), theta_), 
-                ((0 < t_jump(Y_, theta_)) & (t_jump(Y_, theta_) < t_))
+                F(t - t_jump(Y_0, θ) + ϵ, F(t_jump(Y_0, θ) - ϵ, Y_0, θ), θ), 
+                ((0 < t_jump(Y_0, θ)) & (t_jump(Y_0, θ) < t))
             ), 
             (
-                F(t_, Y_, theta_), 
+                F(t, Y_0, θ), 
                 True
             )
         )
@@ -330,8 +386,33 @@ class SymbolicSolver(SolverBase):
         # This can be converted into code, by writing the code for F to disc
         # and the code for t_jump and then then afterwards defining the master
         # equation.
+        python_code = FunctionPythonCode(
+            func_name=func_name,
+            x="t",
+            lhs_0=("Y_0", ("Y_0",)),
+            theta=("θ", ("θ", "ε")),
+            lhs=("Y",),
+            rhs=(F_master,),
+            expand_arguments=True,
+            printer=CustomNumpyPrinter(),
+            modules=("numpy",),
+            docstring=""
+        )
 
-        return F_master
+        return F_master, python_code
+    
+    def t_jump(self, solutions):
+        raise NotImplementedError(
+            "A Piecewise Symbolic solver needs to implement a function 't_jump'"
+        )
+
+
+class CustomNumpyPrinter(NumPyPrinter):
+    def _print_Function(self, func):
+        func_name = func.func.__name__
+        args = ", ".join([self._print(arg) for arg in func.args])
+        return f"{func_name}({args})"
+
 
 @dataclass
 class FunctionPythonCode:
@@ -344,7 +425,7 @@ class FunctionPythonCode:
     expand_arguments: bool = True
     docstring: str = ""
     modules: Tuple[str, ...] = ()
-    printer: CodePrinter = NumPyPrinter()
+    printer: CodePrinter = CustomNumpyPrinter()
     extra_indent: int = 0
 
     def __str__(self):
@@ -453,4 +534,3 @@ class ModulePythonCode:
             for i in f.modules:
                 imports.append(f"import {i}")
         return imports
-    
