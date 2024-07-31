@@ -42,15 +42,29 @@ def get_source_and_docs(func) -> Tuple[str,str]:
     )
     return source, docstring
 
-@dataclass(frozen=True)
 class SymbolicODESolver(SolverBase):
     extra_attributes = [
         "output_path",
         "scenario_path",
+        "do_compile",
+        "module_name"
     ]
+
+    def __post_init__(self, *args, **kwargs):
+        super().__post_init__(*args, **kwargs)
+        
+        # this should happen at initialization time.
+        funcs = self.compile(
+            functions=self.compiler_recipe, 
+            module_name=self.module_name,
+            compile=self.do_compile
+        )
+        self.compiled_functions = funcs
 
     output_path: str = tempfile.gettempdir()
     scenario_path: str = tempfile.gettempdir()
+    do_compile: bool = True 
+    module_name: str = "symbolic_solution"
 
     def define_symbols(self):
         raise NotImplementedError(
@@ -172,12 +186,15 @@ class SymbolicODESolver(SolverBase):
 
         return solutions, integration_constants
 
-
+    @property
+    def compiler_recipe(self):
+        return {"F": self.compile_model}
+    
     def compile(
         self, 
-        functions: Dict[str,Tuple[Callable|None,Callable]], 
+        functions: Dict[str,Callable], 
         module_name: str = "symbolic_solution",
-        force_compile=False
+        compile=False
     ):
         """Compiles an ODE model to source code or reads it from disk if 
         unchanged. Compilation, writing to disk and re-loading the module again
@@ -186,46 +203,24 @@ class SymbolicODESolver(SolverBase):
         python_module = ModulePythonCode()
         
         compiled_functions = {}
-        for func_name, (func, func_compiler) in functions.items():
-            # try to load the module and function
-            compiled_module, compiled_func = self.load_compiled_code(
-                module_name=module_name, func_name=func_name
-            )        
+        if not compile:
+            for func_name, func_compiler in functions.items():
+                # try to load the module and function
+                _, compiled_func = self.load_compiled_code(
+                    module_name=module_name, func_name=func_name
+                )        
             
-            # get the source code and docstrings of the function that should
-            # be compiled
-            if func is not None:
-                source, docs = get_source_and_docs(func)
+                # store loaded results in dictionary
+                results = {
+                    "algebraic_solutions": None,
+                    "python_code": None,
+                    "compiled_function": compiled_func
+                }
+                compiled_functions.update({func_name: results})
 
-                # if the function was not found, instruct to recompile
-                if compiled_func is None:
-                    compile_new = True
-                    python_code_c = None
-                
-                else:
-                    # otherwise see if there were changes in the source code 
-                    # and if not don't recompile
-                    python_code_c, docs_c = get_source_and_docs(compiled_func)
+        else:
+            for func_name, func_compiler in functions.items():
 
-                    if (
-                        docs_c.split("### SOURCE ###")[1].strip("\n") 
-                        == source.strip("\n")
-                    ):
-                        compile_new = False
-                    else:
-                        compile_new = True
-            else:
-                compile_new = True
-                python_code_c = None
-
-            # store loaded results in dictionary
-            results = {
-                "algebraic_solutions": None,
-                "python_code": python_code_c,
-                "compiled_function": compiled_func
-            }
-
-            if compile_new or force_compile:
                 func_solutions, func_code = func_compiler(
                     func_name=func_name,
                     compiled_functions=compiled_functions
@@ -236,10 +231,10 @@ class SymbolicODESolver(SolverBase):
                     flatten([python_module.functions, func_code])
                 )
 
-                results.update({
+                results = {
                     "algebraic_solutions": func_solutions,
                     "python_code": func_code,
-                })
+                }
 
 
                 # write the whole module to disk and load the functions
@@ -254,12 +249,27 @@ class SymbolicODESolver(SolverBase):
                 )
 
                 results.update({"compiled_function": compiled_func})
-            else:
-                pass
 
-            compiled_functions.update({func_name: results})
+                compiled_functions.update({func_name: results})
 
         return compiled_functions
+
+    def test_function_change(self, func, compiled_func):
+        source, docs = get_source_and_docs(func)
+
+        # otherwise see if there were changes in the source code 
+        # and if not don't recompile
+        python_code_c, docs_c = get_source_and_docs(compiled_func)
+
+        if (
+            docs_c.split("### SOURCE ###")[1].strip("\n") 
+            == source.strip("\n")
+        ):
+            changed = False
+        else:
+            changed = True
+        
+        return changed
 
     def compile_model(self, func_name="F", compiled_functions={}):
         # get the ode arguments and names
@@ -410,7 +420,7 @@ class PiecewiseSymbolicODESolver(SymbolicODESolver):
 class CustomNumpyPrinter(NumPyPrinter):
     def _print_Function(self, func):
         func_name = func.func.__name__
-        args = ", ".join([self._print(arg) for arg in func.args])
+        args = ", ".join([self._print(arg) for arg in func.args]) # type: ignore
         return f"{func_name}({args})"
 
 
