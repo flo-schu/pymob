@@ -213,7 +213,6 @@ class SymbolicODESolver(SolverBase):
                 # store loaded results in dictionary
                 results = {
                     "algebraic_solutions": None,
-                    "python_code": None,
                     "compiled_function": compiled_func
                 }
                 compiled_functions.update({func_name: results})
@@ -233,7 +232,6 @@ class SymbolicODESolver(SolverBase):
 
                 results = {
                     "algebraic_solutions": func_solutions,
-                    "python_code": func_code,
                 }
 
 
@@ -244,7 +242,7 @@ class SymbolicODESolver(SolverBase):
                 with open(code_file, "w") as f:
                     f.writelines(str(python_module))
 
-                compiled_func = self.load_compiled_code(
+                _, compiled_func = self.load_compiled_code(
                     module_name=module_name, func_name=func_name
                 )
 
