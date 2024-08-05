@@ -96,6 +96,37 @@ def test_variable_exposure_compiled():
 
 
 
+def test_bufferguts_hybrid_solution():
+    sim = init_bufferguts_casestudy()
+
+    sim.use_hybrid_solver()
+    evaluator = sim.dispatch(theta={})
+    evaluator()
+    sol_symbolic = evaluator.results
+
+    sim.use_jax_solver()
+    sim.dispatch_constructor(rtol=1e-15, atol=1e-16, max_steps=1e6)
+    evaluator = sim.dispatch(theta={})
+    evaluator()
+    sol_numerical = evaluator.results
+
+    # make sure errors are small between exact solution and numerical solution
+    # the errors come from:
+    # a) integrating not exactly to t_eq
+    # b) using a numerical switch in the ODE solution.
+    diff = (
+        sol_numerical.sel(time=np.arange(0,sim.t_max))
+        - sol_symbolic.sel(time=np.arange(0,sim.t_max))
+    )[["B", "D", "H", "S"]]
+    max_delta = np.abs(diff).max().to_array()
+    np.testing.assert_array_less(max_delta, [1e-8, 1e-8, 1e-8])
+
+
+    axes = sim._plot.plot_multiexposure(sol_numerical, vars=["exposure", "B", "D", "H", "S"], color="tab:blue", label_prefix="ODE")
+    axes = sim._plot.plot_multiexposure(sol_symbolic, vars=["exposure", "B", "D", "H", "S"], axes=axes, color="tab:red", linestyle="--", label_prefix="exact")
+    fig = axes[0].figure
+    fig.savefig(f"{sim.output_path}/solution_comparison.png")
+
+
 if __name__ == "__main__":
-    test_constant_exposure()
-    test_variable_exposure()
+    pass
