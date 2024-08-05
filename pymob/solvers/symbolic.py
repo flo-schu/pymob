@@ -4,14 +4,16 @@ from datetime import datetime
 from pathlib import Path
 import tempfile
 import inspect
+from frozendict import frozendict, FrozenOrderedDict
 from dataclasses import dataclass, field
-from typing import List, Dict, Callable, Tuple, Optional
+from typing import List, Dict, Callable, Tuple, Optional, TypedDict
 from pymob.solvers.base import SolverBase, mappar
 import sympy as sp
 from sympy.printing.codeprinter import CodePrinter
 from sympy.printing.numpy import NumPyPrinter, JaxPrinter
 from sympy.printing.python import PythonPrinter
 from sympy.printing.pycode import PythonCodePrinter
+from pymob.utils.config import get_return_arguments, dX_dt2X
 
 def recurse_variables(X, func):
     X_ = []
@@ -42,11 +44,17 @@ def get_source_and_docs(func) -> Tuple[str,str]:
     )
     return source, docstring
 
+class SolutionDict(TypedDict):
+    algebraic_solutions: Dict[str, sp.Eq]
+    compiled_function: Callable
+
+@dataclass(frozen=True)
 class SymbolicODESolver(SolverBase):
     extra_attributes = [
         "output_path",
         "scenario_path",
         "do_compile",
+        "compile_on_init",
         "module_name"
     ]
 
@@ -54,27 +62,45 @@ class SymbolicODESolver(SolverBase):
         super().__post_init__(*args, **kwargs)
         
         # this should happen at initialization time.
-        funcs = self.compile(
-            functions=self.compiler_recipe, 
-            module_name=self.module_name,
-            compile=self.do_compile
-        )
-        self.compiled_functions = funcs
+        if self.compile_on_init:
+            funcs = self.compile(
+                functions=self.compiler_recipe, 
+                module_name=self.module_name,
+                compile=self.do_compile
+            )
+            object.__setattr__(self, "compiled_functions", frozendict(funcs))
 
+    compiled_functions: FrozenOrderedDict[str,SolutionDict] = frozendict({})
     output_path: str = tempfile.gettempdir()
     scenario_path: str = tempfile.gettempdir()
     do_compile: bool = True 
+    compile_on_init: bool = True 
     module_name: str = "symbolic_solution"
 
     def define_symbols(self):
-        raise NotImplementedError(
-            "Must define a method to create the needed symbols in the ODE system "
-            "In Future a method providing automated names for the symbols will "
-            "be provided."
+        """Define the necessary symbols solely based on the function"""
+        thetanames = mappar(
+            self.model, {}, 
+            exclude=["t", "dt", "y", "x_in", "Y", "X"], 
+            to="names"
         )
+        ynames = [dX_dt2X(a) for a in get_return_arguments(self.model)]
 
+        # define symbols for t, Y, Y_0 and theta
+        t = sp.Symbol("t", positive=True, real=True)
+        Y = {y: sp.Function(y, positive=True, real=True) for y in ynames}
+        Y_0 = {
+            f"{y}_0": sp.Symbol(f"{y}_0", positive=True, real=True) 
+            for y in ynames
+        }
+        theta = {p: sp.Symbol(p, positive=True, real=True) for p in thetanames}
+        
+        symbols = (t, Y, Y_0, theta)
+
+        return symbols
+        
     @staticmethod
-    def solve_ode_system(rhs, t, Y, Y_0, theta) -> List:
+    def define_ode_system(rhs, t, Y, Y_0, theta) -> List:
         # get the symbolic ODEs by inserting symbols into the RHS
         dY_dt = rhs(t, recurse_variables(Y, func=lambda x: x(t)), *theta)
 
@@ -85,17 +111,21 @@ class SymbolicODESolver(SolverBase):
             sp.Eq(sp.Derivative(y(t), t), dy_dt) # type: ignore
             for y, dy_dt in zip(flatten(Y), flatten(dY_dt))
         ] 
+        return ode_system
 
+    @classmethod
+    def solve_ode_system(cls, rhs, t, Y, Y_0, theta) -> Tuple[List,List]:
         # solve the ODE system. Here, ics could also be used. There are more arguments,
         # but a simple dsolve works. Before solving the ODEs are expanded to make it
         # easier for the solver.
+        ode_system = cls.define_ode_system(rhs, t, Y, Y_0, theta)
         solution = sp.dsolve([ode.expand() for ode in ode_system])
 
         # convert solution to a list if the ODE system is only one equation
         if not isinstance(solution, list):
             solution = [solution]
 
-        return solution
+        return solution, ode_system
 
     @staticmethod
     def compute_integration_constants_and_substitute(
@@ -168,7 +198,7 @@ class SymbolicODESolver(SolverBase):
         Y_0: List[sp.Symbol], 
         theta: List[sp.Symbol]
     ):
-        solution = self.solve_ode_system(rhs, t, Y, Y_0, theta)
+        solution, ode_system = self.solve_ode_system(rhs, t, Y, Y_0, theta)
         # define the initial or boundary conditions for the ODE system. This could also
         # be used in the solve, but it works better if the initial conditions are only
         # used when solving for the integration constants.
@@ -184,7 +214,7 @@ class SymbolicODESolver(SolverBase):
             t=t,
         )
 
-        return solutions, integration_constants
+        return solutions, integration_constants, ode_system
 
     @property
     def compiler_recipe(self):
@@ -275,13 +305,28 @@ class SymbolicODESolver(SolverBase):
         t, Y, Y_0, theta = symbols
 
         # solve system of differential equations algebraically
-        solutions, integ_constants = self.solve_for_t0(
+        solutions, integ_constants, ode_system = self.solve_for_t0(
             self.model,
             t=t,
             Y=list(Y.values()),
             Y_0=list(Y_0.values()),
             theta=list(theta.values())
         )
+
+        # collect matrix terms
+        solution_dict = {}
+        idx = 0
+        for i, (yname, ysyms) in enumerate(Y.items()):
+            if isinstance(ysyms, list|tuple):
+                neqs = len(ysyms)
+            else:
+                neqs = 1
+            eqs = solutions[slice(idx, idx + neqs)]
+            if neqs == 1:
+                eqs = eqs[0]
+
+            solution_dict.update({yname: eqs})
+            idx += neqs
 
         docstring = self.generate_docstring(self.model)
 
@@ -290,7 +335,7 @@ class SymbolicODESolver(SolverBase):
             x="t",
             lhs_0=("Y_0", tuple(Y_0.keys())),
             lhs=tuple(Y.keys()),
-            rhs=tuple([sol.rhs for sol in solutions]),
+            rhs=tuple(recurse_variables(solution_dict.values(), lambda x: x.rhs.expand())),
             theta=("θ", tuple(theta.keys())),
             expand_arguments=False,
             printer=CustomNumpyPrinter(),
@@ -298,13 +343,14 @@ class SymbolicODESolver(SolverBase):
             docstring=docstring
         )
 
+        str(python_code)
+
         tex = self.to_latex(solutions=solutions)
         code_file = Path(self.output_path, f"{func_name}.tex")
         with open(code_file, "w") as f:
             f.writelines(tex)
 
-        solutions = {k: sol for k, sol in zip(Y.keys(), solutions)}
-        return solutions, python_code
+        return solution_dict, python_code
 
     def to_latex(self, solutions):
         latex = []
@@ -376,7 +422,8 @@ class SymbolicODESolver(SolverBase):
         return module, compiled_function
     
 class PiecewiseSymbolicODESolver(SymbolicODESolver):
-    def jump_solution(self, func_name, funcnames="F t_jump", compiled_functions={}):
+    @staticmethod
+    def jump_func(funcnames="F t_jump"):
         # this is the master equation for solving until certain time t_jump and then
         # continuing the solve from there. This is generic. It just needs a
         # function to determine the jump location from the initial conditions
@@ -395,7 +442,10 @@ class PiecewiseSymbolicODESolver(SymbolicODESolver):
                 True
             )
         )
+        return F_master, (F, t_jump), (t, θ, Y_0, ε)
 
+    def jump_solution(self, func_name, funcnames="F t_jump", compiled_functions={}):
+        F_master, (F, t_jump), (t, θ, Y_0, ε) = self.jump_func(funcnames)
         # This can be converted into code, by writing the code for F to disc
         # and the code for t_jump and then then afterwards defining the master
         # equation.
@@ -430,7 +480,11 @@ class CustomNumpyPrinter(NumPyPrinter):
         func_name = func.func.__name__
         args = ", ".join([self._print(arg) for arg in func.args]) # type: ignore
         return f"{func_name}({args})"
-
+    
+    def _print_LambertW(self, func):
+        # Convert LambertW to scipy.special.lambertw
+        arg = self._print(func.args[0]) # type: ignore
+        return f"scipy.special.lambertw({arg})"
 
 @dataclass
 class FunctionPythonCode:
@@ -519,7 +573,7 @@ class FunctionPythonCode:
         assert len(self.lhs) == len(self.rhs)
         if len(self.lhs) > 0:
             F = self.printer.doprint(
-                expr=[eq.expand() for eq in self.rhs], 
+                expr=self.rhs, 
                 assign_to=self.lhs
             )
             funcbody.append("# compute equation")
@@ -551,4 +605,8 @@ class ModulePythonCode:
         for f in self.functions:
             for i in f.modules:
                 imports.append(f"import {i}")
-        return imports
+        return list(set(imports))
+
+    def save_module(self, path):
+        with open(path, "w") as f:
+            f.writelines(str(self))
