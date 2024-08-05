@@ -587,7 +587,7 @@ class Modelparameters(BaseModel):
         """Removes a Parameter"""
         if key not in self.all:
             warnings.warn(
-                f"'{key}' is not a parameter. Data variables are: "
+                f"'{key}' is not a parameter. Parameters are: "
                 f"{list(self.all.keys())}."
             )
             return
