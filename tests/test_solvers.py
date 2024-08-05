@@ -131,6 +131,7 @@ def test_no_interpolation():
     
     # x input is defined on the interval [0,179]
     x_in = sim.parse_input(input="x_in", reference_data=sim.observations, drop_dims=[])
+    sim.model_parameters["x_in"] = x_in
 
     # run the simulaton until the provided x_input until t=179
     sim.coordinates["time"] = np.linspace(0, 179, 1000)
