@@ -162,7 +162,6 @@ class SimulationBase:
             self.parameterize, 
             model_parameters=copy.deepcopy(dict(self.model_parameters))
         )
-        self.config.simulation.n_ode_states = self.infer_ode_states()
         self.dispatch_constructor()
 
     @property
