@@ -691,7 +691,12 @@ class Config(BaseModel):
             )        
             _config.optionxform = str
             _cfg_file_paths = _config.read(config)
-            _cfg_fp = _cfg_file_paths[0]
+            try:
+                _cfg_fp = _cfg_file_paths[0]
+            except IndexError:
+                raise FileNotFoundError(
+                    f"Config file: {config} could not be found."
+                ) 
         elif isinstance(config, configparser.ConfigParser):
             _config = config
         else:
