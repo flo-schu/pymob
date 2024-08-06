@@ -54,6 +54,7 @@ def test_benchmark_jaxsolver():
 def test_rect_interpolation():
     sim: SimulationBase
     sim = init_bufferguts_casestudy(scenario="testing")
+    sim.use_jax_solver() # type: ignore
 
     # x input is defined on the interval [0,179]
     x_in = sim.parse_input(input="x_in", reference_data=sim.observations, drop_dims=[])
@@ -71,7 +72,7 @@ def test_rect_interpolation():
     # this works and will not return a discontinuity, because jump_ts in the
     # PIDController of diffrax, is told that it shoud jump all ts that are 
     # smaller than x_stop
-    sim.coordinates["time"] = np.linspace(0, 179, 1000)
+    sim.coordinates["time"] = np.linspace(0, sim.t_max - 1, 1000) #type: ignore
     sim.dispatch_constructor(max_steps=1e5, throw_exception=True, pcoeff=0.0, icoeff=0.25)
     e = sim.dispatch(theta={})
     e()
@@ -79,7 +80,7 @@ def test_rect_interpolation():
     # assert that the interpolation produces no infinity values 
     np.testing.assert_array_equal(
         (e.results == np.inf).sum().to_array().values, 
-        np.array([0, 0, 0])
+        np.array([0, 0, 0, 0, 0])
     )
 
     # test if the simulation also works with the normal time vector
@@ -91,12 +92,12 @@ def test_rect_interpolation():
     # assert that the interpolation produces no infinity values 
     np.testing.assert_array_equal(
         (e.results == np.inf).sum().to_array().values, 
-        np.array([0, 0, 0])
+        np.array([0, 0, 0, 0, 0])
     )
 
     # run the simulaton until the added interpolation provided by rect_interpolation
     # until t=180
-    sim.coordinates["time"] = np.linspace(0, 180, 1000)
+    sim.coordinates["time"] = np.linspace(0, sim.t_max, 1000) # type: ignore
     sim.dispatch_constructor(max_steps=1e5, throw_exception=True, pcoeff=0.0, icoeff=0.25)
     e = sim.dispatch(theta={})
     e()
@@ -105,17 +106,18 @@ def test_rect_interpolation():
     # value is not a discontinuity
     np.testing.assert_array_equal(
         (e.results == np.inf).sum().to_array().values, 
-        np.array([0, 0, 0])
+        np.array([0, 0, 0, 0, 0])
     )
 
     # run the simulaton until the added interpolation provided by rect_interpolation
-    # until t=180
+    # until t=500
     # This behavior is correctly caught, by pymob, before it can ocurr, because
     # an interpolation over the provided ts, and ys is not possible. And would
     # result in a difficult to diagnose max_steps error
     try:
-        sim.coordinates["time"] = np.linspace(0, 180.01, 1000)
+        sim.coordinates["time"] = np.linspace(0, sim.t_max + 0.01, 1000) # type: ignore
         sim.dispatch_constructor(max_steps=1e5, throw_exception=True, pcoeff=0.0, icoeff=0.25)
+        threw_error = False
     except AssertionError:
         threw_error = True
 
@@ -128,14 +130,17 @@ def test_rect_interpolation():
 def test_no_interpolation():
     sim: SimulationBase
     sim = init_bufferguts_casestudy(scenario="testing")
+    sim.use_jax_solver() # type: ignore
     
     # x input is defined on the interval [0,179]
     x_in = sim.parse_input(input="x_in", reference_data=sim.observations, drop_dims=[])
     sim.model_parameters["x_in"] = x_in
 
     # run the simulaton until the provided x_input until t=179
-    sim.coordinates["time"] = np.linspace(0, 179, 1000)
-    sim.dispatch_constructor(max_steps=1e5, throw_exception=True, pcoeff=0.0, icoeff=0.25)
+    sim.coordinates["time"] = np.linspace(0, sim.t_max - 1, 1000) # type: ignore
+
+    # without interpolation, the time needs to be 
+    sim.dispatch_constructor(max_steps=1e6, throw_exception=True, pcoeff=0.0, icoeff=0.25)
     e = sim.dispatch(theta={})
     e()
 
@@ -143,7 +148,7 @@ def test_no_interpolation():
     # value is not a discontinuity
     np.testing.assert_array_equal(
         (e.results == np.inf).sum().to_array().values, 
-        np.array([0, 0, 0])
+        np.array([0, 0, 0, 0, 0])
     )
 
 
@@ -151,5 +156,4 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
-    # test_rect_interpolation()
     # test_benchmark_jaxsolver()
