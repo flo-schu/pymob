@@ -77,7 +77,10 @@ class JaxSolver(SolverBase):
 
             # wrap x_in y data in a dummy batch dim if the batch dim is not
             # included in the coordinates
-            if self.batch_dimension not in self.coordinates_input_vars["x_in"]:
+            if (
+                self.batch_dimension not in self.coordinates_input_vars["x_in"]
+                and len(self.indices) == 0
+            ):
                 X_in_y = jnp.tile(x_in_y, n_batch)\
                     .reshape((n_batch, *x_in_y.shape))
             else:
@@ -101,7 +104,10 @@ class JaxSolver(SolverBase):
             batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
             n_batch = len(batch_coordinates)
             
-            if self.batch_dimension not in self.coordinates_input_vars["y0"]:
+            if (
+                self.batch_dimension not in self.coordinates_input_vars["y0"]
+                and len(self.indices) == 0
+            ):
                 y0_batched = jnp.tile(y0_data, n_batch)\
                     .reshape((n_batch, *y0_data.shape))
             else:
