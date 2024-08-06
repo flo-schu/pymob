@@ -447,8 +447,6 @@ class SimulationBase:
         """Construct the dispatcher and pass everything to the evaluator that is 
         static."""
 
-        self.n_ode_states = self.infer_ode_states()
-
         if self.model is None:
             if self.config.simulation.model:
                 if not hasattr(self, "_mod"):
@@ -463,6 +461,8 @@ class SimulationBase:
                 )
         else:
             model = self.model
+
+        self.n_ode_states = self.infer_ode_states()
 
         if self.solver is None:
             if self.config.simulation.solver:
