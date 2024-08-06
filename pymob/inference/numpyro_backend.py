@@ -624,7 +624,7 @@ class NumpyroBackend:
             sampler = infer.SA(
                 model=model,
                 dense_mass=True,
-                adapt_state_size=self.adapt_state_size,
+                adapt_state_size=self.config.inference_numpyro.sa_adapt_state_size,
                 init_strategy=self.init_strategy,
             )
 
