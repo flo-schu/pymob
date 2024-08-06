@@ -689,7 +689,7 @@ class Config(BaseModel):
                 converters=converters,
                 interpolation=interp
             )        
-            _config.optionxform = str
+            _config.optionxform = str # type: ignore
             _cfg_file_paths = _config.read(config)
             try:
                 _cfg_fp = _cfg_file_paths[0]
@@ -704,7 +704,7 @@ class Config(BaseModel):
                 converters=converters,
                 interpolation=interp
             )
-            _config.optionxform = str
+            _config.optionxform = str # type: ignore
 
         # pass arguments to config
 
@@ -839,8 +839,8 @@ class Config(BaseModel):
             self.case_study.package
         )
         if package not in sys.path:
-            sys.path.append(package)
-            print(f"Appended '{package}' to PATH")
+            sys.path.insert(0, package)
+            print(f"Inserted '{package}' in PATH at index=0")
     
         case_study = os.path.join(
             self.case_study.root, 
@@ -848,8 +848,8 @@ class Config(BaseModel):
             self.case_study.name
         )
         if case_study not in sys.path:
-            sys.path.append(case_study)
-            print(f"Appended '{case_study}' to PATH")
+            sys.path.insert(0, case_study)
+            print(f"Inserted '{case_study}' in PATH at index=0")
 
         for module in self.case_study.modules:
             # remove modules of a different case study that might have been
