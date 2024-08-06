@@ -1,5 +1,7 @@
 from typing import Callable
 import sympy as sp
+import numpy
+
 from pymob.solvers.symbolic import FunctionPythonCode
 
 def test_function_coder():
@@ -12,16 +14,18 @@ def test_function_coder():
         x="x"
     )
     # this defines the function
-    exec(str(code))
-
-    # this computes the function
-    res = f(x=5, theta=(1,5)) # type: ignore
-    assert res == 26
+    exec(
+        f"{code}"
+        "res = f(x=5, theta=(1,5))\n"
+        "assert res == 26"
+    )
 
     code.expand_arguments = True
-    exec(str(code))
-    res = f(x=5, a=1, b=5) # type: ignore
-    assert res == 26
+    exec(
+        f"{code}"
+        "res = f(x=5, a=1, b=5)\n"
+        "assert res == 26"
+    )
 
 def test_ode_coder():
     code = FunctionPythonCode(
@@ -36,23 +40,20 @@ def test_ode_coder():
         x="t"
     )
 
-    # import numpy, because it is referenced by the function
-    import numpy
-
-    # this defines the function
-    exec(str(code))
+    # import numpy, needs to happen at the script level
     
-    # this computes the function
-    res = f(t=2, Y_0=(2, 5), theta=(1,2)) # type: ignore
-    assert res == (2 * 2 + 1, 5 * 2 - 2)
+    exec(
+        f"{code}"
+        "res = f(t=2, Y_0=(2,5), theta=(1,2))\n"
+        "assert res == (2 * 2 + 1, 5 * 2 - 2)"
+    )
 
-    # change the code generator and redefine the function
     code.expand_arguments = True
-    exec(str(code))
-    
-    # this computes the function
-    res = f(t=2, D_0=2, H_0=5, b=1, z=2) # type: ignore
-    assert res == (2 * 2 + 1, 5 * 2 - 2)
+    exec(
+        f"{code}"
+        "res = f(t=2, D_0=2, H_0=5, b=1, z=2)\n"
+        "assert res == (2 * 2 + 1, 5 * 2 - 2)"
+    )
 
 
 def test_dummy_function():
@@ -62,5 +63,5 @@ def test_dummy_function():
 
 
 if __name__ == "__main__":
-    # test_ode_coder()
+    test_ode_coder()
     pass
