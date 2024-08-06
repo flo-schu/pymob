@@ -583,6 +583,17 @@ class Modelparameters(BaseModel):
     def value_dict(self) -> Dict[str,float|List[float]]:
         return {k:v.value for k, v in self.all.items()}
     
+    def remove(self, key) -> None:
+        """Removes a Parameter"""
+        if key not in self.all:
+            warnings.warn(
+                f"'{key}' is not a parameter. Parameters are: "
+                f"{list(self.all.keys())}."
+            )
+            return
+        
+        deleted_par = self.__pydantic_extra__.pop(key)
+        print(f"Deleted '{key}' Param({deleted_par}).")
 
 class Errormodel(BaseModel):
     __pydantic_extra__: Dict[str,str]
@@ -680,7 +691,12 @@ class Config(BaseModel):
             )        
             _config.optionxform = str
             _cfg_file_paths = _config.read(config)
-            _cfg_fp = _cfg_file_paths[0]
+            try:
+                _cfg_fp = _cfg_file_paths[0]
+            except IndexError:
+                raise FileNotFoundError(
+                    f"Config file: {config} could not be found."
+                ) 
         elif isinstance(config, configparser.ConfigParser):
             _config = config
         else:
@@ -813,7 +829,9 @@ class Config(BaseModel):
         # reset the path to avoid importing modules form case-studies used
         # before in the same session
         if reset_path:
-            sys.path = default_path
+            # default path needs to be copied, otherwise it will be updated
+            # when setting sys.path
+            sys.path = default_path.copy()
 
         # append relevant paths to sys
         package = os.path.join(

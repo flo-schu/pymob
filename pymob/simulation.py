@@ -20,7 +20,7 @@ import dpath as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from toopy import param, benchmark
 
-from pymob.utils.config import lambdify_expression, lookup_args
+from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
 from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
@@ -91,19 +91,7 @@ def update_parameters_dict(config, x, parnames):
             )
     return config
 
-def get_return_arguments(func):
-    ode_model_source = inspect.getsource(func)
-    
-    # extracts last return statement of source
-    return_statement = ode_model_source.split("\n")[-2]
 
-    # extract arguments returned by ode_func
-    return_args = return_statement.split("return")[1]
-
-    # strip whitespace and separate by comma
-    return_args = return_args.replace(" ", "").split(",")
-
-    return return_args
 
 class SimulationBase:
     model: Optional[Callable] = None
@@ -174,7 +162,6 @@ class SimulationBase:
             self.parameterize, 
             model_parameters=copy.deepcopy(dict(self.model_parameters))
         )
-        self.config.simulation.n_ode_states = self.infer_ode_states()
         self.dispatch_constructor()
 
     @property
@@ -436,6 +423,19 @@ class SimulationBase:
     @property
     def coordinates_input_vars(self):
         input_vars = ["x_in", "y0"]
+
+        # This is a function that could replace the below, to return always
+        # dictionaries for any possible input vars. Default: Empty dict
+        # coordinates = {}
+        # for k in input_vars:
+        #     if k in self.model_parameters:
+        #         v = self.model_parameters[k]
+        #         coords = {ck: cv.values for ck, cv in v.coords.items()}
+        #     else:
+        #         coords = {}
+
+        #     coordinates.update({k: coords})
+        # return coordinates
         return {
             k: {ck: cv.values for ck, cv in v.coords.items()} 
             for k, v in self.model_parameters.items() 
@@ -524,12 +524,16 @@ class SimulationBase:
             y0 = self.subset_by_batch_dimension(model_parameters["y0"])
             y0 = self.validate_model_input(model_parameters["y0"])
             model_parameters["y0"] = y0
+        else:
+            model_parameters["y0"] = {}
         
         if "x_in" in model_parameters:
             x_in = self.subset_by_batch_dimension(model_parameters["x_in"])
             x_in = self.validate_model_input(model_parameters["x_in"])
             model_parameters["x_in"] = x_in
-
+        else:
+            model_parameters["x_in"] = {}
+        
         evaluator = self.evaluator.spawn()
         evaluator.parameters = model_parameters
         return evaluator
