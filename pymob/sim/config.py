@@ -580,6 +580,10 @@ class Modelparameters(BaseModel):
         return {k:v.value for k, v in self.free.items()}
     
     @property
+    def fixed_value_dict(self) -> Dict[str,float|List[float]]:
+        return {k:v.value for k, v in self.fixed.items()}
+    
+    @property
     def value_dict(self) -> Dict[str,float|List[float]]:
         return {k:v.value for k, v in self.all.items()}
     
