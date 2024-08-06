@@ -824,7 +824,9 @@ class Config(BaseModel):
         # reset the path to avoid importing modules form case-studies used
         # before in the same session
         if reset_path:
-            sys.path = default_path
+            # default path needs to be copied, otherwise it will be updated
+            # when setting sys.path
+            sys.path = default_path.copy()
 
         # append relevant paths to sys
         package = os.path.join(

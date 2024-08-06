@@ -51,8 +51,9 @@ def test_simulation():
 
     sim.config.case_study.output = None
 
-    # sim.config.import_casestudy_modules()
-    # sim.load_modules()
+    # resetting the path is important in case other case studies were imported
+    # in the same testing session
+    sim.config.import_casestudy_modules(reset_path=True)
     sim.config.simulation.model = "lotka_volterra"
 
     sim.solver = solve_ivp_1d
@@ -228,6 +229,4 @@ def test_data_variables():
 
 
 if __name__ == "__main__":
-    # test_data_variables()
-    test_load_generated_settings()
     pass
