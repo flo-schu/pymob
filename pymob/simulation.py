@@ -12,6 +12,7 @@ import multiprocessing as mp
 from typing import Callable, Dict
 from multiprocessing.pool import ThreadPool, Pool
 import re
+from collections import OrderedDict
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -523,16 +524,16 @@ class SimulationBase:
         if "y0" in model_parameters:
             y0 = self.subset_by_batch_dimension(model_parameters["y0"])
             y0 = self.validate_model_input(model_parameters["y0"])
-            model_parameters["y0"] = y0
+            model_parameters["y0"] = OrderedDict(y0)
         else:
-            model_parameters["y0"] = {}
+            model_parameters["y0"] = OrderedDict({})
         
         if "x_in" in model_parameters:
             x_in = self.subset_by_batch_dimension(model_parameters["x_in"])
             x_in = self.validate_model_input(model_parameters["x_in"])
-            model_parameters["x_in"] = x_in
+            model_parameters["x_in"] = OrderedDict(x_in)
         else:
-            model_parameters["x_in"] = {}
+            model_parameters["x_in"] = OrderedDict({})
         
         evaluator = self.evaluator.spawn()
         evaluator.parameters = model_parameters
