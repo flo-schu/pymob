@@ -91,6 +91,64 @@ class SolverBase:
                 "values, or extend the x_in values until the required time"
             )
 
+
+    def preprocess_x_in(self, x_in):
+        X_in_list = []
+        for x_in_var, x_in_vals in x_in.items():
+            x_in_x = np.array(self.coordinates_input_vars["x_in"][self.x_dim], dtype=float)
+            x_in_y = np.array(x_in_vals)
+
+            # broadcast x to y and add a dummy
+            batch_coordinates = self.coordinates_input_vars["x_in"].get(self.batch_dimension, [0])
+            n_batch = len(batch_coordinates)
+            X_in_x = np.tile(x_in_x, n_batch).reshape((n_batch, *x_in_x.shape))
+
+            # wrap x_in y data in a dummy batch dim if the batch dim is not
+            # included in the coordinates
+            if (
+                self.batch_dimension not in self.coordinates_input_vars["x_in"]
+                and len(self.indices) == 0
+            ):
+                X_in_y = np.tile(x_in_y, n_batch)\
+                    .reshape((n_batch, *x_in_y.shape))
+            else:
+                X_in_y = np.array(x_in_y)
+
+            # combine xs and ys to make them ready for interpolation
+            X_in = [np.array(v) for v in [X_in_x, X_in_y]]
+
+            X_in_list.append(X_in)
+
+        return X_in_list
+    
+    def preprocess_y_0(self, y0):
+        Y0 = []
+        for y0_var, y0_vals in y0.items():
+            y0_data = np.array(y0_vals, ndmin=1)
+            
+            # wrap y0 data in a dummy batch dim if the batch dim is not
+            # included in the coordinates
+            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
+            n_batch = len(batch_coordinates)
+            
+            if (
+                self.batch_dimension not in self.coordinates_input_vars["y0"]
+                and len(self.indices) == 0
+            ):
+                y0_batched = np.tile(y0_data, n_batch)\
+                    .reshape((n_batch, *y0_data.shape))
+            else:
+                if len(y0_data.shape) == 1:
+                    y0_batched = y0_data\
+                        .reshape((*y0_data.shape, 1))
+                else:
+                    y0_batched = y0_data
+                
+
+            Y0.append(y0_batched)
+        return Y0
+
+
     def solve(self):
         raise NotImplementedError("Solver must implement a solve method.")
 
