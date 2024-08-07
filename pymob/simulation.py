@@ -498,6 +498,7 @@ class SimulationBase:
             n_ode_states=self.config.simulation.n_ode_states,
             var_dim_mapper=self.var_dim_mapper,
             data_structure=self.data_structure,
+            data_structure_and_dimensionality=self.data_structure_and_dimensionality,
             data_variables=self.data_variables,
             coordinates=self.coordinates,
             coordinates_input_vars=self.coordinates_input_vars,
@@ -1304,6 +1305,18 @@ class SimulationBase:
     @property
     def data_structure(self):
         return self.config.data_structure.dimdict
+
+    @property
+    def data_structure_and_dimensionality(self):
+        data_structure = {}
+        for dv, dv_dims in self.config.data_structure.dimdict.items():
+            dim_sizes = {}
+            for dim in dv_dims:
+                coord = self.coordinates[dim]
+                dim_sizes.update({dim: len(coord)})
+            data_structure.update({dv: dim_sizes})
+
+        return data_structure
 
     @property
     def dimension_sizes(self):

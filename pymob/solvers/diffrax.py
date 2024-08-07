@@ -178,11 +178,14 @@ class JaxSolver(SolverBase):
             )
         )
         result = loop_eval(*Y_0, *ode_args_indexed, *pp_args_indexed, *x_in_flat)
-        
+
         # if self.batch_dimension not in self.coordinates:    
         # this is not yet stable, because it may remove extra dimensions
         # if there is a batch dimension of explicitly one specified
-        result = {v:val.squeeze() for v, val in result.items()}
+        for v, val in result.items():
+            expected_dims = tuple(self.data_structure_and_dimensionality[v].values())
+            val_reduced = val.reshape(expected_dims)
+            result.update({v: val_reduced})
 
         return result
 

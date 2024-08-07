@@ -64,6 +64,7 @@ class Evaluator:
             n_ode_states: int,
             var_dim_mapper: Dict,
             data_structure: Dict,
+            data_structure_and_dimensionality: Dict,
             coordinates: Dict,
             coordinates_input_vars: Dict,
             data_variables: Sequence[str],
@@ -114,6 +115,7 @@ class Evaluator:
         self.n_ode_states = n_ode_states
         self.var_dim_mapper = var_dim_mapper
         self.data_structure = data_structure
+        self.data_structure_and_dimensionality = data_structure_and_dimensionality
         self.data_variables = data_variables
         self.coordinates = coordinates
         self.is_stochastic = stochastic
@@ -149,6 +151,12 @@ class Evaluator:
                     for k, v in coordinates_input_vars.items()
                 })
 
+                data_structure_dims = frozendict({
+                    dv: frozendict({d: lendim for d, lendim in dimdict.items()}) 
+                    for dv, dimdict 
+                    in self.data_structure_and_dimensionality.items()
+                })
+
                 frozen_coordinates = frozendict({
                     k: tuple(v) for k, v in self.coordinates.items()
                 })
@@ -162,7 +170,8 @@ class Evaluator:
                     coordinates_input_vars=frozen_coordinates_input_vars,
                     dimensions=tuple(self.dimensions),
                     data_variables=tuple(self.data_variables),
-                    
+                    data_structure_and_dimensionality=data_structure_dims,
+
                     indices=frozendict({k: tuple(v.values) for k, v in self.indices.items()}),
                     n_ode_states=self.n_ode_states,
                     is_stochastic=self.is_stochastic,

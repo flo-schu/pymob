@@ -21,6 +21,7 @@ class SolverBase:
     coordinates: frozendict[str, Tuple] = field(repr=False)
     coordinates_input_vars: frozendict[str, frozendict]
     data_variables: Tuple
+    data_structure_and_dimensionality: frozendict[str, frozendict[str, int]]
     is_stochastic: bool
     post_processing: Callable
     solver_kwargs: frozendict = frozendict()
