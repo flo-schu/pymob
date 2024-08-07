@@ -297,8 +297,8 @@ class SimulationBase:
             self.config.case_study.package
         )
         if package not in sys.path:
-            sys.path.append(package)
-            print(f"Appended '{package}' to PATH")
+            sys.path.insert(0, package)
+            print(f"Inserted '{package}' into PATH at index=0")
     
         case_study = os.path.join(
             self.config.case_study.root, 
@@ -306,8 +306,8 @@ class SimulationBase:
             self.config.case_study.name
         )
         if case_study not in sys.path:
-            sys.path.append(case_study)
-            print(f"Appended '{case_study}' to PATH")
+            sys.path.insert(0, case_study)
+            print(f"Inserted '{case_study}' into PATH at index=0")
 
         for module in MODULES:
             try:
