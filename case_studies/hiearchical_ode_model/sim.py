@@ -78,6 +78,12 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
         if scenario == "data_structure_01_single_observation":
             self.define_observations_unreplicated()
 
+        elif scenario == "data_structure_02_replicated_observation":
+            self.define_observations_replicated()
+
+        elif scenario == "data_structure_03_gradient_observation":
+            self.define_observations_replicated_gradient()
+
 
         # set up coordinates
         self.coordinates["time"] = np.arange(0, 120)
@@ -139,6 +145,53 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
         self.indices = {
             "substance": xr.DataArray(
                 [0],
+                dims=("id"), 
+                coords={
+                    "id": self.observations["id"], 
+                    "substance": self.observations["substance"]
+                }, 
+                name="substance_index"
+            )
+        }
+
+    def define_observations_replicated(self):
+        # set up the observations with the number of organisms and exposure 
+        # concentrations. This is an observation frame for indexed data with 
+        # substance provided as an index
+        self.observations = xr.Dataset().assign_coords({
+            "nzfe":      xr.DataArray([10      ] * 5, dims=("id"), coords={"id": np.arange(5)}),
+            "cext_nom":  xr.DataArray([1000    ] * 5, dims=("id"), coords={"id": np.arange(5)}),
+            "substance": xr.DataArray(["diuron"] * 5, dims=("id"), coords={"id": np.arange(5)})
+        })
+
+        # set up the corresponding index
+        self.indices = {
+            "substance": xr.DataArray(
+                [0] * 5,
+                dims=("id"), 
+                coords={
+                    "id": self.observations["id"], 
+                    "substance": self.observations["substance"]
+                }, 
+                name="substance_index"
+            )
+        }
+
+    def define_observations_replicated_gradient(self):
+        # set up the observations with the number of organisms and exposure 
+        # concentrations. This is an observation frame for indexed data with 
+        # substance provided as an index
+        n = 5
+        self.observations = xr.Dataset().assign_coords({
+            "nzfe":      xr.DataArray([10      ] * n, dims=("id"), coords={"id": np.arange(n)}),
+            "cext_nom":  xr.DataArray(np.logspace(2,4, n), dims=("id"), coords={"id": np.arange(n)}),
+            "substance": xr.DataArray(["diuron"] * n, dims=("id"), coords={"id": np.arange(n)})
+        })
+
+        # set up the corresponding index
+        self.indices = {
+            "substance": xr.DataArray(
+                [0] * n,
                 dims=("id"), 
                 coords={
                     "id": self.observations["id"], 
