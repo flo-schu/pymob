@@ -1,4 +1,6 @@
 from functools import partial
+from typing import Literal
+import xarray as xr
 import numpy as np
 
 from pymob import SimulationBase, Config
@@ -38,36 +40,139 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
         self.model_parameters["parameters"] = self.config.model_parameters\
             .fixed_value_dict
 
+    def setup_data_structure_from_observations(self):
+        self.setup()
+
+        # select observations
+        obs = [0]
+        sim.observations = sim.observations.isel(id=obs)
+        sim.observations.attrs["substance"] = list(
+            np.unique(sim.observations.substance)
+        )
+        sim.set_y0()
+        sim.indices["substance"] = sim.indices["substance"].isel(id=obs)
+
+
+    def setup_data_structure_manually(
+        self, 
+        scenario: Literal[
+            "data_structure_01_single_observation",
+            "data_structure_02_replicated_observation",
+            "data_structure_03_gradient_observation",
+        ] = "data_structure_01_single_observation"
+    ):
+        self.config.case_study.scenario = scenario
+        self.config.create_directory("results")
+        self.config.create_directory("scenario")
+
+        # mark existing data variables as unobserved
+        for _, datavar in self.config.data_structure.all.items():
+            datavar.observed = False
+            datavar.min = np.nan
+            datavar.max = np.nan
+
+        # copy data structure from survival to lethality
+        self.config.data_structure.lethality =\
+            self.config.data_structure.survival # type:ignore
+
+        if scenario == "data_structure_01_single_observation":
+            self.define_observations_unreplicated()
+
+
+        # set up coordinates
+        self.coordinates["time"] = np.arange(0, 120)
+        # self.coordinates["substance"] = "diuron"
+
+        # define starting values
+        self.config.simulation.y0 = [
+            "cext=cext_nom", 
+            "cint=Array([0])", 
+            "nrf2=Array([1])", 
+            "P=Array([0])", 
+        ]
+
+        y0 = self.parse_input("y0", reference_data=self.observations, drop_dims=["time"])
+        self.model_parameters["y0"] = y0
+
+        # define parameters
+
+        # set the fixed parameters
+        self.model_parameters["parameters"] = self.config.model_parameters\
+            .fixed_value_dict
+
+        # set up the solver
+        self.config.simulation.solver = "JaxSolver"
+        self.config.jaxsolver.batch_dimension = "id"
+
+        self.validate()
+        self.config.save(force=True)
+
+    def decorate_results(self, results):
+        """Convenience function to add attributes and coordinates to simulation
+        results needed for other post-processing tasks (e.g. plotting)
+        """
+        results.attrs["substance"] = np.unique(results.substance)
+        results = results.assign_coords({
+            "cext_nom": self.model_parameters["y0"]["cext"]
+        })
+        return results
+
+    def plot(self, results: xr.Dataset):
+        if "substance" not in results.coords:
+            results = results.assign_coords({"substance": self.observations.substance})
+        if "cext_nom" not in results.coords:
+            results = results.assign_coords({"cext_nom": self.observations.cext_nom})
+        fig = self._plot.plot_simulation_results(results)
+
+
+    def define_observations_unreplicated(self):
+        # set up the observations with the number of organisms and exposure 
+        # concentrations. This is an observation frame for indexed data with 
+        # substance provided as an index
+        self.observations = xr.Dataset().assign_coords({
+            "nzfe":      xr.DataArray([10      ], dims=("id"), coords={"id": [0]}),
+            "cext_nom":  xr.DataArray([1000    ], dims=("id"), coords={"id": [0]}),
+            "substance": xr.DataArray(["diuron"], dims=("id"), coords={"id": [0]})
+        })
+
+        # set up the corresponding index
+        self.indices = {
+            "substance": xr.DataArray(
+                [0],
+                dims=("id"), 
+                coords={
+                    "id": self.observations["id"], 
+                    "substance": self.observations["substance"]
+                }, 
+                name="substance_index"
+            )
+        }
 
 
 if __name__ == "__main__":
     cfg = "case_studies/hierarchical_ode_model/scenarios/testing/settings.cfg"
-    cfg = "case_studies/tktd_rna_pulse/scenarios/rna_pulse_3_6c_substance_specific/settings.cfg"
+    # cfg = "case_studies/tktd_rna_pulse/scenarios/rna_pulse_3_6c_substance_specific/settings.cfg"
     sim = NomixHierarchicalSimulation(cfg)
     
     # TODO: this will become a problem once I try to load different extra
     # modules. The way to deal with this is to load modules as a list and try
     # to get them in hierarchical order
     sim.config.import_casestudy_modules()
-    sim.setup()
-
-    # select observations
-    obs = [0]
-    sim.observations = sim.observations.isel(id=obs)
-    sim.observations.attrs["substance"] = list(np.unique(sim.observations.substance))
-    sim.set_y0()
-    sim.indices["substance"] = sim.indices["substance"].isel(id=obs)
+    
+    # sim.setup_data_structure_from_observations()
+    sim.setup_data_structure_manually(
+        scenario="data_structure_01_single_observation"
+    )
 
     # run a simulation
     sim.dispatch_constructor()
     e = sim.dispatch(theta=sim.model_parameter_dict)
     e()
-    e.results
     sim.plot(e.results)
 
     # generate artificial data
     sim.dispatch_constructor()
-    res = sim.generate_artificial_data()
+    res = sim.generate_artificial_data(nan_frac=0.0)
     sim.plot(res)
 
     # perform inference
