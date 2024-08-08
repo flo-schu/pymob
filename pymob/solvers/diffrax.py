@@ -1,5 +1,6 @@
 from functools import partial
 from types import ModuleType
+from collections import OrderedDict
 from typing import Optional, List, Dict, Literal, Tuple, OrderedDict
 from pymob.solvers.base import mappar, SolverBase
 from frozendict import frozendict
@@ -190,7 +191,7 @@ class JaxSolver(SolverBase):
             throw=self.throw_exception
         )
         
-        return list(sol.ys), interp
+        return tuple(sol.ys), interp
 
     @partial(jax.jit, static_argnames=["self", "odestates", "n_odeargs", "n_ppargs", "n_xin"])
     def odesolve_splitargs(self, *args, odestates, n_odeargs, n_ppargs, n_xin):
@@ -201,7 +202,7 @@ class JaxSolver(SolverBase):
         x_in = args[n_odestates+n_odeargs+n_ppargs:n_odestates+n_odeargs+n_ppargs+n_xin]
         sol, interp = self.odesolve(y0=y0, args=odeargs, x_in=x_in)
         
-        res_dict = {v:val for v, val in zip(odestates, sol)}
+        res_dict = OrderedDict({v:val for v, val in zip(odestates, sol)})
 
         return self.post_processing(res_dict, jnp.array(self.x), interp, *ppargs)
 
