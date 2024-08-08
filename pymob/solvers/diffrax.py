@@ -98,9 +98,37 @@ class JaxSolver(SolverBase):
         # if self.batch_dimension not in self.coordinates:    
         # this is not yet stable, because it may remove extra dimensions
         # if there is a batch dimension of explicitly one specified
+
+        # there is an extra dimension added if no batch dimension is present
+        # this is added at the 0-axis
+        # if parameters are scalars, the returned shape is 
         for v, val in result.items():
+            if self.batch_dimension not in self.data_structure_and_dimensionality[v]:
+                # otherwise it has a dummy dimension of length 1
+                val_reduced = jnp.squeeze(val, 0)
+                s0 = 1
+            else:
+                val_reduced = val
+
             expected_dims = tuple(self.data_structure_and_dimensionality[v].values())
-            val_reduced = val.reshape(expected_dims)
+            if len(expected_dims) != len(val_reduced.shape):
+                # if the number of present dims is larger than the number of
+                # expected dims, this is because the ODE "only" returned scalar
+                # values. This is broadcasted to array of ndim=1
+                val_reduced = jnp.squeeze(val_reduced, -1)
+            else:
+                pass
+
+            # si = [
+            #     s for dim, s in self.data_structure_and_dimensionality[v].items() 
+            #     if dim != self.batch_dimension
+            # ]
+            
+            # correct_shape = (s0, *si)
+            
+            # [i for i, vs in enumerate(val.shape) if vs not in expected_dims]
+            # jnp.permute_dims(val, expected_dims)
+            # val_reduced = val.permute_dims(expected_dims)
             result.update({v: val_reduced})
 
         return result
