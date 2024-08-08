@@ -59,6 +59,7 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
             "data_structure_01_single_observation",
             "data_structure_02_replicated_observation",
             "data_structure_03_gradient_observation",
+            "data_structure_04_unreplicated_multi_substance",
         ] = "data_structure_01_single_observation"
     ):
         self.config.case_study.scenario = scenario
@@ -84,6 +85,8 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
         elif scenario == "data_structure_03_gradient_observation":
             self.define_observations_replicated_gradient()
 
+        elif scenario == "data_structure_04_unreplicated_multi_substance":
+            self.define_observations_unreplicated_multiple_substances()
 
         # set up coordinates
         self.coordinates["time"] = np.arange(0, 120)
@@ -201,6 +204,29 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
             )
         }
 
+    def define_observations_unreplicated_multiple_substances(self):
+        # set up the observations with the number of organisms and exposure 
+        # concentrations. This is an observation frame for indexed data with 
+        # substance provided as an index
+        self.observations = xr.Dataset().assign_coords({
+            "nzfe":      xr.DataArray([10      , 10,10], dims=("id"), coords={"id": np.arange(3)}),
+            "cext_nom":  xr.DataArray([1000    , 100,10], dims=("id"), coords={"id": np.arange(3)}),
+            "substance": xr.DataArray(["diuron", "naproxen","diclofenac"], dims=("id"), coords={"id": np.arange(3)})
+        })
+
+        # set up the corresponding index
+        self.indices = {
+            "substance": xr.DataArray(
+                [0,1,2],
+                dims=("id"), 
+                coords={
+                    "id": self.observations["id"], 
+                    "substance": self.observations["substance"]
+                }, 
+                name="substance_index"
+            )
+        }
+
 
 if __name__ == "__main__":
     cfg = "case_studies/hierarchical_ode_model/scenarios/testing/settings.cfg"
@@ -211,10 +237,10 @@ if __name__ == "__main__":
     # modules. The way to deal with this is to load modules as a list and try
     # to get them in hierarchical order
     sim.config.import_casestudy_modules()
-    
+
     # sim.setup_data_structure_from_observations()
     sim.setup_data_structure_manually(
-        scenario="data_structure_01_single_observation"
+        scenario="data_structure_04_unreplicated_multi_substance"
     )
 
     # run a simulation
