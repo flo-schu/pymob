@@ -303,14 +303,14 @@ class Evaluator:
     @property
     def results(self):
         if isinstance(self.Y, dict):
-            return create_dataset_from_dict(
+            dataset = create_dataset_from_dict(
                 Y=self.Y, 
                 coordinates=self.coordinates,
                 data_structure=self.data_structure,
                 var_dim_mapper=self.var_dim_mapper
             )
         elif isinstance(self.Y, np.ndarray):
-            return create_dataset_from_numpy(
+            dataset = create_dataset_from_numpy(
                 Y=self.Y,
                 Y_names=self.data_variables,
                 coordinates=self.coordinates,
@@ -319,6 +319,13 @@ class Evaluator:
             raise NotImplementedError(
                 "Results returned by the solver must be of type Dict or np.ndarray."
             )
+        
+        # assign the coordinates from the indices to the dataset if available
+        dataset = dataset.assign_coords({
+            f"{idx}_index": data_array 
+            for idx, data_array in self.indices.items()
+        })
+        return dataset
     
     def spawn(self):
         return deepcopy(self)
