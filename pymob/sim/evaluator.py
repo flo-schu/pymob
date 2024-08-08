@@ -34,12 +34,23 @@ def create_dataset_from_numpy(Y, Y_names, coordinates):
 
     return dataset
 
-def create_dataset_from_dict(Y: dict, data_structure, coordinates):
+def create_dataset_from_dict(Y: dict, data_structure, coordinates, var_dim_mapper):
     arrays = {}
     for k, v in Y.items():
         dims = data_structure.get(k, tuple(coordinates.keys()))
         coords = {d: coordinates[d] for d in dims}
-        da = xr.DataArray(v, coords=coords, dims=dims)
+        dim_order = var_dim_mapper.get(k) # use get which returns None if there is no mapping
+
+        v_permuted_dims = v.transpose(dim_order)
+        try:
+            da = xr.DataArray(v_permuted_dims, coords=coords, dims=dims)
+        except ValueError as err:
+            raise ValueError(
+                f"{err} for the data variable '{k}'. You can try specifying "
+                f"evaluator_dimensions for '{k}' in order to redorder the dimensions: "
+                f"sim.config.data_structure.{k} = DataVariable(..., evaluator_dimensions=[...])." 
+                f"Hint: The solvers usually put the batch_dimension (e.g. 'id') first."
+            )
         arrays.update({k: da})
 
     return xr.Dataset(arrays)
@@ -289,6 +300,7 @@ class Evaluator:
                 Y=self.Y, 
                 coordinates=self.coordinates,
                 data_structure=self.data_structure,
+                var_dim_mapper=self.var_dim_mapper
             )
         elif isinstance(self.Y, np.ndarray):
             return create_dataset_from_numpy(

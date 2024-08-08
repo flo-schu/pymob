@@ -922,6 +922,7 @@ class SimulationBase:
                 Y=results, 
                 coordinates=self.coordinates,
                 data_structure=self.data_structure,
+                var_dim_mapper=self.var_dim_mapper
             )
         elif isinstance(results, np.ndarray):
             return create_dataset_from_numpy(
