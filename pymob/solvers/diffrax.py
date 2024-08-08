@@ -1,4 +1,5 @@
 from functools import partial
+from types import ModuleType
 from typing import Optional, List, Dict, Literal, Tuple, OrderedDict
 from pymob.solvers.base import mappar, SolverBase
 from frozendict import frozendict
@@ -67,47 +68,19 @@ class JaxSolver(SolverBase):
     @partial(jax.jit, static_argnames=["self"])
     def solve(self, parameters: Dict, y0:Dict={}, x_in:Dict={}):
         
-
+        
         X_in = self.preprocess_x_in(x_in)
         x_in_flat = [x for xi in X_in for x in xi]
+
         Y_0 = self.preprocess_y_0(y0)
 
-        ode_args = mappar(self.model, parameters, exclude=self.exclude_kwargs_model)
-        pp_args = mappar(self.post_processing, parameters, exclude=self.exclude_kwargs_postprocessing)
-        
-        # simply broadcast the parameters along the batch dimension
-        # if there is no other index provided
-        if len(self.indices) == 0:
-            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
-            n_batch = len(batch_coordinates)
-            ode_args_indexed = [
-                jnp.tile(jnp.array(a, ndmin=1), n_batch)\
-                    .reshape((n_batch, *jnp.array(a, ndmin=1).shape))
-                for a in ode_args
-            ]
-            pp_args_indexed = [
-                jnp.tile(jnp.array(a, ndmin=1), n_batch)\
-                    .reshape((n_batch, *jnp.array(a, ndmin=1).shape))
-                for a in pp_args
-            ]
-        else:
-            idxs = list(self.indices.values())
-            n_index = len(idxs[0])
-            ode_args_indexed = [
-                jnp.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
-                for a in ode_args
-            ]
-            pp_args_indexed = [
-                jnp.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
-                for a in pp_args
-            ]
-
+        ode_args, pp_args = self.preprocess_parameters(parameters)
 
         initialized_eval_func = partial(
             self.odesolve_splitargs,
             odestates = tuple(y0.keys()),
-            n_odeargs=len(ode_args_indexed),
-            n_ppargs=len(pp_args_indexed),
+            n_odeargs=len(ode_args),
+            n_ppargs=len(pp_args),
             n_xin=len(x_in_flat)
         )
         
@@ -115,12 +88,12 @@ class JaxSolver(SolverBase):
             initialized_eval_func, 
             in_axes=(
                 *[0 for _ in range(self.n_ode_states)], 
-                *[0 for _ in range(len(ode_args_indexed))],
-                *[0 for _ in range(len(pp_args_indexed))],
+                *[0 for _ in range(len(ode_args))],
+                *[0 for _ in range(len(pp_args))],
                 *[0 for _ in range(len(x_in_flat))], 
             )
         )
-        result = loop_eval(*Y_0, *ode_args_indexed, *pp_args_indexed, *x_in_flat)
+        result = loop_eval(*Y_0, *ode_args, *pp_args, *x_in_flat)
 
         # if self.batch_dimension not in self.coordinates:    
         # this is not yet stable, because it may remove extra dimensions
@@ -132,6 +105,17 @@ class JaxSolver(SolverBase):
 
         return result
 
+    @partial(jax.jit, static_argnames=["self"])
+    def preprocess_parameters(self, parameters, num_backend: ModuleType = jnp):
+        return super().preprocess_parameters(parameters, num_backend)
+    
+    @partial(jax.jit, static_argnames=["self"])
+    def preprocess_x_in(self, x_in, num_backend: ModuleType = jnp):
+        return super().preprocess_x_in(x_in, num_backend)
+
+    @partial(jax.jit, static_argnames=["self"])
+    def preprocess_y_0(self, y0, num_backend: ModuleType = jnp):
+        return super().preprocess_y_0(y0, num_backend)
 
     @partial(jax.jit, static_argnames=["self"])
     def odesolve(self, y0, args, x_in):
