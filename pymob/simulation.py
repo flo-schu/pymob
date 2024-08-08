@@ -21,6 +21,7 @@ import dpath as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from toopy import param, benchmark
 
+import pymob
 from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
 from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
@@ -469,7 +470,18 @@ class SimulationBase:
             if self.config.simulation.solver:
                 if not hasattr(self, "_mod"):
                     self.load_modules()
-                solver = getattr(self._mod, self.config.simulation.solver)
+                try:
+                    solver = getattr(self._mod, self.config.simulation.solver)
+                except AttributeError:
+                    try:
+                        solver = getattr(pymob.solvers, self.config.simulation.solver)
+                    except AttributeError:
+                        raise AttributeError(
+                            f"The solver {self.config.simulation.solver} "
+                            f"could not be found in {self._mod} or {pymob.solvers} "
+                            f"Define your own solver or callable or select an "
+                            "implemented solver (e.g. JaxSolver)."
+                        )
                 self.solver = solver
             else: 
                 raise ValueError(
