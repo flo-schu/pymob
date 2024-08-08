@@ -1,4 +1,5 @@
 import numpy as np
+import xarray as xr
 import pytest
 
 from pymob.sim.config import Config, DataVariable, FloatParam
@@ -20,6 +21,35 @@ def init_simulation_casestudy_api(scenario="test_scenario"):
     sim.setup()
     return sim
 
+def init_lotkavolterra_simulation_replicated():
+    sim = init_simulation_casestudy_api()
+    sim.config.case_study.scenario = "test_replicated"
+    sim._observations = xr.Dataset()
+
+    sim.config.solverbase.batch_dimension = "id"
+    sim.config.jaxsolver.batch_dimension = "id"
+
+    sim.config.model_parameters.gamma = FloatParam(value=0.3)
+    sim.config.model_parameters.delta = FloatParam(value=0.01)
+
+    sim.config.data_structure.wolves = DataVariable(
+        dimensions=["id", "time"], observed=False, dimensions_evaluator=["id", "time"])
+    sim.config.data_structure.rabbits = DataVariable(
+        dimensions=["id", "time"], observed=False, dimensions_evaluator=["id", "time"]
+    )
+    
+    sim.coordinates["id"] = [0,1]
+    sim.coordinates["time"] = [0,1,2,3,4,5]
+    
+    sim.config.simulation.y0 = ["wolves=Array([9, 5])", "rabbits=Array([40, 50])"]
+    y0 = sim.parse_input("y0",drop_dims=["time"])
+    sim.model_parameters["y0"] = y0
+    
+    sim.config.create_directory("results", force=True)
+    sim.config.create_directory("scenario", force=True)
+    sim.config.save(force=True)
+    
+    return sim
 
 def init_bufferguts_casestudy(scenario="testing"):
     """This is an external case study used for local testing. The test study
@@ -95,3 +125,8 @@ def linear_model():
     y_noise = rng.normal(loc=y, scale=parameters["sigma_y"])
 
     return model, x, y, y_noise, parameters
+
+def setup_solver(sim: SimulationBase, solver: type):
+    sim.solver = solver
+    sim.dispatch_constructor()
+    return sim.evaluator._solver

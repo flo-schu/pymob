@@ -1,14 +1,95 @@
 import os
 import time
 import numpy as np
+import xarray as xr
 
-from pymob.solvers.diffrax import JaxSolver
-from pymob.solvers.base import rect_interpolation, radius_interpolation, smoothed_interpolation, jump_interpolation
-from tests.fixtures import init_simulation_casestudy_api, init_bufferguts_casestudy
-from diffrax import Heun, Euler, Tsit5, Dopri5
+from pymob.sim.config import FloatParam, DataVariable
+from pymob.solvers import JaxSolver, SolverBase
+from pymob.solvers.base import rect_interpolation
+from tests.fixtures import (
+    init_simulation_casestudy_api, 
+    init_lotkavolterra_simulation_replicated,
+    init_bufferguts_casestudy, 
+    setup_solver
+)
 
-from pymob.sim.evaluator import Evaluator
 from pymob import SimulationBase
+
+def test_solver_preprocessing():
+    sim = init_simulation_casestudy_api()
+    sim.config.model_parameters.gamma = FloatParam(value=0.3)
+    sim.config.model_parameters.delta = FloatParam(value=0.01)
+    
+    # test SolverBase
+    solver = setup_solver(sim, solver=SolverBase)
+    y0 = sim.parse_input("y0",drop_dims=["time"])
+    y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
+    np.testing.assert_equal([y.shape for y in y0_solver], [(1,1), (1,1)])
+
+    # test jax solver
+    solver = setup_solver(sim, solver=JaxSolver)
+    y0 = sim.parse_input("y0",drop_dims=["time"])
+    y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
+    np.testing.assert_equal([y.shape for y in y0_solver], [(1,1), (1,1)])
+
+def test_solver_preprocessing_replicated():
+    sim = init_lotkavolterra_simulation_replicated()
+
+    # test SolverBase
+    solver = setup_solver(sim, solver=SolverBase)
+    y0 = sim.parse_input("y0",drop_dims=["time"])
+    y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
+    np.testing.assert_equal([y.shape for y in y0_solver], [(2,1), (2,1)])
+    np.testing.assert_equal(y0_solver, [np.array([[9],[5]]), np.array([[40], [50]])])
+
+    sim.config.jaxsolver.batch_dimension = "idx" # this is not existing
+    solver = setup_solver(sim, solver=JaxSolver)
+    y0 = sim.parse_input("y0",drop_dims=["time"])
+    y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
+    np.testing.assert_equal([y.shape for y in y0_solver], [(1,2), (1,2)])
+    np.testing.assert_equal(y0_solver, [np.array([[9, 5]]), np.array([[40, 50]])])
+    
+    sim.config.jaxsolver.batch_dimension = "id" # This exists!
+    solver = setup_solver(sim, solver=JaxSolver)
+    y0 = sim.parse_input("y0",drop_dims=["time"])
+    y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
+    np.testing.assert_equal([y.shape for y in y0_solver], [(2,1), (2,1)])
+    np.testing.assert_equal(y0_solver, [np.array([[9],[5]]), np.array([[40], [50]])])
+    
+    # test parameter processing
+    theta = sim.model_parameter_dict
+    theta_solver_ode, theta_solver_pp = solver.preprocess_parameters(theta)
+    np.testing.assert_equal(
+        [t.shape for t in theta_solver_ode], 
+        [(2,1), (2,1), (2,1), (2,1)]
+    )
+
+def test_solver_dimensional_order():
+    sim = init_lotkavolterra_simulation_replicated()
+    theta = sim.model_parameter_dict
+    sim.solver = JaxSolver
+
+    sim.data_structure_and_dimensionality
+    sim.dispatch_constructor()
+    e = sim.dispatch(theta)
+    e()
+    res_id_time = e.results
+
+    # reorder dimensions of the data variables to see if they can be processed
+    sim.config.data_structure.wolves.dimensions = ["time", "id"] # type: ignore
+    sim.config.data_structure.rabbits.dimensions = ["time", "id"] # type: ignore
+
+    sim.dispatch_constructor()
+    e = sim.dispatch(theta)
+    e()
+    res_time_id = e.results
+
+    np.testing.assert_equal(
+        (res_id_time.to_array() - res_time_id.to_array()).values, 0
+    )
+
+
+
 
 def test_benchmark_time():
     sim = init_simulation_casestudy_api()
@@ -156,4 +237,6 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
+    # test_solver_dimensional_order()
+    # test_solver_preprocessing_replicated()
     # test_benchmark_jaxsolver()
