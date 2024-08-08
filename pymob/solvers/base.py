@@ -29,9 +29,8 @@ class SolverBase:
 
     x_dim: str = "time"
     batch_dimension: str = "batch_id"
-    extra_attributes = ["exclude_kwargs_model", "exclude_kwargs_postprocessing"]
-    exclude_kwargs_model = ["t", "x_in", "y", "X"]
-    exclude_kwargs_postprocessing = ["t", "time", "interpolation", "results"]
+    exclude_kwargs_model: Tuple[str, ...] = ("t", "x_in", "y", "X")
+    exclude_kwargs_postprocessing: Tuple[str, ...] = ("t", "time", "interpolation", "results")
 
     # fields that are computed post_init
     x: Tuple[float] = field(init=False, repr=False)
@@ -46,10 +45,6 @@ class SolverBase:
 
         # set extra attributes from solver_kwargs, which are specified through
         # the dispatch_constructor. Those don't receive post-processing
-        for key in self.extra_attributes:
-            value = self.solver_kwargs.get(key, None)
-            if value is not None:
-                object.__setattr__(self, key, value)
 
         self.test_matching_batch_dims()
         self.test_x_coordinates()

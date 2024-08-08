@@ -488,7 +488,17 @@ class SimulationBase:
 
         stochastic = self.config.simulation.modeltype
             
+        solver_options = {}
+        if isinstance(solver, type):
+            solver_classes = [solver] + [c for c in solver.__mro__ if c not in [solver, object]]
 
+            for sc in solver_classes:
+                try:
+                    solver_options = getattr(self.config, sc.__name__.lower())
+                    solver_options = solver_options.model_dump()
+                    break
+                except AttributeError:
+                    continue
 
         self.evaluator = Evaluator(
             model=model,
@@ -506,6 +516,7 @@ class SimulationBase:
             stochastic=True if stochastic == "stochastic" else False,
             indices=self.indices,
             post_processing=post_processing,
+            solver_options=solver_options,
             **evaluator_kwargs
         )
 

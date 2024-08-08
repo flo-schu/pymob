@@ -71,6 +71,7 @@ class Evaluator:
             stochastic: bool,
             indices: Dict = {},
             post_processing: Optional[Callable] = None,
+            solver_options: Dict = {},
             **kwargs
         ) -> None:
         """_summary_
@@ -120,6 +121,7 @@ class Evaluator:
         self.coordinates = coordinates
         self.is_stochastic = stochastic
         self.indices = indices
+        self.solver_options = solver_options
         
         # can be initialized
         if post_processing is None:
@@ -161,10 +163,17 @@ class Evaluator:
                     k: tuple(v) for k, v in self.coordinates.items()
                 })
 
+                solver_extra_options = frozendict({
+                    k:v for k, v in kwargs.items() 
+                    if k in solver.__match_args__
+                })
+
+                solver_options.update(solver_extra_options)
+                
+
                 self._solver = solver(
                     model=self.model,
                     post_processing=self.post_processing,
-                    solver_kwargs=frozendict({k:v for k, v in kwargs.items() if k in solver.extra_attributes}),
                     
                     coordinates=frozen_coordinates,
                     coordinates_input_vars=frozen_coordinates_input_vars,
@@ -175,6 +184,8 @@ class Evaluator:
                     indices=frozendict({k: tuple(v.values) for k, v in self.indices.items()}),
                     n_ode_states=self.n_ode_states,
                     is_stochastic=self.is_stochastic,
+                    **solver_options
+
                 )
             else:
                 raise NotImplementedError(

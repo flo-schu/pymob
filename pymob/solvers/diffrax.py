@@ -5,6 +5,8 @@ from frozendict import frozendict
 from dataclasses import dataclass, field
 import jax.numpy as jnp
 import jax
+import diffrax
+from diffrax.solver.base import _MetaAbstractSolver
 from diffrax import (
     diffeqsolve, 
     Dopri5, 
@@ -37,89 +39,30 @@ class JaxSolver(SolverBase):
         biased parameter estimates.
     """
 
-    extra_attributes = [
-        "batch_dimension",
-        "diffrax_solver", 
-        "rtol", 
-        "atol", 
-        "pcoeff",
-        "icoeff",
-        "dcoeff",
-        "max_steps",
-        "throw_exception",
-        "exclude_kwargs_model",
-        "exclude_kwargs_postprocessing",
-    ]
-    diffrax_solver = Dopri5
-    rtol = jnp.float32(1e-6)
-    atol = jnp.float32(1e-7)
-    pcoeff = 0.0
-    icoeff = 1.0
-    dcoeff = 0.0
-    max_steps = int(1e5)
-    throw_exception = True
+    diffrax_solver: _MetaAbstractSolver|str = field(default=Dopri5)
+    rtol: float = 1e-6
+    atol: float = 1e-7
+    pcoeff: float = 0.0
+    icoeff: float = 1.0
+    dcoeff: float = 0.0
+    max_steps: int = int(1e5)
+    throw_exception: bool = True
 
     def __post_init__(self, *args, **kwargs):
         super().__post_init__(*args, **kwargs)
+
+        # set the diffrax solver if it is a string instance
+        dfx_solver = self.diffrax_solver
+        if isinstance(dfx_solver, str):
+            diffrax_solver = getattr(diffrax, dfx_solver)
+            if not isinstance(diffrax_solver, _MetaAbstractSolver):
+                raise TypeError(
+                    f"Solver {diffrax_solver} must be {_MetaAbstractSolver}"
+                )
+            object.__setattr__(self, "diffrax_solver", diffrax_solver)
+
+
         hash(self)
-
-    @partial(jax.jit, static_argnames=["self"])
-    def preprocess_x_in(self, x_in):
-        X_in_list = []
-        for x_in_var, x_in_vals in x_in.items():
-            x_in_x = jnp.array(self.coordinates_input_vars["x_in"][self.x_dim], dtype=float)
-            x_in_y = jnp.array(x_in_vals)
-
-            # broadcast x to y and add a dummy
-            batch_coordinates = self.coordinates_input_vars["x_in"].get(self.batch_dimension, [0])
-            n_batch = len(batch_coordinates)
-            X_in_x = jnp.tile(x_in_x, n_batch).reshape((n_batch, *x_in_x.shape))
-
-            # wrap x_in y data in a dummy batch dim if the batch dim is not
-            # included in the coordinates
-            if (
-                self.batch_dimension not in self.coordinates_input_vars["x_in"]
-                and len(self.indices) == 0
-            ):
-                X_in_y = jnp.tile(x_in_y, n_batch)\
-                    .reshape((n_batch, *x_in_y.shape))
-            else:
-                X_in_y = jnp.array(x_in_y)
-
-            # combine xs and ys to make them ready for interpolation
-            X_in = [jnp.array(v) for v in [X_in_x, X_in_y]]
-
-            X_in_list.append(X_in)
-
-        return X_in_list
-    
-    @partial(jax.jit, static_argnames=["self"])
-    def preprocess_y_0(self, y0):
-        Y0 = []
-        for y0_var, y0_vals in y0.items():
-            y0_data = jnp.array(y0_vals, ndmin=1)
-            
-            # wrap y0 data in a dummy batch dim if the batch dim is not
-            # included in the coordinates
-            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
-            n_batch = len(batch_coordinates)
-            
-            if (
-                self.batch_dimension not in self.coordinates_input_vars["y0"]
-                and len(self.indices) == 0
-            ):
-                y0_batched = jnp.tile(y0_data, n_batch)\
-                    .reshape((n_batch, *y0_data.shape))
-            else:
-                if len(y0_data.shape) == 1:
-                    y0_batched = y0_data\
-                        .reshape((*y0_data.shape, 1))
-                else:
-                    y0_batched = y0_data
-                
-
-            Y0.append(y0_batched)
-        return Y0
 
     @partial(jax.jit, static_argnames=["self"])
     def solve(self, parameters: Dict, y0:Dict={}, x_in:Dict={}):
@@ -204,7 +147,9 @@ class JaxSolver(SolverBase):
             jumps = None
 
         term = ODETerm(f)
-        solver = self.diffrax_solver()
+        solver = self.diffrax_solver() # type: ignore (diffrax_solver is ensured
+                                       # to be _MetaAbstractSolver type during 
+                                       # post_init)
         saveat = SaveAt(ts=self.x)
         t_min = self.x[0]
         t_max = self.x[-1]

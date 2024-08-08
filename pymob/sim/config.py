@@ -154,6 +154,10 @@ def string_to_list(option: Union[List, str]) -> List:
         return [i.strip() for i in option.split(" ")]
 
 
+def string_to_tuple(option: Union[List, str]) -> Tuple:
+    return tuple(string_to_list(option))
+
+
 def string_to_dict(
         option: Union[Dict[str,str|float|int|List[float|int|str]], str]
     ) -> Dict[str,str|float|int|List[float|int|str]]:
@@ -272,6 +276,11 @@ OptionListStr = Annotated[
     serialize_list_to_string
 ]
 
+OptionTupleStr = Annotated[
+    Tuple[str, ...], 
+    BeforeValidator(string_to_tuple), 
+    serialize_list_to_string
+]
 
 OptionDictStr = Annotated[
     Dict[str,str|float|int|List[float|int]], 
@@ -526,7 +535,22 @@ class Datastructure(BaseModel):
     def observed_data_variables_max(self):
         return [v.max for v in self.__pydantic_extra__.values() if v.observed]
 
+class Solverbase(BaseModel):
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
+    batch_dimension: str = "batch_id"
+    x_dim: str = "time"
+    exclude_kwargs_model: OptionTupleStr = ("t", "time", "x_in", "y", "x", "Y", "X")
+    exclude_kwargs_postprocessing: OptionTupleStr = ("t", "time", "interpolation", "results")
 
+class Jaxsolver(Solverbase):
+    diffrax_solver: str = "Dopri5"
+    rtol: float = 1e-6
+    atol: float = 1e-7
+    pcoeff: float = 0.0
+    icoeff: float = 1.0
+    dcoeff: float = 0.0
+    max_steps: int = int(1e5)
+    throw_exception: bool = True
 
 class Inference(BaseModel):
     model_config = {"validate_assignment" : True}
@@ -722,6 +746,8 @@ class Config(BaseModel):
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
     simulation: Simulation = Field(default=Simulation())
     data_structure: Datastructure = Field(default=Datastructure(), alias="data-structure") # type:ignore
+    solverbase: Solverbase = Field(default=Solverbase())
+    jaxsolver: Jaxsolver = Field(default=Jaxsolver(), alias="jax-solver")
     inference: Inference = Field(default=Inference())
     model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters") #type: ignore
     error_model: Errormodel = Field(default=Errormodel(), alias="error-model") # type: ignore
