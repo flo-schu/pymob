@@ -402,12 +402,12 @@ class SimulationBase:
         return n_ode_states
         
     @staticmethod
-    def validate_model_input(model_input) -> Dict[str, ArrayLike]:
+    def validate_model_input(model_input) -> Dict[str, OrderedDict]:
         if isinstance(model_input, xr.Dataset):
             model_input = {
                 k: dv.values for k, dv in model_input.data_vars.items()
             }
-            return model_input # type: ignore
+            return OrderedDict(model_input) # type: ignore
         
         raise NotImplementedError(
             f"Model input of type {type(model_input)} "
@@ -525,9 +525,9 @@ class SimulationBase:
         if "y0" in model_parameters:
             y0 = self.subset_by_batch_dimension(model_parameters["y0"])
             y0 = self.validate_model_input(model_parameters["y0"])
-            model_parameters["y0"] = OrderedDict(y0)
+            model_parameters["y0"] = y0
         else:
-            model_parameters["y0"] = OrderedDict({})
+            model_parameters["y0"] = y0
         
         if "x_in" in model_parameters:
             x_in = self.subset_by_batch_dimension(model_parameters["x_in"])
