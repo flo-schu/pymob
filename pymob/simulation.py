@@ -522,7 +522,7 @@ class SimulationBase:
 
         # return evaluator
 
-    def dispatch(self, theta):
+    def dispatch(self, theta, y0=None, x_in=None):
         """Dispatch an evaluator, which will compute the model at parameters
         (theta). Evaluators are advantageous, because they are easier serialized
         than the whole simulation object. Comparison can then happen back in 
@@ -538,12 +538,12 @@ class SimulationBase:
             y0 = self.validate_model_input(model_parameters["y0"])
             model_parameters["y0"] = y0
         else:
-            model_parameters["y0"] = y0
+            model_parameters["y0"] = OrderedDict({})
         
         if "x_in" in model_parameters:
             x_in = self.subset_by_batch_dimension(model_parameters["x_in"])
             x_in = self.validate_model_input(model_parameters["x_in"])
-            model_parameters["x_in"] = OrderedDict(x_in)
+            model_parameters["x_in"] = x_in
         else:
             model_parameters["x_in"] = OrderedDict({})
         
