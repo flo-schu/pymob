@@ -46,10 +46,17 @@ def create_dataset_from_dict(Y: dict, data_structure, coordinates, var_dim_mappe
             da = xr.DataArray(v_permuted_dims, coords=coords, dims=dims)
         except ValueError as err:
             raise ValueError(
-                f"{err} for the data variable '{k}'. You can try specifying "
-                f"evaluator_dimensions for '{k}' in order to redorder the dimensions: "
-                f"sim.config.data_structure.{k} = DataVariable(..., evaluator_dimensions=[...])." 
-                f"Hint: The solvers usually put the batch_dimension (e.g. 'id') first."
+                f"{err} for the data variable '{k}'. This can have multiple causes: "
+                f"1) Have you specified a batch dimensions? If you have a "
+                f"multi-replicate design, this is typically 'ID', or 'replicate_id' "
+                f"or similar. You can set the batch dimension, by setting the "
+                f"option config.<solver>.batch_dimension = '...' where <solver> is "
+                f"replaced by the solver you are using (e.g. jaxsolver, solverbase) "
+                f"2) The dimensional order of the data variables differs from the "
+                f"Solver dimensional order. You can try specifying "
+                f"evaluator dimensions for '{k}' in order to redorder the dimensions: "
+                f"sim.config.data_structure.{k} = DataVariable(..., dimensions_evaluator=[...]). " 
+                f"Hint: The solvers usually put the batch dimension (e.g. 'id') first."
             )
         arrays.update({k: da})
 
