@@ -32,7 +32,7 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
         # use_numpyro_backend can be written into the intiialize method
         # self.use_numpyro_backend()
         
-    def use_numpyro_backend(self):
+    def use_numpyro_backend(self, error_model=None, only_prior=False):
         # configure the Numpyro backend
         self.config.inference_numpyro.user_defined_preprocessing = None
         self.config.inference_numpyro.user_defined_probability_model = None
@@ -40,7 +40,8 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
         self.set_inferer("numpyro")
         self.inferer.inference_model = partial( 
             self.inferer.inference_model, 
-            user_error_model=error_model
+            user_error_model=error_model,
+            only_prior=only_prior
         )
 
         # set the fixed parameters
@@ -235,7 +236,7 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
         }
 
 
-def error_model(theta, simulation_results, observations, masks):
+def conditional_survival_error_model(theta, simulation_results, observations, masks):
     # indexing
     substance_idx = observations["substance_index"]
     sigma_cint_indexed = theta["sigma_cint"][substance_idx]
@@ -277,6 +278,38 @@ def error_model(theta, simulation_results, observations, masks):
     )
 
 
+def independent_survival_error_model(theta, simulation_results, observations, masks):
+    # indexing
+    substance_idx = observations["substance_index"]
+    sigma_cint_indexed = theta["sigma_cint"][substance_idx]
+    sigma_nrf2_indexed = theta["sigma_nrf2"][substance_idx]
+
+    sigma_cint_ix_bc = jnp.broadcast_to(sigma_cint_indexed.reshape((-1, 1)), masks["cint"].shape)
+    sigma_nrf2_ix_bc = jnp.broadcast_to(sigma_nrf2_indexed.reshape((-1, 1)), masks["nrf2"].shape)
+
+    
+    # calculate likelihoods
+    numpyro.sample("cint_obs", dist.LogNormal(
+            loc=jnp.log(simulation_results["cint"] + EPS),  # type: ignore
+            scale=sigma_cint_ix_bc  # type: ignore
+        ).mask(masks["cint"]),
+        obs=observations["cint"]
+    )
+    
+    numpyro.sample("nrf2_obs", dist.LogNormal(
+            loc=jnp.log(simulation_results["nrf2"]),  # type: ignore
+            scale=sigma_nrf2_ix_bc  # type: ignore
+        ).mask(masks["nrf2"]), 
+        obs=observations["nrf2"]
+    )    
+    
+    numpyro.sample(
+        "survival_obs", dist.Binomial(
+            probs=simulation_results["survival"], 
+            total_count=observations["nzfe"]
+        ).mask(masks["survival"]), 
+        obs=observations["survival"]
+    )
 
 
 if __name__ == "__main__":
@@ -305,13 +338,29 @@ if __name__ == "__main__":
     res = sim.generate_artificial_data(nan_frac=0.0)
     res_ = sim.lethality_to_conditional_survival(res)
 
+    # mark data as observed
+    sim.observations = res_
+    # mark existing data variables as unobserved
+    for key, datavar in sim.config.data_structure.all.items():
+        if key in ["cint", "nrf2", "survival"]:
+            datavar.observed = True
+
     sim.plot(res)
 
     # perform inference
-    sim.config.inference.extra_vars = []
-    sim.use_numpyro_backend()
-    sim.config.inference_numpyro.kernel = "map"
-    sim.config.inference_numpyro.draws = 1000
+    sim.config.jaxsolver.throw_exception = False
+    sim.dispatch_constructor()
+    sim.use_numpyro_backend(
+        error_model=independent_survival_error_model,
+        only_prior=False
+    )
+    sim.config.inference_numpyro.kernel = "nuts"
+    sim.config.inference_numpyro.draws = 2000
+    sim.config.inference_numpyro.svi_iterations = 1000
+
+    pp = sim.inferer.prior_predictions()
+    plot_kwargs = dict(mode="mean+hdi")
+    sim.inferer.plot_prior_predictions("cint", x_dim="time", **plot_kwargs) # type:ignore
     sim.inferer.run()
 
     # next steps:
