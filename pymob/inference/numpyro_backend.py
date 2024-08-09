@@ -913,11 +913,22 @@ class NumpyroBackend:
         key = jax.random.PRNGKey(seed)
         obs, masks = self.observation_parser()
 
+        # there is a very small remark in the numpyro API that explains that
+        # if data input for observed variables is None, the data are sampled
+        # from the distributions instead of returning the input data
+        # https://num.pyro.ai/en/stable/getting_started.html#a-simple-example-8-schools
+        obs_ = {
+            k: None if k in self.config.data_structure.observed_data_variables
+            else data 
+            for k, data in obs.items() 
+        }
+
         model_kwargs = self.preprocessing(
-            obs=obs, 
+            obs=obs_, 
             masks=masks,
         )
         
+
         # prepare model
         model = partial(
             self.inference_model, 
@@ -1120,6 +1131,8 @@ class NumpyroBackend:
     def plot_prior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={}, 
             n=None, seed=None, plot_preds_without_obs=False,
+            prediction_data_variable: Optional[str] = None,
+            **plot_kwargs
         ):
         if n is None:
             n = self.n_predictions
@@ -1141,14 +1154,17 @@ class NumpyroBackend:
             x_dim=x_dim,
             ax=ax,
             subset=subset,
-            mode="draws"
+            prediction_data_variable=prediction_data_variable,
+            **plot_kwargs,
         )
 
         return ax
 
     def plot_posterior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={},
-            n=None, seed=None, plot_preds_without_obs=False
+            n=None, seed=None, plot_preds_without_obs=False,
+            prediction_data_variable: Optional[str] = None,
+            **plot_kwargs
         ):
         # TODO: This method should be trashed. It is not really useful
         if n is None:
@@ -1171,6 +1187,8 @@ class NumpyroBackend:
             x_dim=x_dim,
             ax=ax,
             subset=subset,
+            prediction_data_variable=prediction_data_variable,
+            **plot_kwargs
         )
 
         return ax
@@ -1199,19 +1217,30 @@ class NumpyroBackend:
             self, 
             observations,
             predictions,
-            data_variable: str, 
+            data_variable: str,
             x_dim: str, 
             ax=None, 
             plot_preds_without_obs=False,
             subset={},
             mode: Literal["mean+hdi", "draws"]="mean+hdi",
             plot_options: Dict={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
+            prediction_data_variable: Optional[str] = None,
         ):
         # filter subset coordinates present in data_variable
         subset = {k: v for k, v in subset.items() if k in observations.coords}
         
+        if prediction_data_variable is None:
+            prediction_data_variable = data_variable + "_obs"
+
         # select subset
-        preds = predictions.sel(subset)[data_variable]
+        if prediction_data_variable in predictions:
+            preds = predictions.sel(subset)[prediction_data_variable]
+        else:
+            raise KeyError(
+                f"{prediction_data_variable} was not found in the predictions "+
+                f"consider specifying the data variable for the predictions "+
+                "explicitly with the option `prediction_data_variable`."
+            )
         try:
             obs = observations.sel(subset)[data_variable]
         except KeyError:
@@ -1233,7 +1262,7 @@ class NumpyroBackend:
         preds = preds.stack(i=stack_dims)
         N = len(obs.coords["i"])
             
-        hdi = az.hdi(preds, .95)[f"{data_variable}"]
+        hdi = az.hdi(preds, .95)[f"{prediction_data_variable}"]
 
         if ax is None:
             ax = plt.subplot(111)
