@@ -2,6 +2,7 @@ from functools import partial
 from typing import Literal
 import xarray as xr
 import numpy as np
+from matplotlib import pyplot as plt
 
 from pymob import SimulationBase, Config
 from pymob.solvers.diffrax import JaxSolver
@@ -68,6 +69,7 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
             "data_structure_02_replicated_observation",
             "data_structure_03_gradient_observation",
             "data_structure_04_unreplicated_multi_substance",
+            "data_structure_05_replicated_multi_experiment",
         ] = "data_structure_01_single_observation"
     ):
         self.config.case_study.scenario = scenario
@@ -95,6 +97,9 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
 
         elif scenario == "data_structure_04_unreplicated_multi_substance":
             self.define_observations_unreplicated_multiple_substances()
+
+        elif scenario == "data_structure_05_replicated_multi_experiment":
+            self.define_observations_replicated_multi_experiment()
 
         # set up coordinates
         self.coordinates["time"] = np.arange(0, 120)
@@ -179,6 +184,31 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
         self.indices = {
             "substance": xr.DataArray(
                 [0] * 5,
+                dims=("id"), 
+                coords={
+                    "id": self.observations["id"], 
+                    "substance": self.observations["substance"]
+                }, 
+                name="substance_index"
+            )
+        }
+
+    def define_observations_replicated_multi_experiment(self):
+        # set up the observations with the number of organisms and exposure 
+        # concentrations. This is an observation frame for indexed data with 
+        # substance provided as an index
+        n = 10
+        self.observations = xr.Dataset().assign_coords({
+            "nzfe":      xr.DataArray([10      ] * n, dims=("id"), coords={"id": np.arange(n)}),
+            "cext_nom":  xr.DataArray([1000    ] * n, dims=("id"), coords={"id": np.arange(n)}),
+            "substance": xr.DataArray(["diuron"] * n, dims=("id"), coords={"id": np.arange(n)}),
+            "experiment": xr.DataArray(np.repeat([0,1], int(n/2)), dims=("id"), coords={"id": np.arange(n)})
+        })
+
+        # set up the corresponding index
+        self.indices = {
+            "substance": xr.DataArray(
+                [0] * n,
                 dims=("id"), 
                 coords={
                     "id": self.observations["id"], 
@@ -324,7 +354,7 @@ if __name__ == "__main__":
 
     # sim.setup_data_structure_from_observations()
     sim.setup_data_structure_manually(
-        scenario="data_structure_04_unreplicated_multi_substance"
+        scenario="data_structure_05_replicated_multi_experiment"
     )
 
     # run a simulation
