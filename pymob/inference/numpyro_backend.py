@@ -2,7 +2,10 @@ from functools import partial, lru_cache
 import glob
 import re
 import warnings
-from typing import Tuple, Dict, Union, Optional, Callable, Literal, List
+from typing import (
+    Tuple, Dict, Union, Optional, Callable, Literal, List, Any,
+    Protocol
+)
 
 from tqdm import tqdm
 import numpy as np
@@ -91,6 +94,17 @@ exp = transforms.ExpTransform
 sigmoid = transforms.SigmoidTransform
 C = transforms.ComposeTransform
 
+class ErrorModelFunction(Protocol):
+    def __call__(
+        self, 
+        theta: Dict, 
+        simulation_results: Dict, 
+        observations: Dict, 
+        masks: Dict
+    ) -> Any:
+        ...
+
+
 class NumpyroBackend:
     def __init__(
         self, 
@@ -132,10 +146,7 @@ class NumpyroBackend:
             )
         else:
             self.error_model = self.parse_error_model()
-            if self.gaussian_base_distribution:
-                self.inference_model = self.parse_probabilistic_model_with_gaussian_base()
-            else:
-                self.inference_model = self.parse_probabilistic_model()
+            self.inference_model = self.parse_probabilistic_model()
 
 
         self.idata: az.InferenceData
@@ -330,6 +341,7 @@ class NumpyroBackend:
         prior = self.prior.copy()
         error_model = self.error_model.copy()
         extra = {"EPS": EPS}
+        gaussian_base = self.gaussian_base_distribution
 
         def lookup(val, deterministic, prior_samples, observations):
             if val in deterministic:
@@ -347,8 +359,7 @@ class NumpyroBackend:
             else:
                 return val
 
-        def model(solver, obs, masks):
-            # construct priors with numpyro.sample and sample during inference
+        def sample_prior(prior: Dict, obs: Dict):
             theta = {}
             for prior_name, prior_kwargs in prior.items():
                 
@@ -368,68 +379,10 @@ class NumpyroBackend:
                 )
 
                 theta.update({prior_name: theta_i})
-            
-            # calculate deterministic simulation with parameter samples
-            sim_results = solver(theta=theta)
 
-            # store data_variables as deterministic model output
-            for deterministic_name, deterministic_value in sim_results.items():
-                _ = numpyro.deterministic(
-                    name=deterministic_name, 
-                    value=deterministic_value
-                )
-
-            for error_model_name, error_model_kwargs in error_model.items():
-                error_distribution = error_model_kwargs["fn"]
-                error_distribution_kwargs = {}
-                for errdist_par, errdist_val in error_model_kwargs["parameters"].items():
-                    errdist_trans_func = errdist_val["transform"]
-                    errdist_trans_func_kwargs = {
-                        k: lookup(k, sim_results, theta, obs) for k in errdist_val["args"]
-                    }
-                    error_distribution_kwargs.update({
-                        errdist_par: errdist_trans_func(**errdist_trans_func_kwargs)
-                    })
-
-                _ = numpyro.sample(
-                    name=error_model_name + "_obs",
-                    fn=error_distribution(**error_distribution_kwargs).mask(masks[error_model_name]),
-                    obs=obs[error_model_name]
-                )
-
-
-            # TODO: How to add EPS
-            # DONE: add biomial n --> I think this is already done
-            # numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks["cext"]), obs=obs["cext"] + EPS)
-            # numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks["cint"]), obs=obs["cint"] + EPS)
-            # numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks["nrf2"]), obs=obs["nrf2"] + EPS)
-            # numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=obs["nzfe"]).mask(masks["lethality"]), obs=obs["lethality"])
-        return model
-
-    def parse_probabilistic_model_with_gaussian_base(self):
-        EPS = self.EPS
-        prior = self.prior.copy()
-        error_model = self.error_model.copy()
-        extra = {"EPS": EPS}
-
-
-        def lookup(val, deterministic, prior_samples, observations):
-            if val in deterministic:
-                return deterministic[val]
-            
-            elif val in prior_samples:
-                return prior_samples[val]
-            
-            elif val in observations:
-                return observations[val]
-            
-            elif val in extra:
-                return extra[val]
-
-            else:
-                return val
-
-        def model(solver, obs, masks):
+            return {}, theta
+        
+        def sample_prior_gaussian_base(prior: Dict, obs: Dict):
             theta = {}
             theta_base = {}
             for prior_name, prior_kwargs in prior.items():
@@ -479,6 +432,49 @@ class NumpyroBackend:
                 theta_base.update({prior_name: theta_base_i})
                 theta.update({prior_name: theta_i})
 
+            return theta_base, theta
+
+        def likelihood(theta, simulation_results, observations, masks):
+            """Uses lookup and error model from the local function context"""
+            for error_model_name, error_model_kwargs in error_model.items():
+                error_distribution = error_model_kwargs["fn"]
+                error_distribution_kwargs = {}
+                for errdist_par, errdist_val in error_model_kwargs["parameters"].items():
+                    errdist_trans_func = errdist_val["transform"]
+                    errdist_trans_func_kwargs = {
+                        k: lookup(k, simulation_results, theta, observations) for k in errdist_val["args"]
+                    }
+                    error_distribution_kwargs.update({
+                        errdist_par: errdist_trans_func(**errdist_trans_func_kwargs)
+                    })
+
+                _ = numpyro.sample(
+                    name=error_model_name + "_obs",
+                    fn=error_distribution(**error_distribution_kwargs).mask(masks[error_model_name]),
+                    obs=observations[error_model_name]
+                )
+
+
+        def model(
+            solver, obs, masks, 
+            only_prior: bool = False, 
+            user_error_model: Optional[ErrorModelFunction] = None
+        ):
+            # construct priors with numpyro.sample and sample during inference
+            if gaussian_base:
+                theta_gaussian, theta = sample_prior_gaussian_base(
+                    prior=prior, 
+                    obs=obs, 
+                )
+            else:
+                _, theta = sample_prior(
+                    prior=prior, 
+                    obs=obs, 
+                )
+            
+            if only_prior:
+                return
+            
             # calculate deterministic simulation with parameter samples
             sim_results = solver(theta=theta)
 
@@ -489,24 +485,20 @@ class NumpyroBackend:
                     value=deterministic_value
                 )
 
-            for error_model_name, error_model_kwargs in error_model.items():
-                error_distribution = error_model_kwargs["fn"]
-                error_distribution_kwargs = {}
-                for errdist_par, errdist_val in error_model_kwargs["parameters"].items():
-                    errdist_trans_func = errdist_val["transform"]
-                    errdist_trans_func_kwargs = {
-                        k: lookup(k, sim_results, theta, obs) for k in errdist_val["args"]
-                    }
-                    error_distribution_kwargs.update({
-                        errdist_par: errdist_trans_func(**errdist_trans_func_kwargs)
-                    })
-
-                _ = numpyro.sample(
-                    name=error_model_name + "_obs",
-                    fn=error_distribution(**error_distribution_kwargs).mask(masks[error_model_name]),
-                    obs=obs[error_model_name]
+            if user_error_model is None:
+                _ = likelihood(
+                    theta=theta,
+                    simulation_results=sim_results,
+                    observations=obs,
+                    masks=masks,
                 )
-
+            else:
+                _ = user_error_model(
+                    theta=theta,
+                    simulation_results=sim_results,
+                    observations=obs,
+                    masks=masks
+                )
 
             # TODO: How to add EPS
             # DONE: add biomial n --> I think this is already done
@@ -515,7 +507,6 @@ class NumpyroBackend:
             # numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks["nrf2"]), obs=obs["nrf2"] + EPS)
             # numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=obs["nzfe"]).mask(masks["lethality"]), obs=obs["lethality"])
         return model
-
 
     @staticmethod
     def preprocessing(**kwargs):

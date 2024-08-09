@@ -1,5 +1,7 @@
+import numpy
 import numpy as np
 from numpy.typing import ArrayLike
+from types import ModuleType
 import xarray as xr
 from typing import Callable, Dict, List, Optional, Sequence, Literal, Tuple
 from frozendict import frozendict
@@ -21,6 +23,7 @@ class SolverBase:
     coordinates: frozendict[str, Tuple] = field(repr=False)
     coordinates_input_vars: frozendict[str, frozendict]
     data_variables: Tuple
+    data_structure_and_dimensionality: frozendict[str, frozendict[str, int]]
     is_stochastic: bool
     post_processing: Callable
     solver_kwargs: frozendict = frozendict()
@@ -28,9 +31,8 @@ class SolverBase:
 
     x_dim: str = "time"
     batch_dimension: str = "batch_id"
-    extra_attributes = ["exclude_kwargs_model", "exclude_kwargs_postprocessing"]
-    exclude_kwargs_model = ["t", "x_in", "y", "X"]
-    exclude_kwargs_postprocessing = ["t", "time", "interpolation", "results"]
+    exclude_kwargs_model: Tuple[str, ...] = ("t", "x_in", "y", "X")
+    exclude_kwargs_postprocessing: Tuple[str, ...] = ("t", "time", "interpolation", "results")
 
     # fields that are computed post_init
     x: Tuple[float] = field(init=False, repr=False)
@@ -45,10 +47,6 @@ class SolverBase:
 
         # set extra attributes from solver_kwargs, which are specified through
         # the dispatch_constructor. Those don't receive post-processing
-        for key in self.extra_attributes:
-            value = self.solver_kwargs.get(key, None)
-            if value is not None:
-                object.__setattr__(self, key, value)
 
         self.test_matching_batch_dims()
         self.test_x_coordinates()
@@ -89,6 +87,97 @@ class SolverBase:
                 "Make sure to run the simulation only until the provided x_in "
                 "values, or extend the x_in values until the required time"
             )
+
+    def preprocess_parameters(self, parameters, num_backend: ModuleType=numpy):
+        ode_args = mappar(self.model, parameters, exclude=self.exclude_kwargs_model)
+        pp_args = mappar(self.post_processing, parameters, exclude=self.exclude_kwargs_postprocessing)
+        
+        # simply broadcast the parameters along the batch dimension
+        # if there is no other index provided
+        if len(self.indices) == 0:
+            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
+            n_batch = len(batch_coordinates)
+            ode_args_indexed = [
+                num_backend.tile(num_backend.array(a, ndmin=1), n_batch)\
+                    .reshape((n_batch, *num_backend.array(a, ndmin=1).shape))
+                for a in ode_args
+            ]
+            pp_args_indexed = [
+                num_backend.tile(num_backend.array(a, ndmin=1), n_batch)\
+                    .reshape((n_batch, *num_backend.array(a, ndmin=1).shape))
+                for a in pp_args
+            ]
+        else:
+            idxs = list(self.indices.values())
+            n_index = len(idxs[0])
+            ode_args_indexed = [
+                num_backend.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
+                for a in ode_args
+            ]
+            pp_args_indexed = [
+                num_backend.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
+                for a in pp_args
+            ]
+
+        return ode_args_indexed, pp_args_indexed
+
+    def preprocess_x_in(self, x_in, num_backend:ModuleType=numpy):
+        X_in_list = []
+        for x_in_var, x_in_vals in x_in.items():
+            x_in_x = num_backend.array(self.coordinates_input_vars["x_in"][self.x_dim], dtype=float)
+            x_in_y = num_backend.array(x_in_vals)
+
+            # broadcast x to y and add a dummy
+            batch_coordinates = self.coordinates_input_vars["x_in"].get(self.batch_dimension, [0])
+            n_batch = len(batch_coordinates)
+            X_in_x = num_backend.tile(x_in_x, n_batch).reshape((n_batch, *x_in_x.shape))
+
+            # wrap x_in y data in a dummy batch dim if the batch dim is not
+            # included in the coordinates
+            if (
+                self.batch_dimension not in self.coordinates_input_vars["x_in"]
+                and len(self.indices) == 0
+            ):
+                X_in_y = num_backend.tile(x_in_y, n_batch)\
+                    .reshape((n_batch, *x_in_y.shape))
+            else:
+                X_in_y = num_backend.array(x_in_y)
+
+            # combine xs and ys to make them ready for interpolation
+            X_in = [num_backend.array(v) for v in [X_in_x, X_in_y]]
+
+            X_in_list.append(X_in)
+
+        return X_in_list
+    
+    def preprocess_y_0(self, y0, num_backend:ModuleType=numpy):
+        Y0 = []
+
+        for y0_var, y0_vals in y0.items():
+            y0_data = num_backend.array(y0_vals, ndmin=1)
+            
+            # wrap y0 data in a dummy batch dim if the batch dim is not
+            # included in the coordinates
+            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
+            n_batch = len(batch_coordinates)
+            
+            if (
+                self.batch_dimension not in self.coordinates_input_vars["y0"]
+                and len(self.indices) == 0
+            ):
+                y0_batched = num_backend.tile(y0_data, n_batch)\
+                    .reshape((n_batch, *y0_data.shape))
+            else:
+                if len(y0_data.shape) == 1:
+                    y0_batched = y0_data\
+                        .reshape((*y0_data.shape, 1))
+                else:
+                    y0_batched = y0_data
+                
+
+            Y0.append(y0_batched)
+        return Y0
+
 
     def solve(self):
         raise NotImplementedError("Solver must implement a solve method.")

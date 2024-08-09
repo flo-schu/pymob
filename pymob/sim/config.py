@@ -154,6 +154,10 @@ def string_to_list(option: Union[List, str]) -> List:
         return [i.strip() for i in option.split(" ")]
 
 
+def string_to_tuple(option: Union[List, str]) -> Tuple:
+    return tuple(string_to_list(option))
+
+
 def string_to_dict(
         option: Union[Dict[str,str|float|int|List[float|int|str]], str]
     ) -> Dict[str,str|float|int|List[float|int|str]]:
@@ -272,6 +276,11 @@ OptionListStr = Annotated[
     serialize_list_to_string
 ]
 
+OptionTupleStr = Annotated[
+    Tuple[str, ...], 
+    BeforeValidator(string_to_tuple), 
+    serialize_list_to_string
+]
 
 OptionDictStr = Annotated[
     Dict[str,str|float|int|List[float|int]], 
@@ -526,7 +535,22 @@ class Datastructure(BaseModel):
     def observed_data_variables_max(self):
         return [v.max for v in self.__pydantic_extra__.values() if v.observed]
 
+class Solverbase(BaseModel):
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
+    batch_dimension: str = "batch_id"
+    x_dim: str = "time"
+    exclude_kwargs_model: OptionTupleStr = ("t", "time", "x_in", "y", "x", "Y", "X")
+    exclude_kwargs_postprocessing: OptionTupleStr = ("t", "time", "interpolation", "results")
 
+class Jaxsolver(Solverbase):
+    diffrax_solver: str = "Dopri5"
+    rtol: float = 1e-6
+    atol: float = 1e-7
+    pcoeff: float = 0.0
+    icoeff: float = 1.0
+    dcoeff: float = 0.0
+    max_steps: int = int(1e5)
+    throw_exception: bool = True
 
 class Inference(BaseModel):
     model_config = {"validate_assignment" : True}
@@ -578,6 +602,10 @@ class Modelparameters(BaseModel):
     @property
     def free_value_dict(self) -> Dict[str,float|List[float]]:
         return {k:v.value for k, v in self.free.items()}
+    
+    @property
+    def fixed_value_dict(self) -> Dict[str,float|List[float]]:
+        return {k:v.value for k, v in self.fixed.items()}
     
     @property
     def value_dict(self) -> Dict[str,float|List[float]]:
@@ -689,7 +717,7 @@ class Config(BaseModel):
                 converters=converters,
                 interpolation=interp
             )        
-            _config.optionxform = str
+            _config.optionxform = str # type: ignore
             _cfg_file_paths = _config.read(config)
             try:
                 _cfg_fp = _cfg_file_paths[0]
@@ -704,7 +732,7 @@ class Config(BaseModel):
                 converters=converters,
                 interpolation=interp
             )
-            _config.optionxform = str
+            _config.optionxform = str # type: ignore
 
         # pass arguments to config
 
@@ -718,6 +746,8 @@ class Config(BaseModel):
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
     simulation: Simulation = Field(default=Simulation())
     data_structure: Datastructure = Field(default=Datastructure(), alias="data-structure") # type:ignore
+    solverbase: Solverbase = Field(default=Solverbase())
+    jaxsolver: Jaxsolver = Field(default=Jaxsolver(), alias="jax-solver")
     inference: Inference = Field(default=Inference())
     model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters") #type: ignore
     error_model: Errormodel = Field(default=Errormodel(), alias="error-model") # type: ignore
@@ -839,8 +869,8 @@ class Config(BaseModel):
             self.case_study.package
         )
         if package not in sys.path:
-            sys.path.append(package)
-            print(f"Appended '{package}' to PATH")
+            sys.path.insert(0, package)
+            print(f"Inserted '{package}' in PATH at index=0")
     
         case_study = os.path.join(
             self.case_study.root, 
@@ -848,8 +878,8 @@ class Config(BaseModel):
             self.case_study.name
         )
         if case_study not in sys.path:
-            sys.path.append(case_study)
-            print(f"Appended '{case_study}' to PATH")
+            sys.path.insert(0, case_study)
+            print(f"Inserted '{case_study}' in PATH at index=0")
 
         for module in self.case_study.modules:
             # remove modules of a different case study that might have been

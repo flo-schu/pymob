@@ -1,10 +1,14 @@
 from functools import partial
+from types import ModuleType
+from collections import OrderedDict
 from typing import Optional, List, Dict, Literal, Tuple, OrderedDict
 from pymob.solvers.base import mappar, SolverBase
 from frozendict import frozendict
 from dataclasses import dataclass, field
 import jax.numpy as jnp
 import jax
+import diffrax
+from diffrax.solver.base import _MetaAbstractSolver
 from diffrax import (
     diffeqsolve, 
     Dopri5, 
@@ -37,128 +41,47 @@ class JaxSolver(SolverBase):
         biased parameter estimates.
     """
 
-    extra_attributes = [
-        "batch_dimension",
-        "diffrax_solver", 
-        "rtol", 
-        "atol", 
-        "pcoeff",
-        "icoeff",
-        "dcoeff",
-        "max_steps",
-        "throw_exception",
-        "exclude_kwargs_model",
-        "exclude_kwargs_postprocessing",
-    ]
-    diffrax_solver = Dopri5
-    rtol = jnp.float32(1e-6)
-    atol = jnp.float32(1e-7)
-    pcoeff = 0.0
-    icoeff = 1.0
-    dcoeff = 0.0
-    max_steps = int(1e5)
-    throw_exception = True
+    diffrax_solver: _MetaAbstractSolver|str = field(default=Dopri5)
+    rtol: float = 1e-6
+    atol: float = 1e-7
+    pcoeff: float = 0.0
+    icoeff: float = 1.0
+    dcoeff: float = 0.0
+    max_steps: int = int(1e5)
+    throw_exception: bool = True
 
     def __post_init__(self, *args, **kwargs):
         super().__post_init__(*args, **kwargs)
+
+        # set the diffrax solver if it is a string instance
+        dfx_solver = self.diffrax_solver
+        if isinstance(dfx_solver, str):
+            diffrax_solver = getattr(diffrax, dfx_solver)
+            if not isinstance(diffrax_solver, _MetaAbstractSolver):
+                raise TypeError(
+                    f"Solver {diffrax_solver} must be {_MetaAbstractSolver}"
+                )
+            object.__setattr__(self, "diffrax_solver", diffrax_solver)
+
+
         hash(self)
-
-    @partial(jax.jit, static_argnames=["self"])
-    def preprocess_x_in(self, x_in):
-        X_in_list = []
-        for x_in_var, x_in_vals in x_in.items():
-            x_in_x = jnp.array(self.coordinates_input_vars["x_in"][self.x_dim], dtype=float)
-            x_in_y = jnp.array(x_in_vals)
-
-            # broadcast x to y and add a dummy
-            batch_coordinates = self.coordinates_input_vars["x_in"].get(self.batch_dimension, [0])
-            n_batch = len(batch_coordinates)
-            X_in_x = jnp.tile(x_in_x, n_batch).reshape((n_batch, *x_in_x.shape))
-
-            # wrap x_in y data in a dummy batch dim if the batch dim is not
-            # included in the coordinates
-            if self.batch_dimension not in self.coordinates_input_vars["x_in"]:
-                X_in_y = jnp.tile(x_in_y, n_batch)\
-                    .reshape((n_batch, *x_in_y.shape))
-            else:
-                X_in_y = jnp.array(x_in_y)
-
-            # combine xs and ys to make them ready for interpolation
-            X_in = [jnp.array(v) for v in [X_in_x, X_in_y]]
-
-            X_in_list.append(X_in)
-
-        return X_in_list
-    
-    @partial(jax.jit, static_argnames=["self"])
-    def preprocess_y_0(self, y0):
-        Y0 = []
-        for y0_var, y0_vals in y0.items():
-            y0_data = jnp.array(y0_vals, ndmin=1)
-            
-            # wrap y0 data in a dummy batch dim if the batch dim is not
-            # included in the coordinates
-            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
-            n_batch = len(batch_coordinates)
-            
-            if self.batch_dimension not in self.coordinates_input_vars["y0"]:
-                y0_batched = jnp.tile(y0_data, n_batch)\
-                    .reshape((n_batch, *y0_data.shape))
-            else:
-                if len(y0_data.shape) == 1:
-                    y0_batched = y0_data\
-                        .reshape((*y0_data.shape, 1))
-                else:
-                    y0_batched = y0_data
-                
-
-            Y0.append(y0_batched)
-        return Y0
 
     @partial(jax.jit, static_argnames=["self"])
     def solve(self, parameters: Dict, y0:Dict={}, x_in:Dict={}):
         
-
+        
         X_in = self.preprocess_x_in(x_in)
         x_in_flat = [x for xi in X_in for x in xi]
+
         Y_0 = self.preprocess_y_0(y0)
 
-        ode_args = mappar(self.model, parameters, exclude=self.exclude_kwargs_model)
-        pp_args = mappar(self.post_processing, parameters, exclude=self.exclude_kwargs_postprocessing)
-        
-        # simply broadcast the parameters along the batch dimension
-        # if there is no other index provided
-        if len(self.indices) == 0:
-            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
-            n_batch = len(batch_coordinates)
-            ode_args_indexed = [
-                jnp.tile(jnp.array(a, ndmin=1), n_batch)\
-                    .reshape((n_batch, *jnp.array(a, ndmin=1).shape))
-                for a in ode_args
-            ]
-            pp_args_indexed = [
-                jnp.tile(jnp.array(a, ndmin=1), n_batch)\
-                    .reshape((n_batch, *jnp.array(a, ndmin=1).shape))
-                for a in pp_args
-            ]
-        else:
-            idxs = list(self.indices.values())
-            n_index = len(idxs[0])
-            ode_args_indexed = [
-                jnp.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
-                for a in ode_args
-            ]
-            pp_args_indexed = [
-                jnp.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
-                for a in pp_args
-            ]
-
+        ode_args, pp_args = self.preprocess_parameters(parameters)
 
         initialized_eval_func = partial(
             self.odesolve_splitargs,
             odestates = tuple(y0.keys()),
-            n_odeargs=len(ode_args_indexed),
-            n_ppargs=len(pp_args_indexed),
+            n_odeargs=len(ode_args),
+            n_ppargs=len(pp_args),
             n_xin=len(x_in_flat)
         )
         
@@ -166,20 +89,62 @@ class JaxSolver(SolverBase):
             initialized_eval_func, 
             in_axes=(
                 *[0 for _ in range(self.n_ode_states)], 
-                *[0 for _ in range(len(ode_args_indexed))],
-                *[0 for _ in range(len(pp_args_indexed))],
+                *[0 for _ in range(len(ode_args))],
+                *[0 for _ in range(len(pp_args))],
                 *[0 for _ in range(len(x_in_flat))], 
             )
         )
-        result = loop_eval(*Y_0, *ode_args_indexed, *pp_args_indexed, *x_in_flat)
-        
+        result = loop_eval(*Y_0, *ode_args, *pp_args, *x_in_flat)
+
         # if self.batch_dimension not in self.coordinates:    
         # this is not yet stable, because it may remove extra dimensions
         # if there is a batch dimension of explicitly one specified
-        result = {v:val.squeeze() for v, val in result.items()}
+
+        # there is an extra dimension added if no batch dimension is present
+        # this is added at the 0-axis
+        # if parameters are scalars, the returned shape is 
+        for v, val in result.items():
+            if self.batch_dimension not in self.data_structure_and_dimensionality[v]:
+                # otherwise it has a dummy dimension of length 1
+                val_reduced = jnp.squeeze(val, 0)
+                s0 = 1
+            else:
+                val_reduced = val
+
+            expected_dims = tuple(self.data_structure_and_dimensionality[v].values())
+            if len(expected_dims) != len(val_reduced.shape):
+                # if the number of present dims is larger than the number of
+                # expected dims, this is because the ODE "only" returned scalar
+                # values. This is broadcasted to array of ndim=1
+                val_reduced = jnp.squeeze(val_reduced, -1)
+            else:
+                pass
+
+            # si = [
+            #     s for dim, s in self.data_structure_and_dimensionality[v].items() 
+            #     if dim != self.batch_dimension
+            # ]
+            
+            # correct_shape = (s0, *si)
+            
+            # [i for i, vs in enumerate(val.shape) if vs not in expected_dims]
+            # jnp.permute_dims(val, expected_dims)
+            # val_reduced = val.permute_dims(expected_dims)
+            result.update({v: val_reduced})
 
         return result
 
+    @partial(jax.jit, static_argnames=["self"])
+    def preprocess_parameters(self, parameters, num_backend: ModuleType = jnp):
+        return super().preprocess_parameters(parameters, num_backend)
+    
+    @partial(jax.jit, static_argnames=["self"])
+    def preprocess_x_in(self, x_in, num_backend: ModuleType = jnp):
+        return super().preprocess_x_in(x_in, num_backend)
+
+    @partial(jax.jit, static_argnames=["self"])
+    def preprocess_y_0(self, y0, num_backend: ModuleType = jnp):
+        return super().preprocess_y_0(y0, num_backend)
 
     @partial(jax.jit, static_argnames=["self"])
     def odesolve(self, y0, args, x_in):
@@ -195,7 +160,9 @@ class JaxSolver(SolverBase):
             jumps = None
 
         term = ODETerm(f)
-        solver = self.diffrax_solver()
+        solver = self.diffrax_solver() # type: ignore (diffrax_solver is ensured
+                                       # to be _MetaAbstractSolver type during 
+                                       # post_init)
         saveat = SaveAt(ts=self.x)
         t_min = self.x[0]
         t_max = self.x[-1]
@@ -224,7 +191,7 @@ class JaxSolver(SolverBase):
             throw=self.throw_exception
         )
         
-        return list(sol.ys), interp
+        return tuple(sol.ys), interp
 
     @partial(jax.jit, static_argnames=["self", "odestates", "n_odeargs", "n_ppargs", "n_xin"])
     def odesolve_splitargs(self, *args, odestates, n_odeargs, n_ppargs, n_xin):
@@ -235,7 +202,7 @@ class JaxSolver(SolverBase):
         x_in = args[n_odestates+n_odeargs+n_ppargs:n_odestates+n_odeargs+n_ppargs+n_xin]
         sol, interp = self.odesolve(y0=y0, args=odeargs, x_in=x_in)
         
-        res_dict = {v:val for v, val in zip(odestates, sol)}
+        res_dict = OrderedDict({v:val for v, val in zip(odestates, sol)})
 
         return self.post_processing(res_dict, jnp.array(self.x), interp, *ppargs)
 

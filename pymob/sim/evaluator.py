@@ -34,12 +34,30 @@ def create_dataset_from_numpy(Y, Y_names, coordinates):
 
     return dataset
 
-def create_dataset_from_dict(Y: dict, data_structure, coordinates):
+def create_dataset_from_dict(Y: dict, data_structure, coordinates, var_dim_mapper):
     arrays = {}
     for k, v in Y.items():
         dims = data_structure.get(k, tuple(coordinates.keys()))
         coords = {d: coordinates[d] for d in dims}
-        da = xr.DataArray(v, coords=coords, dims=dims)
+        dim_order = var_dim_mapper.get(k) # use get which returns None if there is no mapping
+
+        v_permuted_dims = v.transpose(dim_order)
+        try:
+            da = xr.DataArray(v_permuted_dims, coords=coords, dims=dims)
+        except ValueError as err:
+            raise ValueError(
+                f"{err} for the data variable '{k}'. This can have multiple causes: "
+                f"1) Have you specified a batch dimensions? If you have a "
+                f"multi-replicate design, this is typically 'ID', or 'replicate_id' "
+                f"or similar. You can set the batch dimension, by setting the "
+                f"option config.<solver>.batch_dimension = '...' where <solver> is "
+                f"replaced by the solver you are using (e.g. jaxsolver, solverbase) "
+                f"2) The dimensional order of the data variables differs from the "
+                f"Solver dimensional order. You can try specifying "
+                f"evaluator dimensions for '{k}' in order to redorder the dimensions: "
+                f"sim.config.data_structure.{k} = DataVariable(..., dimensions_evaluator=[...]). " 
+                f"Hint: The solvers usually put the batch dimension (e.g. 'id') first."
+            )
         arrays.update({k: da})
 
     return xr.Dataset(arrays)
@@ -64,12 +82,14 @@ class Evaluator:
             n_ode_states: int,
             var_dim_mapper: Dict,
             data_structure: Dict,
+            data_structure_and_dimensionality: Dict,
             coordinates: Dict,
             coordinates_input_vars: Dict,
             data_variables: Sequence[str],
             stochastic: bool,
             indices: Dict = {},
             post_processing: Optional[Callable] = None,
+            solver_options: Dict = {},
             **kwargs
         ) -> None:
         """_summary_
@@ -114,10 +134,12 @@ class Evaluator:
         self.n_ode_states = n_ode_states
         self.var_dim_mapper = var_dim_mapper
         self.data_structure = data_structure
+        self.data_structure_and_dimensionality = data_structure_and_dimensionality
         self.data_variables = data_variables
         self.coordinates = coordinates
         self.is_stochastic = stochastic
         self.indices = indices
+        self.solver_options = solver_options
         
         # can be initialized
         if post_processing is None:
@@ -149,23 +171,39 @@ class Evaluator:
                     for k, v in coordinates_input_vars.items()
                 })
 
+                data_structure_dims = frozendict({
+                    dv: frozendict({d: lendim for d, lendim in dimdict.items()}) 
+                    for dv, dimdict 
+                    in self.data_structure_and_dimensionality.items()
+                })
+
                 frozen_coordinates = frozendict({
                     k: tuple(v) for k, v in self.coordinates.items()
                 })
 
+                solver_extra_options = frozendict({
+                    k:v for k, v in kwargs.items() 
+                    if k in solver.__match_args__
+                })
+
+                solver_options.update(solver_extra_options)
+                
+
                 self._solver = solver(
                     model=self.model,
                     post_processing=self.post_processing,
-                    solver_kwargs=frozendict({k:v for k, v in kwargs.items() if k in solver.extra_attributes}),
                     
                     coordinates=frozen_coordinates,
                     coordinates_input_vars=frozen_coordinates_input_vars,
                     dimensions=tuple(self.dimensions),
                     data_variables=tuple(self.data_variables),
-                    
+                    data_structure_and_dimensionality=data_structure_dims,
+
                     indices=frozendict({k: tuple(v.values) for k, v in self.indices.items()}),
                     n_ode_states=self.n_ode_states,
                     is_stochastic=self.is_stochastic,
+                    **solver_options
+
                 )
             else:
                 raise NotImplementedError(
@@ -265,13 +303,14 @@ class Evaluator:
     @property
     def results(self):
         if isinstance(self.Y, dict):
-            return create_dataset_from_dict(
+            dataset = create_dataset_from_dict(
                 Y=self.Y, 
                 coordinates=self.coordinates,
                 data_structure=self.data_structure,
+                var_dim_mapper=self.var_dim_mapper
             )
         elif isinstance(self.Y, np.ndarray):
-            return create_dataset_from_numpy(
+            dataset = create_dataset_from_numpy(
                 Y=self.Y,
                 Y_names=self.data_variables,
                 coordinates=self.coordinates,
@@ -280,6 +319,13 @@ class Evaluator:
             raise NotImplementedError(
                 "Results returned by the solver must be of type Dict or np.ndarray."
             )
+        
+        # assign the coordinates from the indices to the dataset if available
+        dataset = dataset.assign_coords({
+            f"{idx}_index": data_array 
+            for idx, data_array in self.indices.items()
+        })
+        return dataset
     
     def spawn(self):
         return deepcopy(self)

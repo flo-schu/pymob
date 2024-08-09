@@ -12,6 +12,7 @@ import multiprocessing as mp
 from typing import Callable, Dict
 from multiprocessing.pool import ThreadPool, Pool
 import re
+from collections import OrderedDict
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -20,6 +21,7 @@ import dpath as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from toopy import param, benchmark
 
+import pymob
 from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
 from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
@@ -297,8 +299,8 @@ class SimulationBase:
             self.config.case_study.package
         )
         if package not in sys.path:
-            sys.path.append(package)
-            print(f"Appended '{package}' to PATH")
+            sys.path.insert(0, package)
+            print(f"Inserted '{package}' into PATH at index=0")
     
         case_study = os.path.join(
             self.config.case_study.root, 
@@ -306,8 +308,8 @@ class SimulationBase:
             self.config.case_study.name
         )
         if case_study not in sys.path:
-            sys.path.append(case_study)
-            print(f"Appended '{case_study}' to PATH")
+            sys.path.insert(0, case_study)
+            print(f"Inserted '{case_study}' into PATH at index=0")
 
         for module in MODULES:
             try:
@@ -401,12 +403,12 @@ class SimulationBase:
         return n_ode_states
         
     @staticmethod
-    def validate_model_input(model_input) -> Dict[str, ArrayLike]:
+    def validate_model_input(model_input) -> Dict[str, OrderedDict]:
         if isinstance(model_input, xr.Dataset):
             model_input = {
                 k: dv.values for k, dv in model_input.data_vars.items()
             }
-            return model_input # type: ignore
+            return OrderedDict(model_input) # type: ignore
         
         raise NotImplementedError(
             f"Model input of type {type(model_input)} "
@@ -447,8 +449,6 @@ class SimulationBase:
         """Construct the dispatcher and pass everything to the evaluator that is 
         static."""
 
-        self.n_ode_states = self.infer_ode_states()
-
         if self.model is None:
             if self.config.simulation.model:
                 if not hasattr(self, "_mod"):
@@ -464,11 +464,24 @@ class SimulationBase:
         else:
             model = self.model
 
+        self.n_ode_states = self.infer_ode_states()
+
         if self.solver is None:
             if self.config.simulation.solver:
                 if not hasattr(self, "_mod"):
                     self.load_modules()
-                solver = getattr(self._mod, self.config.simulation.solver)
+                try:
+                    solver = getattr(self._mod, self.config.simulation.solver)
+                except AttributeError:
+                    try:
+                        solver = getattr(pymob.solvers, self.config.simulation.solver)
+                    except AttributeError:
+                        raise AttributeError(
+                            f"The solver {self.config.simulation.solver} "
+                            f"could not be found in {self._mod} or {pymob.solvers} "
+                            f"Define your own solver or callable or select an "
+                            "implemented solver (e.g. JaxSolver)."
+                        )
                 self.solver = solver
             else: 
                 raise ValueError(
@@ -487,7 +500,17 @@ class SimulationBase:
 
         stochastic = self.config.simulation.modeltype
             
+        solver_options = {}
+        if isinstance(solver, type):
+            solver_classes = [solver] + [c for c in solver.__mro__ if c not in [solver, object]]
 
+            for sc in solver_classes:
+                try:
+                    solver_options = getattr(self.config, sc.__name__.lower())
+                    solver_options = solver_options.model_dump()
+                    break
+                except AttributeError:
+                    continue
 
         self.evaluator = Evaluator(
             model=model,
@@ -497,6 +520,7 @@ class SimulationBase:
             n_ode_states=self.config.simulation.n_ode_states,
             var_dim_mapper=self.var_dim_mapper,
             data_structure=self.data_structure,
+            data_structure_and_dimensionality=self.data_structure_and_dimensionality,
             data_variables=self.data_variables,
             coordinates=self.coordinates,
             coordinates_input_vars=self.coordinates_input_vars,
@@ -504,12 +528,13 @@ class SimulationBase:
             stochastic=True if stochastic == "stochastic" else False,
             indices=self.indices,
             post_processing=post_processing,
+            solver_options=solver_options,
             **evaluator_kwargs
         )
 
         # return evaluator
 
-    def dispatch(self, theta):
+    def dispatch(self, theta, y0=None, x_in=None):
         """Dispatch an evaluator, which will compute the model at parameters
         (theta). Evaluators are advantageous, because they are easier serialized
         than the whole simulation object. Comparison can then happen back in 
@@ -525,14 +550,14 @@ class SimulationBase:
             y0 = self.validate_model_input(model_parameters["y0"])
             model_parameters["y0"] = y0
         else:
-            model_parameters["y0"] = {}
+            model_parameters["y0"] = OrderedDict({})
         
         if "x_in" in model_parameters:
             x_in = self.subset_by_batch_dimension(model_parameters["x_in"])
             x_in = self.validate_model_input(model_parameters["x_in"])
             model_parameters["x_in"] = x_in
         else:
-            model_parameters["x_in"] = {}
+            model_parameters["x_in"] = OrderedDict({})
         
         evaluator = self.evaluator.spawn()
         evaluator.parameters = model_parameters
@@ -909,6 +934,7 @@ class SimulationBase:
                 Y=results, 
                 coordinates=self.coordinates,
                 data_structure=self.data_structure,
+                var_dim_mapper=self.var_dim_mapper
             )
         elif isinstance(results, np.ndarray):
             return create_dataset_from_numpy(
@@ -1303,6 +1329,18 @@ class SimulationBase:
     @property
     def data_structure(self):
         return self.config.data_structure.dimdict
+
+    @property
+    def data_structure_and_dimensionality(self):
+        data_structure = {}
+        for dv, dv_dims in self.config.data_structure.dimdict.items():
+            dim_sizes = {}
+            for dim in dv_dims:
+                coord = self.coordinates[dim]
+                dim_sizes.update({dim: len(coord)})
+            data_structure.update({dv: dim_sizes})
+
+        return data_structure
 
     @property
     def dimension_sizes(self):
