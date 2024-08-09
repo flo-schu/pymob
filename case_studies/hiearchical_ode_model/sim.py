@@ -7,6 +7,11 @@ from pymob import SimulationBase, Config
 from pymob.solvers.diffrax import JaxSolver
 from pymob.sim.config import DataVariable
 
+import jax.numpy as jnp
+import numpyro
+from numpyro import distributions as dist
+EPS = 1e-8
+
 # load the basic TKTD RNA Pulse case study and use as a parent class for the
 # hierarchical model
 config = Config()
@@ -29,12 +34,14 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
         
     def use_numpyro_backend(self):
         # configure the Numpyro backend
-        self.set_inferer("numpyro")
         self.config.inference_numpyro.user_defined_preprocessing = None
-        self.inferer.preprocessing = partial(         # type: ignore
-            sim.inferer.preprocessing,                # type: ignore
-            ci_max=self.config.model_parameters.fixed_value_dict["ci_max"] 
-        ) 
+        self.config.inference_numpyro.user_defined_probability_model = None
+        
+        self.set_inferer("numpyro")
+        self.inferer.inference_model = partial( 
+            self.inferer.inference_model, 
+            user_error_model=error_model
+        )
 
         # set the fixed parameters
         self.model_parameters["parameters"] = self.config.model_parameters\
@@ -228,6 +235,50 @@ class NomixHierarchicalSimulation(SingleSubstanceSim2):
         }
 
 
+def error_model(theta, simulation_results, observations, masks):
+    # indexing
+    substance_idx = observations["substance_index"]
+    sigma_cint_indexed = theta["sigma_cint"][substance_idx]
+    sigma_nrf2_indexed = theta["sigma_nrf2"][substance_idx]
+
+    sigma_cint_ix_bc = jnp.broadcast_to(sigma_cint_indexed.reshape((-1, 1)), observations["cint"].shape)
+    sigma_nrf2_ix_bc = jnp.broadcast_to(sigma_nrf2_indexed.reshape((-1, 1)), observations["nrf2"].shape)
+
+    # error model
+    S = jnp.clip(simulation_results["survival"], EPS, 1 - EPS) 
+    S_cond = S[:, 1:] / S[:, :-1]
+    S_cond_ = jnp.column_stack([jnp.ones_like(substance_idx), S_cond])
+
+    n_surv = observations["survivors_before_t"]
+    S_mask = masks["survival"]
+    obs_survival = observations["survival"]
+    
+    # calculate likelihoods
+    numpyro.sample("cint_obs", dist.LogNormal(
+            loc=jnp.log(simulation_results["cint"] + EPS),  # type: ignore
+            scale=sigma_cint_ix_bc  # type: ignore
+        ).mask(masks["cint"]),
+        obs=observations["cint"]
+    )
+    
+    numpyro.sample("nrf2_obs", dist.LogNormal(
+            loc=jnp.log(simulation_results["nrf2"]),  # type: ignore
+            scale=sigma_nrf2_ix_bc  # type: ignore
+        ).mask(masks["nrf2"]), 
+        obs=observations["nrf2"]
+    )    
+    
+    numpyro.sample(
+        "survival_obs", dist.Binomial(
+            probs=S_cond_, 
+            total_count=n_surv
+        ).mask(S_mask), 
+        obs=obs_survival
+    )
+
+
+
+
 if __name__ == "__main__":
     cfg = "case_studies/hierarchical_ode_model/scenarios/testing/settings.cfg"
     # cfg = "case_studies/tktd_rna_pulse/scenarios/rna_pulse_3_6c_substance_specific/settings.cfg"
@@ -252,19 +303,24 @@ if __name__ == "__main__":
     # generate artificial data
     sim.dispatch_constructor()
     res = sim.generate_artificial_data(nan_frac=0.0)
+    res_ = sim.lethality_to_conditional_survival(res)
+
     sim.plot(res)
 
     # perform inference
+    sim.config.inference.extra_vars = []
     sim.use_numpyro_backend()
     sim.config.inference_numpyro.kernel = "map"
     sim.config.inference_numpyro.draws = 1000
     sim.inferer.run()
 
+    # next steps:
+    # 1. add substance index to obsertvation like in dict -> dataset
+    # 2. convert lethality to conditional probability survival notation
+    # 3. Try numpyro plate notation and when batch dimension is returned
+    #    Or extend dims if no batch is present
 
 
-    from tktd_rna_pulse import mod as trpmod
-
-    trpmod.tktd_rna_3_6c
 
     # define a hierarchical error structure
     # check out murefi for this
