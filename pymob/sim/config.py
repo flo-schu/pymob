@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import ast
 from dataclasses import dataclass
 from glob import glob
 import configparser
@@ -9,12 +10,13 @@ import importlib
 import logging
 import json
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Literal, Callable, Tuple, TypedDict
+from typing import List, Optional, Union, Dict, Literal, Callable, Tuple, TypedDict, Any
 from typing_extensions import Annotated
 from types import ModuleType
 import tempfile
 
 import numpy as np
+import numpy.typing as npt
 import xarray as xr
 from numpy.typing import ArrayLike
 
@@ -26,28 +28,28 @@ from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 
 from pymob.utils.store_file import scenario_file, converters
-
+from pymob.sim.parameters import Param, FloatArray
 # this loads at the import of the module
 default_path = sys.path.copy()
 
-class FloatParam(BaseModel):
-    name: Optional[str] = None
-    value: float = 0.0
-    min: Optional[float] = None
-    max: Optional[float] = None
-    step: Optional[float] = None
-    prior: Optional[str] = None
-    free: bool = True
+# class FloatParam(BaseModel):
+#     name: Optional[str] = None
+#     value: float = 0.0
+#     min: Optional[float] = None
+#     max: Optional[float] = None
+#     step: Optional[float] = None
+#     prior: Optional[str] = None
+#     free: bool = True
 
 
-class ArrayParam(BaseModel):
-    name: Optional[str] = None
-    value: List[float] = [0.0]
-    min: Optional[List[float]] = None
-    max: Optional[List[float]] = None
-    step: Optional[List[float]] = None
-    prior: Optional[str] = None
-    free: bool = True
+# class ArrayParam(BaseModel):
+#     name: Optional[str] = None
+#     value: List[float] = [0.0]
+#     min: Optional[List[float]] = None
+#     max: Optional[List[float]] = None
+#     step: Optional[List[float]] = None
+#     prior: Optional[str] = None
+#     free: bool = True
 
 class ModelParameterDict(TypedDict):
     parameters: Dict[str, float|str|int]
@@ -87,6 +89,10 @@ class DataVariable(BaseModel):
     None
 
     """
+    model_config = ConfigDict(
+        validate_assignment=True,
+        extra="forbid"
+    )
     dimensions: List[str]
     min: float = np.nan
     max: float = np.nan
@@ -174,16 +180,18 @@ def string_to_dict(
             parsed = False
             if not parsed:
                 try:
-                    parsed_value = TypeAdapter(List[float]).validate_json(v)
+                    parsed_value = TypeAdapter(float).validate_json(v)
                     parsed = True
                 except ValidationError:
                     pass
 
             if not parsed:
                 try:
-                    parsed_value = TypeAdapter(float).validate_json(v)
+                    # v_ = np.array(ast.literal_eval(v))
+                    # _cfg = ConfigDict(arbitrary_types_allowed=True)
+                    parsed_value = TypeAdapter(FloatArray).validate_json(v)
                     parsed = True
-                except ValidationError:
+                except ValueError:
                     pass
 
             if not parsed and  v[0]=="[" and v[-1]=="]" in v:
@@ -205,17 +213,13 @@ def string_to_dict(
         return retdict
 
 
-def string_to_param(option:str|FloatParam|ArrayParam) -> FloatParam|ArrayParam:
-    if isinstance(option, FloatParam|ArrayParam):
+def string_to_param(option:str|Param) -> Param:
+    if isinstance(option, Param):
         return option
     else:
         param_dict = string_to_dict(option)
-        if isinstance(param_dict.get("value"), float):
-            return FloatParam.model_validate(param_dict, strict=False)
+        return Param.model_validate(param_dict, strict=False)
         
-        else:
-            return ArrayParam.model_validate(param_dict, strict=False)
-    
 
 def string_to_datavar(option:str|DataVariable) -> DataVariable:
     if isinstance(option, DataVariable):
@@ -224,18 +228,25 @@ def string_to_datavar(option:str|DataVariable) -> DataVariable:
         param_dict = string_to_dict(option)
         return DataVariable.model_validate(param_dict, strict=False)
         
-    
 
 def dict_to_string(dct: Dict):
-    return " ".join([f"{k}={v}".replace(" ", "") for k, v in dct.items()]).replace("'", "")
+    string_items = []
+    for k, v in dct.items():
+        if isinstance(v, np.ndarray):
+            v = v.tolist()
+
+        expr = f"{k}={v}".replace(" ", "")
+        string_items.append(expr)
+
+    return " ".join(string_items)
 
 
 def list_to_string(lst: List):
     return " ".join([str(l) for l in lst])
 
 
-def param_to_string(prm: ArrayParam|FloatParam):
-    return dict_to_string(prm.model_dump(exclude_none=True))
+def param_to_string(prm: Param):
+    return dict_to_string(prm.model_dump(exclude_none=True, mode="json"))
 
 def datavar_to_string(prm: DataVariable):
     return dict_to_string(prm.model_dump(exclude_none=True))
@@ -295,17 +306,17 @@ OptionDataVariable = Annotated[
 ]
 
 OptionParam = Annotated[
-    FloatParam|ArrayParam, 
+    Param, 
     BeforeValidator(string_to_param), 
     serialize_param_to_string
 ]
 
 
-OptionListFloat = Annotated[
-    List[float], 
-    BeforeValidator(string_to_list), 
-    serialize_list_to_string
-]
+# OptionListFloat = Annotated[
+#     List[float], 
+#     BeforeValidator(string_to_list), 
+#     serialize_list_to_string
+# ]
 
         
 class Casestudy(BaseModel):
@@ -536,7 +547,10 @@ class Datastructure(BaseModel):
         return [v.max for v in self.__pydantic_extra__.values() if v.observed]
 
 class Solverbase(BaseModel):
-    model_config = ConfigDict(validate_assignment=True, extra="ignore")
+    model_config = ConfigDict(
+        validate_assignment=True, 
+        extra="forbid"
+    )
     batch_dimension: str = "batch_id"
     x_dim: str = "time"
     exclude_kwargs_model: OptionTupleStr = ("t", "time", "x_in", "y", "x", "Y", "X")

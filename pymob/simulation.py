@@ -27,7 +27,7 @@ from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
-from pymob.sim.config import Config, FloatParam, ArrayParam, ParameterDict, DataVariable
+from pymob.sim.config import Config, ParameterDict, DataVariable, Param
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -270,7 +270,7 @@ class SimulationBase:
         self._coordinates = value
 
     @property
-    def free_model_parameters(self) -> List[FloatParam|ArrayParam]:
+    def free_model_parameters(self) -> List[Param]:
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
         free_params = self.config.model_parameters.free.copy()
@@ -279,11 +279,11 @@ class SimulationBase:
         return list(free_params.values())
 
     @property
-    def fixed_model_parameters(self) -> Dict[str, FloatParam|ArrayParam]:
+    def fixed_model_parameters(self) -> Dict[str, Param]:
         return self.config.model_parameters.fixed
 
     @property
-    def all_model_parameters(self) -> Dict[str, FloatParam|ArrayParam]:
+    def all_model_parameters(self) -> Dict[str, Param]:
         return self.config.model_parameters.all
 
     def __repr__(self) -> str:

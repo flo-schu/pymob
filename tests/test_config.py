@@ -1,10 +1,13 @@
 import pytest
 import tempfile
 from pymob.simulation import SimulationBase, Config
-from pymob.sim.config import ArrayParam, FloatParam, DataVariable, Datastructure
+from pymob.sim.config import DataVariable, Datastructure
+from pymob.sim.parameters import Param, Prior
 from pymob.utils.store_file import import_package
 from pymob.solvers.scipy import solve_ivp_1d
+from sympy import Function
 import xarray as xr
+import numpy as np
 import os
 
 scenario = "case_studies/test_case_study/scenarios/test_scenario_scripting_api"
@@ -124,10 +127,10 @@ def test_standalone_casestudy():
 def test_parameter_parsing():
     config = Config()
 
-    io = "value=1.0 min=0.0 max=3.0 free=True"
+    io = "value=1.0 min=0.0 max=3.0 hyper=False free=True"
 
     # test scripting input
-    test = FloatParam(value=1.0, min=0.0, max=3.0)
+    test = Param(value=1.0, min=0.0, max=3.0)
     config.model_parameters.test = test
 
     # test dict input
@@ -146,10 +149,10 @@ def test_parameter_parsing():
 def test_parameter_array():
     config = Config()
 
-    io = "value=[1.0,2.0,3.0] free=True"
+    io = "value=[1.0,2.0,3.0] hyper=False free=True"
 
     # test scripting input
-    test = ArrayParam(value=[1.0,2.0,3.0])
+    test = Param(value=np.array([1.0,2.0,3.0]))
     config.model_parameters.test = test
 
     # test dict input
@@ -164,11 +167,40 @@ def test_parameter_array():
     serialized = config.model_parameters.model_dump(mode="json")
     assert serialized == {"test": io}
 
+def test_prior():
+    config = Config()
+
+    io = "lognorm(scale=[1.0,1.0,1.0],s=1.5,dims=('hello',))"
+
+    test_prior = Prior(
+        distribution="lognorm", 
+        parameters={"scale": np.array([1.0, 1.0, 1.0]), "s": 1.5},
+        dims=("hello",)
+    )
+
+    # test scripting input
+    test_param = Param(value=np.array([1.0,2.0,3.0]))
+    test_param.prior = test_prior
+
+    # test dict input
+    test_param.prior = test_prior.model_dump(exclude_none=True)
+    assert test_param.prior == test_prior # type: ignore
+
+    # test config file input
+    test_param.prior = io
+    assert test_param.prior == test_prior  # type: ignore
+    
+    # test serialization
+    config.model_parameters.test = test_param
+    serialized = test_prior.model_dump(mode="json")
+    config.model_parameters.model_dump(mode="json")
+    assert serialized == io
+
 def test_parameter_array_with_prior():
     config = Config()
 
     io = "value=[1.0,2.0,3.0] prior=lognorm(scale=[1.0,1.0,1.0],s=1) free=True"
-    test = ArrayParam(value=[1.0,2.0,3.0], prior="lognorm(scale=[1.0,1.0,1.0],s=1)")
+    test = Param(value=np.array([1.0,2.0,3.0]), prior="lognorm(scale=[1.0,1.0,1.0],s=1)")
 
     # test config file input
     config.model_parameters.test = io
@@ -230,3 +262,7 @@ def test_data_variables():
 
 if __name__ == "__main__":
     pass
+    test_parameter_parsing()
+    test_parameter_array()
+    test_prior()
+    test_parameter_array_with_prior()
