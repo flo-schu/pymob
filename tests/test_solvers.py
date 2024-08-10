@@ -3,7 +3,7 @@ import time
 import numpy as np
 import xarray as xr
 
-from pymob.sim.config import FloatParam, DataVariable
+from pymob.sim.config import Param, DataVariable
 from pymob.solvers import JaxSolver, SolverBase
 from pymob.solvers.base import rect_interpolation
 from tests.fixtures import (
@@ -17,8 +17,8 @@ from pymob import SimulationBase
 
 def test_solver_preprocessing():
     sim = init_simulation_casestudy_api()
-    sim.config.model_parameters.gamma = FloatParam(value=0.3)
-    sim.config.model_parameters.delta = FloatParam(value=0.01)
+    sim.config.model_parameters.gamma = Param(value=0.3)
+    sim.config.model_parameters.delta = Param(value=0.01)
     
     # test SolverBase
     solver = setup_solver(sim, solver=SolverBase)

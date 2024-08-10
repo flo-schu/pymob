@@ -614,15 +614,15 @@ class Modelparameters(BaseModel):
         return len(self.free)
     
     @property
-    def free_value_dict(self) -> Dict[str,float|List[float]]:
+    def free_value_dict(self) -> Dict[str,float|FloatArray]:
         return {k:v.value for k, v in self.free.items()}
     
     @property
-    def fixed_value_dict(self) -> Dict[str,float|List[float]]:
+    def fixed_value_dict(self) -> Dict[str,float|FloatArray]:
         return {k:v.value for k, v in self.fixed.items()}
     
     @property
-    def value_dict(self) -> Dict[str,float|List[float]]:
+    def value_dict(self) -> Dict[str,float|FloatArray]:
         return {k:v.value for k, v in self.all.items()}
     
     def remove(self, key) -> None:

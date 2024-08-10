@@ -199,8 +199,8 @@ def test_prior():
 def test_parameter_array_with_prior():
     config = Config()
 
-    io = "value=[1.0,2.0,3.0] prior=lognorm(scale=[1.0,1.0,1.0],s=1) free=True"
-    test = Param(value=np.array([1.0,2.0,3.0]), prior="lognorm(scale=[1.0,1.0,1.0],s=1)")
+    io = "value=[1.0,2.0,3.0] prior=lognorm(scale=[1.0,1.0,1.0],s=1.0,dims=()) hyper=False free=True"
+    test = Param(value=np.array([1.0,2.0,3.0]), prior="lognorm(scale=[1.0,1.0,1.0],s=1,dims=())") # type:ignore
 
     # test config file input
     config.model_parameters.test = io
@@ -222,8 +222,8 @@ def test_parameter_array_with_prior():
 def test_model_parameters():
     config = Config()
 
-    a = FloatParam(value=1)
-    b = FloatParam(value=5, free=False)
+    a = Param(value=1)
+    b = Param(value=5, free=False)
 
     config.model_parameters.a = a
     config.model_parameters.b = b
@@ -262,7 +262,3 @@ def test_data_variables():
 
 if __name__ == "__main__":
     pass
-    test_parameter_parsing()
-    test_parameter_array()
-    test_prior()
-    test_parameter_array_with_prior()
