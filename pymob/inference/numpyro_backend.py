@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 import sympy
 
 from pymob.simulation import SimulationBase
-from pymob.sim.parameters import Expression
+from pymob.sim.parameters import Expression, NumericArray
 from pymob.inference.base import InferenceBackend
 from pymob.inference.analysis import (
     cluster_chains, rename_extra_dims, plot_posterior_samples,
@@ -792,7 +792,7 @@ class NumpyroBackend(InferenceBackend):
 
     def check_log_likelihood(
         self, 
-        theta: Optional[Dict[str, float|List[float]]]=None,
+        theta: Optional[Dict[str, float|NumericArray]]=None,
     ):
         log_density = self.create_log_likelihood(seed=self.config.simulation.seed)
         
@@ -827,7 +827,7 @@ class NumpyroBackend(InferenceBackend):
 
     def check_gradients(
         self, 
-        theta: Optional[Dict[str, float|List[float]]]=None,
+        theta: Optional[Dict[str, float|NumericArray]]=None,
     ):
         log_density = self.create_log_likelihood(seed=self.config.simulation.seed)
         grad_func = partial(log_density, return_type="joint-log-likelihood", check=False)
