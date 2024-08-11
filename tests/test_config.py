@@ -261,5 +261,4 @@ def test_data_variables():
 
 
 if __name__ == "__main__":
-    test_prior()
-    test_parameter_array_with_prior()
+    pass

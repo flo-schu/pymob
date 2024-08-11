@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from pymob.solvers.diffrax import JaxSolver
 from pymob.inference.numpyro_backend import NumpyroBackend, distribution_map
 
-from fixtures import init_simulation_casestudy_api, create_composite_priors
+from tests.fixtures import init_simulation_casestudy_api, create_composite_priors
 
 
 def test_prior_parsing():
@@ -142,6 +142,7 @@ def test_convergence_svi_kernel():
     for data_var, ax in zip(sim.config.data_structure.data_variables, axes):
         ax = sim.inferer.plot_posterior_predictions( # type: ignore
             data_variable=data_var, 
+            prediction_data_variable=data_var,
             x_dim="time",
             ax=ax
         )
@@ -228,6 +229,7 @@ def test_convergence_sa_kernel():
     for data_var in sim.config.data_structure.data_variables:
         ax = sim.inferer.plot_posterior_predictions( # type: ignore
             data_variable=data_var, 
+            prediction_data_variable=data_var,
             x_dim="time"
         )
 
@@ -255,5 +257,3 @@ if __name__ == "__main__":
     import os
     sys.path.append(os.getcwd())
     # test_user_defined_probability_model()
-    test_prior_parsing()
-    test_convergence_nuts_kernel_jaxsolver()

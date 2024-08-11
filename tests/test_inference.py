@@ -15,6 +15,7 @@ def test_inference_evaluation():
     for data_var in sim.config.data_structure.data_variables:
         ax = sim.inferer.plot_predictions(
             data_variable=data_var, 
+            prediction_data_variable=data_var,
             x_dim="time"
         )
         fig = ax.get_figure()

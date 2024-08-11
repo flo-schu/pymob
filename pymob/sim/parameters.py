@@ -11,9 +11,9 @@ from pydantic import (
 from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 from numpydantic import NDArray, Shape
-from nptyping import Float64
+from nptyping import Float64, Int64
 
-FloatArray = NDArray[Shape["*, ..."], (Float64,)] # type:ignore
+NumericArray = NDArray[Shape["*, ..."], (Float64,Int64)] # type:ignore
 
 class Expression:
     """Random variables are context dependent. They may be dependent on other
@@ -162,11 +162,11 @@ class Param(BaseModel):
         extra="forbid"
     )
     name: Optional[str] = None
-    value: float|FloatArray = 0.0
+    value: float|NumericArray = 0.0
     prior: Optional[OptionRV] = None
-    min: Optional[float|FloatArray] = None
-    max: Optional[float|FloatArray] = None
-    step: Optional[float|FloatArray] = None
+    min: Optional[float|NumericArray] = None
+    max: Optional[float|NumericArray] = None
+    step: Optional[float|NumericArray] = None
     hyper: bool = False
     free: bool = True
 

@@ -28,7 +28,7 @@ from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 
 from pymob.utils.store_file import scenario_file, converters
-from pymob.sim.parameters import Param, FloatArray, OptionRV
+from pymob.sim.parameters import Param, NumericArray, OptionRV
 # this loads at the import of the module
 default_path = sys.path.copy()
 
@@ -189,7 +189,7 @@ def string_to_dict(
                 try:
                     # v_ = np.array(ast.literal_eval(v))
                     # _cfg = ConfigDict(arbitrary_types_allowed=True)
-                    parsed_value = TypeAdapter(FloatArray).validate_json(v)
+                    parsed_value = TypeAdapter(NumericArray).validate_json(v)
                     parsed = True
                 except ValueError:
                     pass
@@ -614,15 +614,15 @@ class Modelparameters(BaseModel):
         return len(self.free)
     
     @property
-    def free_value_dict(self) -> Dict[str,float|FloatArray]:
+    def free_value_dict(self) -> Dict[str,float|NumericArray]:
         return {k:v.value for k, v in self.free.items()}
     
     @property
-    def fixed_value_dict(self) -> Dict[str,float|FloatArray]:
+    def fixed_value_dict(self) -> Dict[str,float|NumericArray]:
         return {k:v.value for k, v in self.fixed.items()}
     
     @property
-    def value_dict(self) -> Dict[str,float|FloatArray]:
+    def value_dict(self) -> Dict[str,float|NumericArray]:
         return {k:v.value for k, v in self.all.items()}
     
     def remove(self, key) -> None:
