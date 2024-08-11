@@ -10,10 +10,7 @@ from tests.fixtures import init_simulation_casestudy_api, create_composite_prior
 
 def test_prior_parsing():
     params = create_composite_priors()
-    parsed_params = NumpyroBackend.parse_model_priors(
-        parameters=params.free, 
-        distribution_map=distribution_map
-    )
+    parsed_params = NumpyroBackend.parse_model_priors(parameters=params.free)
     parsed_params
 
 def test_diffrax_exception():
@@ -257,3 +254,5 @@ if __name__ == "__main__":
     import os
     sys.path.append(os.getcwd())
     # test_user_defined_probability_model()
+    # test_prior_parsing()
+    # test_convergence_nuts_kernel_jaxsolver()

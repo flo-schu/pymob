@@ -32,6 +32,8 @@ class Expression:
         else:
             self.expression = ast.Expression(expression)
 
+        finder = UndefinedNameFinder()
+        self.undefined_args = finder.find_undefined_names(self.expression)
         self.context = context
 
     def __repr__(self):
@@ -51,8 +53,31 @@ class Expression:
                 f"{err}. Have you forgotten to pass a context?"
             )
 
+class UndefinedNameFinder(ast.NodeVisitor):
+    # powered by ChatGPT
+    def __init__(self):
+        self.defined_names = set()
+        self.undefined_names = set()
 
+    def visit_FunctionDef(self, node):
+        # Function arguments are considered defined within the function
+        for arg in node.args.args:
+            self.defined_names.add(arg.arg)
+        self.generic_visit(node)
 
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Store):
+            # If the name is being assigned to, add it to the defined names
+            self.defined_names.add(node.id)
+        elif isinstance(node.ctx, ast.Load):
+            # If the name is being used, check if it's defined
+            if node.id not in self.defined_names:
+                self.undefined_names.add(node.id)
+
+    def find_undefined_names(self, expr):
+        tree = ast.parse(expr, mode='exec')
+        self.visit(tree)
+        return self.undefined_names
 
 
 class RandomVariable(BaseModel):

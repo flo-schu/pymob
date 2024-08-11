@@ -17,7 +17,7 @@ import sympy
 
 from pymob.simulation import SimulationBase
 from pymob.sim.parameters import Expression, NumericArray
-from pymob.inference.base import InferenceBackend
+from pymob.inference.base import InferenceBackend, Distribution
 from pymob.inference.analysis import (
     cluster_chains, rename_extra_dims, plot_posterior_samples,
     add_cluster_coordinates
@@ -98,8 +98,12 @@ class ErrorModelFunction(Protocol):
     ) -> Any:
         ...
 
+class NumpyroDistribution(Distribution):
+    distribution_map: Dict[str,Tuple[dist.Distribution, Dict[str,str]]] = distribution_map
+
 
 class NumpyroBackend(InferenceBackend):
+    _distribution = NumpyroDistribution
     def __init__(
         self, 
         simulation: SimulationBase
@@ -125,6 +129,10 @@ class NumpyroBackend(InferenceBackend):
                 self.simulation._prob, 
                 self.user_defined_probability_model
             )
+
+        # combine the model
+        self.inference_model = self.parse_probabilistic_model()
+
 
     @property
     def distribution_map(self):
@@ -242,48 +250,6 @@ class NumpyroBackend(InferenceBackend):
         
         return observations, masks
     
-    @classmethod
-    def parse_model_priors(cls, parameters, distribution_map):
-        priors = {}
-        for key, par in parameters.items():
-            if par.prior is None:
-                raise AttributeError(
-                    f"No prior was defined for {par}. E.g.: "+
-                    f"sim.config.model_parameters.{par} = lognorm(loc=1, scale=2)"
-                )
-            name, distribution, params = cls.parse_random_variable(
-                parname=key, 
-                random_variable=par.prior, 
-                distribution_map=distribution_map
-            )
-            # parameterized_dist = distribution(**params)
-            priors.update({
-                name: {
-                    "fn":distribution, 
-                    "parameters": params
-                }
-            })
-        return priors
-
-    def parse_error_model(self):
-        error_model = {}
-        for data_var, error_distribution in self.config.error_model.all.items():
-            name, distribution, parameters = self.parse_random_variable(
-                parname=data_var,
-                random_variable=error_distribution,
-                distribution_map=self.distribution_map
-            )
-
-                
-            error_model.update({
-                data_var: {
-                    "fn": distribution, 
-                    "parameters": parameters,
-                    "error_dist": error_distribution
-                }
-            })
-        return error_model
-
     def parse_probabilistic_model(self):
         EPS = self.EPS
         prior = self.prior.copy()
@@ -309,21 +275,13 @@ class NumpyroBackend(InferenceBackend):
 
         def sample_prior(prior: Dict, obs: Dict):
             theta = {}
-            for prior_name, prior_kwargs in prior.items():
-                
-                # apply transforms to priors. This will be handy when I use nested
-                # parameters
-                prior_distribution_parameters = {}
-                for pri_par, pri_val in prior_kwargs["parameters"].items():
-                    prior_trans_func = pri_val["transform"]
-                    prior_trans_func_kwargs = {k: lookup(k, {}, theta, obs) for k in pri_val["args"]}
-                    prior_distribution_parameters.update({
-                        pri_par: prior_trans_func(**prior_trans_func_kwargs)
-                    })
+            for prior_name, prior_dist in prior.items():
+                lup = partial(lookup, deterministic={}, prior_samples=theta, observations=obs)
+                dist = prior_dist.construct(lup)
 
                 theta_i = numpyro.sample(
                     name=prior_name,
-                    fn=prior_kwargs["fn"](**prior_distribution_parameters)
+                    fn=dist
                 )
 
                 theta.update({prior_name: theta_i})
@@ -333,34 +291,22 @@ class NumpyroBackend(InferenceBackend):
         def sample_prior_gaussian_base(prior: Dict, obs: Dict):
             theta = {}
             theta_base = {}
-            for prior_name, prior_kwargs in prior.items():
+            for prior_name, prior_dist in prior.items():
+                lup = partial(lookup, deterministic={}, prior_samples=theta, observations=obs)
+                dist = prior_dist.construct(lup)
 
-                # apply transforms to priors. This will be handy when I use nested
-                # parameters
-                prior_distribution_parameters = {}
-                for pri_par, pri_val in prior_kwargs["parameters"].items():
-                    prior_trans_func = pri_val["transform"]
-                    # TODO could be replaced by utils.config.lookup and lookup args
-                    prior_trans_func_kwargs = {k: lookup(k, {}, theta, obs) for k in pri_val["args"]}
-                    prior_distribution_parameters.update({
-                        pri_par: prior_trans_func(**prior_trans_func_kwargs)
-                    })
-
-                # parameterize the prior distribution and extract transforms
-                dist = prior_kwargs["fn"](**prior_distribution_parameters)
-                
                 try:
                     transforms = getattr(dist, "transforms")
                 except:
                     raise RuntimeError(
-                        "The specified distribution had no transforms. If setting "
-                        "the option 'inference.numpyro.gaussian_base_distribution = 1', "
-                        "you are only allowed to use parameter distribution, which can "
-                        "be specified as transformed normal distributions. "
-                        "Currently only 'lognorm' and 'halfnorm' are implemented. "
-                        "You can use the numypro.distributions.TransformedDistribution "
-                        "API to specify additional distributions with transforms."
-                        "And pass them to the inferer by updating the distribution map: "
+                        "The specified distribution had no transforms. If setting "+
+                        "the option 'inference.numpyro.gaussian_base_distribution = 1', "+
+                        "you are only allowed to use parameter distribution, which can "+
+                        "be specified as transformed normal distributions. "+
+                        "Currently only 'lognorm' and 'halfnorm' are implemented. "+
+                        "You can use the numypro.distributions.TransformedDistribution "+
+                        "API to specify additional distributions with transforms."+
+                        "And pass them to the inferer by updating the distribution map: "+
                         "sim.inferer.distribution_map.update({'newdist': your_new_distribution})"
                     )
 
@@ -384,21 +330,18 @@ class NumpyroBackend(InferenceBackend):
 
         def likelihood(theta, simulation_results, observations, masks):
             """Uses lookup and error model from the local function context"""
-            for error_model_name, error_model_kwargs in error_model.items():
-                error_distribution = error_model_kwargs["fn"]
-                error_distribution_kwargs = {}
-                for errdist_par, errdist_val in error_model_kwargs["parameters"].items():
-                    errdist_trans_func = errdist_val["transform"]
-                    errdist_trans_func_kwargs = {
-                        k: lookup(k, simulation_results, theta, observations) for k in errdist_val["args"]
-                    }
-                    error_distribution_kwargs.update({
-                        errdist_par: errdist_trans_func(**errdist_trans_func_kwargs)
-                    })
+            lup = partial(lookup, 
+                deterministic=simulation_results, 
+                prior_samples=theta, 
+                observations=observations
+            )
+
+            for error_model_name, error_model_dist in error_model.items():
+                dist = error_model_dist.construct(lup)
 
                 _ = numpyro.sample(
                     name=error_model_name + "_obs",
-                    fn=error_distribution(**error_distribution_kwargs).mask(masks[error_model_name]),
+                    fn=dist.mask(masks[error_model_name]),
                     obs=observations[error_model_name]
                 )
 
@@ -448,12 +391,6 @@ class NumpyroBackend(InferenceBackend):
                     masks=masks
                 )
 
-            # TODO: How to add EPS
-            # DONE: add biomial n --> I think this is already done
-            # numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks["cext"]), obs=obs["cext"] + EPS)
-            # numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks["cint"]), obs=obs["cint"] + EPS)
-            # numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks["nrf2"]), obs=obs["nrf2"] + EPS)
-            # numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=obs["nzfe"]).mask(masks["lethality"]), obs=obs["lethality"])
         return model
 
     @staticmethod
