@@ -107,7 +107,6 @@ class JaxSolver(SolverBase):
             if self.batch_dimension not in self.data_structure_and_dimensionality[v]:
                 # otherwise it has a dummy dimension of length 1
                 val_reduced = jnp.squeeze(val, 0)
-                s0 = 1
             else:
                 val_reduced = val
 
