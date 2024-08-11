@@ -28,7 +28,7 @@ from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 
 from pymob.utils.store_file import scenario_file, converters
-from pymob.sim.parameters import Param, FloatArray
+from pymob.sim.parameters import Param, FloatArray, OptionRV
 # this loads at the import of the module
 default_path = sys.path.copy()
 
@@ -638,11 +638,11 @@ class Modelparameters(BaseModel):
         print(f"Deleted '{key}' Param({deleted_par}).")
 
 class Errormodel(BaseModel):
-    __pydantic_extra__: Dict[str,str]
+    __pydantic_extra__: Dict[str,OptionRV]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
     
     @property
-    def all(self) -> Dict[str,str]:
+    def all(self) -> Dict[str,OptionRV]:
         return self.__pydantic_extra__
 
 class Pyabc(BaseModel):

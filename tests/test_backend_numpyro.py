@@ -3,8 +3,18 @@ import numpy as np
 from click.testing import CliRunner
 from matplotlib import pyplot as plt
 from pymob.solvers.diffrax import JaxSolver
+from pymob.inference.numpyro_backend import NumpyroBackend, distribution_map
 
-from tests.fixtures import init_simulation_casestudy_api
+from fixtures import init_simulation_casestudy_api, create_composite_priors
+
+
+def test_prior_parsing():
+    params = create_composite_priors()
+    parsed_params = NumpyroBackend.parse_model_priors(
+        parameters=params.free, 
+        distribution_map=distribution_map
+    )
+    parsed_params
 
 def test_diffrax_exception():
     # with proper scripting API define JAX model here or import from fixtures
@@ -245,3 +255,5 @@ if __name__ == "__main__":
     import os
     sys.path.append(os.getcwd())
     # test_user_defined_probability_model()
+    test_prior_parsing()
+    test_convergence_nuts_kernel_jaxsolver()

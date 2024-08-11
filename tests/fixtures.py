@@ -2,7 +2,8 @@ import numpy as np
 import xarray as xr
 import pytest
 
-from pymob.sim.config import Config, DataVariable, FloatParam
+from pymob.sim.config import Config, DataVariable, Modelparameters
+from pymob.sim.parameters import Param, RandomVariable, Expression
 from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
 
@@ -29,8 +30,8 @@ def init_lotkavolterra_simulation_replicated():
     sim.config.solverbase.batch_dimension = "id"
     sim.config.jaxsolver.batch_dimension = "id"
 
-    sim.config.model_parameters.gamma = FloatParam(value=0.3)
-    sim.config.model_parameters.delta = FloatParam(value=0.01)
+    sim.config.model_parameters.gamma = Param(value=0.3)
+    sim.config.model_parameters.delta = Param(value=0.01)
 
     sim.config.data_structure.wolves = DataVariable(
         dimensions=["id", "time"], observed=False, dimensions_evaluator=["id", "time"])
@@ -130,3 +131,18 @@ def setup_solver(sim: SimulationBase, solver: type):
     sim.solver = solver
     sim.dispatch_constructor()
     return sim.evaluator._solver
+
+
+def create_composite_priors():
+    prior_mu = RandomVariable(distribution="normal", parameters={"loc": Expression("5"), "scale": Expression("2.0")}, dims=("experiment",))
+    prior_k = RandomVariable(distribution="normal", parameters={"loc": Expression("mu"), "scale": Expression("1.0")})
+    prior_k = RandomVariable(distribution="normal", parameters={"loc": Expression("mu + Array([5,5])"), "scale": Expression("1.0")})
+
+    mu = Param(prior=prior_mu, hyper=True)
+    k = Param(prior=prior_k)
+
+    theta = Modelparameters() # type: ignore
+    theta.mu = mu
+    theta.k = k
+
+    return theta

@@ -15,12 +15,52 @@ from nptyping import Float64
 
 FloatArray = NDArray[Shape["*, ..."], (Float64,)] # type:ignore
 
-class Prior(BaseModel):
+class Expression:
+    """Random variables are context dependent. They may be dependent on other
+    Variables, or datasets. In the config they represent an abstract structure,
+    so they remain unevaluated expressions that must follow python syntax.
+    Once, the context is available, the expressions can be evaluated by
+    `Expression.evaluate(context={...})`.
+    If needed context can be provided to a variable at creation in the scripting 
+    API.
+    """
+    def __init__(self, expression: Union[str, ast.Expression], context: Dict={}):
+        if isinstance(expression, str):
+            self.expression = ast.parse(expression, mode="eval")
+        elif isinstance(expression, ast.Expression):
+            self.expression = expression
+        else:
+            self.expression = ast.Expression(expression)
+
+        self.context = context
+
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self) -> str:
+        return ast.unparse(self.expression)
+    
+    def evaluate(self, context: Dict = {}) -> float|NDArray:
+        ctx = self.context.copy()
+        ctx.update(context)
+        try:
+            val = eval(compile(self.expression, '', mode='eval'), ctx)
+            return val
+        except NameError as err:
+            raise NameError(
+                f"{err}. Have you forgotten to pass a context?"
+            )
+
+
+
+
+
+class RandomVariable(BaseModel):
     """Basic infrastructure to parse priors into their components so that 
     they can be more easily parsed to other backends.
     Parsing to distributions needs more context:
     - other parameters (for hierarchical parameter structures)
-
+    - data structure and coordinates to identify dimension sizes
     """
     model_config = ConfigDict(
         arbitrary_types_allowed=True, 
@@ -29,18 +69,18 @@ class Prior(BaseModel):
     )
 
     distribution: str
-    parameters: Dict[str, float|FloatArray]
+    parameters: Dict[str, Expression]
     dims: Tuple[str, ...] = ()
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Prior):
+        if not isinstance(other, RandomVariable):
             raise NotImplementedError("Only compare to Prior instance")
         
         return bool(
             self.distribution == other.distribution and
             self.dims == other.dims and
             self.parameters.keys() == other.parameters.keys() and
-            all([np.all(self.parameters[k] == other.parameters[k]) 
+            all([str(self.parameters[k]) == str(other.parameters[k]) 
                 for k in self.parameters.keys()])
         )
 
@@ -68,26 +108,30 @@ def string_to_prior_dict(prior_str: str):
     kwargs = {}
     for kw in node.body.keywords:
         key = kw.arg  # Argument name (e.g., 'loc')
-        value = eval(compile(ast.Expression(kw.value), '', mode='eval'))  # Evaluate the value part
+        # if this is a valid python expression it can be compiled, but
+        # evaluated, it can only be if the respective arguments are present
+        # value = compile(ast.Expression(kw.value), '', mode='eval')
+        # value = eval(compile(ast.Expression(kw.value), '', mode='eval'), {"wolves": 2, "EPS": 2})  # Evaluate the value part
+        value = Expression(kw.value)
         kwargs[key] = value
     
-    dims = kwargs.pop("dims", ())
+    dims = kwargs.pop("dims", Expression("()"))
     # Step 3: Return the symbolic expression and the argument dictionary
     return {
         "distribution": func_name, 
         "parameters": kwargs, 
-        "dims": dims
+        "dims": dims.evaluate({})
     }
 
-def to_prior(option: Union[str,Prior,Dict]) -> Prior:
-    if isinstance(option, Prior):
+def to_rv(option: Union[str,RandomVariable,Dict]) -> RandomVariable:
+    if isinstance(option, RandomVariable):
         return option
     elif isinstance(option, Dict):
         prior_dict = option
     else:
         prior_dict = string_to_prior_dict(option)
 
-    return Prior.model_validate(prior_dict, strict=False)
+    return RandomVariable.model_validate(prior_dict, strict=False)
 
 
 def dict_to_string(dct: Dict, jstr=" "):
@@ -103,9 +147,9 @@ def dict_to_string(dct: Dict, jstr=" "):
 
 
 
-OptionPrior = Annotated[
-    Prior, 
-    BeforeValidator(to_prior), 
+OptionRV = Annotated[
+    RandomVariable, 
+    BeforeValidator(to_rv), 
 ]
 
 class Param(BaseModel):
@@ -119,7 +163,7 @@ class Param(BaseModel):
     )
     name: Optional[str] = None
     value: float|FloatArray = 0.0
-    prior: Optional[OptionPrior] = None
+    prior: Optional[OptionRV] = None
     min: Optional[float|FloatArray] = None
     max: Optional[float|FloatArray] = None
     step: Optional[float|FloatArray] = None

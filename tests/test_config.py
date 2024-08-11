@@ -2,7 +2,7 @@ import pytest
 import tempfile
 from pymob.simulation import SimulationBase, Config
 from pymob.sim.config import DataVariable, Datastructure
-from pymob.sim.parameters import Param, Prior
+from pymob.sim.parameters import Param, RandomVariable, Expression
 from pymob.utils.store_file import import_package
 from pymob.solvers.scipy import solve_ivp_1d
 from sympy import Function
@@ -170,11 +170,11 @@ def test_parameter_array():
 def test_prior():
     config = Config()
 
-    io = "lognorm(scale=[1.0,1.0,1.0],s=1.5,dims=('hello',))"
+    io = "lognorm(scale=[1.0,1.0,a],s=1.5,dims=('hello',))"
 
-    test_prior = Prior(
+    test_prior = RandomVariable(
         distribution="lognorm", 
-        parameters={"scale": np.array([1.0, 1.0, 1.0]), "s": 1.5},
+        parameters={"scale": Expression("[1.0,1.0,a]"), "s": Expression("1.5")},
         dims=("hello",)
     )
 
@@ -200,7 +200,7 @@ def test_parameter_array_with_prior():
     config = Config()
 
     io = "value=[1.0,2.0,3.0] prior=lognorm(scale=[1.0,1.0,1.0],s=1.0,dims=()) hyper=False free=True"
-    test = Param(value=np.array([1.0,2.0,3.0]), prior="lognorm(scale=[1.0,1.0,1.0],s=1,dims=())") # type:ignore
+    test = Param(value=[1.0,2.0,3.0], prior="lognorm(scale=[1.0,1.0,1.0],s=1.0,dims=())") # type:ignore
 
     # test config file input
     config.model_parameters.test = io
@@ -261,4 +261,5 @@ def test_data_variables():
 
 
 if __name__ == "__main__":
-    pass
+    test_prior()
+    test_parameter_array_with_prior()
