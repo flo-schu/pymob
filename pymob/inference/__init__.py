@@ -13,3 +13,4 @@ if numpyro is not None:
     from . import numpyro_backend
 
 from . import analysis
+from . import base

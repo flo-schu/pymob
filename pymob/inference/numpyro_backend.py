@@ -9,16 +9,20 @@ from typing import (
 
 from tqdm import tqdm
 import numpy as np
+import numpy.typing as npt
 import xarray as xr
 import arviz as az
 from matplotlib import pyplot as plt
 import sympy
 
 from pymob.simulation import SimulationBase
+from pymob.sim.parameters import Expression
+from pymob.inference.base import InferenceBackend
 from pymob.inference.analysis import (
     cluster_chains, rename_extra_dims, plot_posterior_samples,
     add_cluster_coordinates
 )
+
 
 import numpyro
 from numpyro import distributions as dist
@@ -72,23 +76,13 @@ def catch_patterns(expression_str):
 
     return expression_str
 
-def generate_transform(expression_str):
-    # check for parentheses in expression
-    
-    expression_str = catch_patterns(expression_str)
-
-    # Parse the expression without knowing the symbol names in advance
-    parsed_expression = sympy.sympify(expression_str, evaluate=False)
-    free_symbols = tuple(parsed_expression.free_symbols)
-
-    # Transform expression to jax expression
-    func = sympy2jax.SymbolicModule(
-        parsed_expression, 
-        extra_funcs=sympy2jax_extra_funcs, 
-        make_array=True
-    )
-
-    return {"transform": func, "args": [str(s) for s in free_symbols]}
+distribution_map =  {
+    "lognorm": (LogNormalTrans, {"scale": "loc", "s": "scale"}),
+    "binom": (dist.Binomial, {"n":"total_count", "p":"probs"}),
+    "normal": dist.Normal,
+    "halfnorm": HalfNormalTrans,
+    "poisson": (dist.Poisson, {"mu": "rate"}),
+}
 
 exp = transforms.ExpTransform
 sigmoid = transforms.SigmoidTransform
@@ -105,7 +99,7 @@ class ErrorModelFunction(Protocol):
         ...
 
 
-class NumpyroBackend:
+class NumpyroBackend(InferenceBackend):
     def __init__(
         self, 
         simulation: SimulationBase
@@ -117,20 +111,7 @@ class NumpyroBackend:
         simulation : SimulationBase
             An initialized simulation.
         """
-        self.EPS = 1e-8
-        self.distribution_map = {
-            "lognorm": (LogNormalTrans, {"scale": "loc", "s": "scale"}),
-            "binom": (dist.Binomial, {"n":"total_count", "p":"probs"}),
-            "normal": dist.Normal,
-            "halfnorm": HalfNormalTrans,
-            "poisson": (dist.Poisson, {"mu": "rate"}),
-        }
-        
-        self.simulation = simulation
-        self.config = simulation.config
-        self.evaluator = self.parse_deterministic_model()
-        self.prior = self.parse_model_priors()
-
+        super().__init__(simulation=simulation)
         # parse preprocessing
         if self.user_defined_preprocessing is not None:
             self.preprocessing = getattr(
@@ -144,16 +125,10 @@ class NumpyroBackend:
                 self.simulation._prob, 
                 self.user_defined_probability_model
             )
-        else:
-            self.error_model = self.parse_error_model()
-            self.inference_model = self.parse_probabilistic_model()
-
-
-        self.idata: az.InferenceData
 
     @property
-    def extra_vars(self):
-        return self.config.inference.extra_vars
+    def distribution_map(self):
+        return distribution_map
     
 
     @property
@@ -168,11 +143,6 @@ class NumpyroBackend:
     def gaussian_base_distribution(self):
         return self.config.inference_numpyro.gaussian_base_distribution
     
-    @property
-    def n_predictions(self):
-        return self.config.inference.n_predictions
-    
-
     @property
     def chains(self):
         return self.config.inference_numpyro.chains
@@ -209,6 +179,24 @@ class NumpyroBackend:
     def init_strategy(self):
         strategy = self.config.inference_numpyro.init_strategy
         return getattr(infer, strategy)
+
+    @staticmethod
+    def generate_transform(expression: Expression):
+        # check for parentheses in expression
+        
+        # Parse the expression without knowing the symbol names in advance
+        parsed_expression = sympy.sympify(str(expression), evaluate=False)
+        free_symbols = tuple(parsed_expression.free_symbols)
+
+        # Transform expression to jax expression
+        func = sympy2jax.SymbolicModule(
+            parsed_expression, 
+            extra_funcs=sympy2jax_extra_funcs, 
+            make_array=True
+        )
+
+        return {"transform": func, "args": [str(s) for s in free_symbols]}
+
 
     def parse_deterministic_model(self) -> Callable:
         """Parses an evaluation function from the Simulation object, which 
@@ -254,59 +242,19 @@ class NumpyroBackend:
         
         return observations, masks
     
-    @staticmethod
-    def parse_parameter(parname: str, prior: str, distribution_map: Dict[str,Tuple]) -> Tuple[str,dist.Distribution,Dict[str,Callable]]:
-
-        pattern = r'\[(.*?)\]'
-        # Function to replace commas with spaces within the match
-        def replace_commas(match):
-            return '[' + match.group(1).replace(',', ' ') + ']'
-
-        distribution, cluttered_arguments = prior.split("(", 1)
-        argument_string = cluttered_arguments.split(")", 1)[0]
-        argument_string = re.sub(pattern, replace_commas, argument_string)
-        param_strings = argument_string.split(",")
-
-        distribution_mapping = distribution_map[distribution]
-
-        if not isinstance(distribution_mapping, tuple):
-            distribution = distribution_mapping
-            distribution_mapping = (distribution, {})
-        
-        assert len(distribution_mapping) == 2, (
-            "distribution and parameter mapping must be "
-            "a tuple of length 2."
-        )
-
-        distribution, parameter_mapping = distribution_mapping
-        mapped_params = {}
-        for parstr in param_strings:
-            key, val = parstr.split("=")
-            
-            mapped_key = parameter_mapping.get(key, key)
-
-            # if is_number(val):
-            #     parsed_val = float(val)
-            # else:
-            parsed_val = generate_transform(expression_str=val)
-
-            # parsed_val = float(val) if is_number(val) else val
-            mapped_params.update({mapped_key:parsed_val})
-
-        return parname, distribution, mapped_params
-
-    def parse_model_priors(self):
+    @classmethod
+    def parse_model_priors(cls, parameters, distribution_map):
         priors = {}
-        for key, par in self.config.model_parameters.free.items():
+        for key, par in parameters.items():
             if par.prior is None:
                 raise AttributeError(
-                    f"No prior was defined for {par}. E.g.: "
-                    "sim.config.model_parameters.{par} = lognorm(loc=1, scale=2)"
+                    f"No prior was defined for {par}. E.g.: "+
+                    f"sim.config.model_parameters.{par} = lognorm(loc=1, scale=2)"
                 )
-            name, distribution, params = self.parse_parameter(
+            name, distribution, params = cls.parse_random_variable(
                 parname=key, 
-                prior=par.prior, 
-                distribution_map=self.distribution_map
+                random_variable=par.prior, 
+                distribution_map=distribution_map
             )
             # parameterized_dist = distribution(**params)
             priors.update({
@@ -320,9 +268,9 @@ class NumpyroBackend:
     def parse_error_model(self):
         error_model = {}
         for data_var, error_distribution in self.config.error_model.all.items():
-            name, distribution, parameters = self.parse_parameter(
+            name, distribution, parameters = self.parse_random_variable(
                 parname=data_var,
-                prior=error_distribution,
+                random_variable=error_distribution,
                 distribution_map=self.distribution_map
             )
 
