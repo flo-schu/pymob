@@ -3,7 +3,7 @@ import xarray as xr
 import pytest
 
 from pymob.sim.config import Config, DataVariable, Modelparameters
-from pymob.sim.parameters import Param, RandomVariable, Expression
+from pymob.sim.parameters import Param, RandomVariable, Expression, OptionRV
 from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
 
@@ -51,6 +51,7 @@ def init_lotkavolterra_simulation_replicated():
     sim.config.save(force=True)
     
     return sim
+
 
 def init_bufferguts_casestudy(scenario="testing"):
     """This is an external case study used for local testing. The test study
@@ -146,3 +147,17 @@ def create_composite_priors():
     theta.k = k
 
     return theta
+
+def init_test_case_study_hierarchical() -> SimulationBase:
+    config = Config()
+    config.case_study.name = "test_case_study"
+    config.case_study.scenario = "test_hierarchical"
+    config.case_study.simulation = "HierarchicalSimulation"
+    config.import_casestudy_modules(reset_path=True)
+    Simulation = config.import_simulation_from_case_study()
+    
+    sim = Simulation(config)
+    sim.setup()
+    sim.config.save(force=True)
+
+    return sim
