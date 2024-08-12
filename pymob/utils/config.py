@@ -1,3 +1,5 @@
+from typing import Iterable, Any
+from typing_extensions import Protocol
 import inspect
 import json
 import re
@@ -61,6 +63,20 @@ def lambdify_expression(expression_str):
 
     return func, args
 
+from typing import Mapping
+
+def lookup_from(val: Any, collection: Iterable[Mapping]) -> Any:
+    if isinstance(collection, dict):
+        collection = list(collection.values())
+
+    for obj in collection:
+        if val in obj:
+            return obj[val]
+        else:
+            continue
+
+    return val
+
 def lookup(val, *indexable_objects):
     for obj in indexable_objects:
         if val in obj:
@@ -69,7 +85,6 @@ def lookup(val, *indexable_objects):
             continue
 
     return val
-
 
 def lookup_args(args, *objects_to_search):
     return {k: lookup(k, *objects_to_search) for k in args}
