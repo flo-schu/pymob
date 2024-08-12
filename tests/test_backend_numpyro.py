@@ -11,7 +11,6 @@ from tests.fixtures import init_simulation_casestudy_api, create_composite_prior
 def test_prior_parsing():
     params = create_composite_priors()
     parsed_params = NumpyroBackend.parse_model_priors(parameters=params.free)
-    parsed_params
 
 def test_diffrax_exception():
     # with proper scripting API define JAX model here or import from fixtures
