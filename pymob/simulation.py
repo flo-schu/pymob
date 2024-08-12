@@ -149,13 +149,13 @@ class SimulationBase:
 
         """
 
-        self.validate()
 
         self.load_modules()
 
         self.initialize(input=self.config.input_file_paths)
-        
         self.coordinates = self.create_coordinates()
+        self.validate()
+        
         self.config.create_directory(directory="results", force=True)
         self.config.create_directory(directory="scenario", force=True)
 
