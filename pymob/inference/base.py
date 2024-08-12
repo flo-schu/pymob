@@ -4,7 +4,9 @@ from typing import (
     Tuple,
     Literal,
     Union,
+    Mapping,
     Callable,
+    Iterable,
     Any
 )
 from abc import ABC, abstractmethod
@@ -14,9 +16,9 @@ import arviz as az
 from pymob.simulation import SimulationBase
 from pymob.sim.parameters import Param, RandomVariable, Expression
 from pymob.sim.config import Modelparameters
+from pymob.utils.config import lookup_from
 
 class Distribution:
-    distribution_map: Dict[str,Tuple[Callable, Dict[str,str]]] = {}
     """The distribution is a pre-initialized distibution with human friendly 
     interface to construct a distribution in an arbitrary backend.
 
@@ -24,6 +26,7 @@ class Distribution:
     are done by passing more context to Distribution class to the
     _context variable
     """
+    distribution_map: Dict[str,Tuple[Callable, Dict[str,str]]] = {}
     _context = {}
     def __init__(self, name: str, random_variable: RandomVariable) -> None:
         self.name = name
@@ -37,22 +40,26 @@ class Distribution:
         self.undefined_args: set = uargs
 
     def __str__(self) -> str:
-        dist = self.distribution.__name__
+        dist = self.dist_name
         params = ", ".join([f"{k}={v}" for k, v in self.parameters.items()])
-        return f"{dist}({params})"
+        return f"{dist}({params}, dims={self._dims})"
     
     def __repr__(self) -> str:
         return str(self)
-    
-    def construct(self, lookup: Callable):
-        context = {arg: lookup(arg) for arg in self.undefined_args}
-        context.update(self._context)
+
+    @property
+    def dist_name(self) -> str:
+        return self._dist_str
+
+    def construct(self, context: Iterable[Mapping], extra_kwargs: Dict = {}):
+        _context = {arg: lookup_from(arg, context) for arg in self.undefined_args}
+        _context.update(self._context)
         # evaluate the parameters given a context
         params = {
-            key: value.evaluate(context=context) 
+            key: value.evaluate(context=_context) 
             for key, value in self.parameters.items()
         }
-        return self.distribution(**params)
+        return self.distribution(**params, **extra_kwargs)
 
 
     @classmethod
@@ -75,25 +82,15 @@ class Distribution:
         for key, val in random_variable.parameters.items():
             mapped_key = parameter_mapping.get(key, key)
             underfined_args = underfined_args.union(val.undefined_args)
-            # parsed_val = val.evaluate()
-            # parsed_val = cls.generate_transform(expression=val)
             mapped_params.update({mapped_key:val})
 
         return distribution, mapped_params, underfined_args
-
-    @staticmethod
-    @abstractmethod
-    def generate_transform(expression: Expression):
-        """This function translates parameter transformations into expressions
-        that can be used by the inference backend.
-        """
-        pass
-
 
 
 class InferenceBackend(ABC):
     _distribution = Distribution
     idata: az.InferenceData
+    prior: Dict[str,Distribution]
 
     def __init__(
         self, 
@@ -104,11 +101,12 @@ class InferenceBackend(ABC):
         self.simulation = simulation
         self.config = simulation.config
 
+        self.indices = {v.name: list(v.values) for _, v in self.simulation.indices.items()}
         # parse model components
         self.prior = self.parse_model_priors(
             parameters=self.config.model_parameters.free,
         )
-        
+
         self.evaluator = self.parse_deterministic_model()
 
         self.error_model = self.parse_error_model(
@@ -124,19 +122,6 @@ class InferenceBackend(ABC):
     def parse_probabilistic_model(self):
         pass
 
-    @staticmethod
-    @abstractmethod
-    def generate_transform(expression: Expression):
-        """This function translates parameter transformations into expressions
-        that can be used by the inference backend.
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def distribution_map(self) -> Dict[str,Tuple]:
-        pass
-
     @property
     def extra_vars(self):
         return self.config.inference.extra_vars
@@ -145,29 +130,17 @@ class InferenceBackend(ABC):
     def n_predictions(self):
         return self.config.inference.n_predictions
     
-    @classmethod
-    def parse_random_variable(cls, parname: str, random_variable: RandomVariable, distribution_map: Dict[str,Tuple]) -> Tuple[str,Any,Dict[str,Callable]]:
+    def get_dim_shape(self, distribution: Distribution) -> Tuple[int, ...]:
+        dims = distribution._dims
+        dim_shape = []
+        for dim in dims:
+            coords = set(self.simulation.observations[dim].values.tolist())
+            n_coords = len(coords)
+            dim_shape.append(n_coords)
 
-        distribution_mapping = distribution_map[random_variable.distribution]
-
-        if not isinstance(distribution_mapping, tuple):
-            distribution = distribution_mapping
-            distribution_mapping = (distribution, {})
-        
-        assert len(distribution_mapping) == 2, (
-            "distribution and parameter mapping must be "
-            "a tuple of length 2."
-        )
-
-        distribution, parameter_mapping = distribution_mapping
-        mapped_params = {}
-        for key, val in random_variable.parameters.items():
-            mapped_key = parameter_mapping.get(key, key)
-            parsed_val = cls.generate_transform(expression=val)
-            mapped_params.update({mapped_key:parsed_val})
-
-        return parname, distribution, mapped_params
-
+        if len(dim_shape) == 0:
+            dim_shape = (1,)
+        return tuple(dim_shape)
 
     @classmethod
     def parse_model_priors(
