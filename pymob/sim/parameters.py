@@ -1,15 +1,13 @@
-import sympy as sp
 import ast
-import numpy as np
-import numpy.typing as npt
+import warnings
+import inspect
 from typing import Optional, List, Dict, Tuple, Any, Union
 from typing_extensions import Annotated
-from pydantic import (
-    BaseModel, Field, computed_field, field_validator, model_validator, 
-    ConfigDict, TypeAdapter, ValidationError, model_serializer
-)
-from pydantic.functional_validators import BeforeValidator, AfterValidator
-from pydantic.functional_serializers import PlainSerializer
+
+import scipy
+import numpy as np
+from pydantic import BaseModel, ConfigDict, model_serializer, field_validator
+from pydantic.functional_validators import BeforeValidator
 from numpydantic import NDArray, Shape
 from nptyping import Float64, Int64
 
@@ -21,10 +19,8 @@ class Expression:
     so they remain unevaluated expressions that must follow python syntax.
     Once, the context is available, the expressions can be evaluated by
     `Expression.evaluate(context={...})`.
-    If needed context can be provided to a variable at creation in the scripting 
-    API.
     """
-    def __init__(self, expression: Union[str, ast.Expression], context: Dict={}):
+    def __init__(self, expression: Union[str, ast.Expression]):
         if isinstance(expression, str):
             self.expression = ast.parse(expression, mode="eval")
         elif isinstance(expression, ast.Expression):
@@ -34,7 +30,7 @@ class Expression:
 
         finder = UndefinedNameFinder()
         self.undefined_args = finder.find_undefined_names(self.expression)
-        self.context = context
+        self.compiled_expression = compile(self.expression, '', mode='eval')
 
     def __repr__(self):
         return str(self)
@@ -43,10 +39,8 @@ class Expression:
         return ast.unparse(self.expression)
     
     def evaluate(self, context: Dict = {}) -> float|NDArray:
-        ctx = self.context.copy()
-        ctx.update(context)
         try:
-            val = eval(compile(self.expression, '', mode='eval'), ctx)
+            val = eval(self.compiled_expression, context)
             return val
         except NameError as err:
             raise NameError(
@@ -117,7 +111,41 @@ class RandomVariable(BaseModel):
         
         return f"{distribution}({parameters})"
 
+    @field_validator("distribution", mode="after")
+    def check_distribution(cls, new_value, info, **kwargs):
+        if new_value not in scipy_to_scipy:
+            warnings.warn(
+                f"The distribution '{new_value}' is not part of the scipy "+
+                "distributions implemented in pymob. "+
+                "This can lead to inconsistent behavior. "+
+                "It is recommended to use the scipy distribution protocol "+
+                "where possible. "+
+                "https://docs.scipy.org/doc/scipy/reference/stats.html "+
+                "It may also be possible that your distribution has not yet "+
+                "been introduced into the pymob package "
+            )
+        return new_value.lower()
 
+    @field_validator("parameters", mode="after")
+    def check_parameters(cls, new_value, info, **kwargs):
+        distribution = info.data.get("distribution")
+        dist = scipy_to_scipy.get(distribution, (None, ))[0]
+        if dist is None:
+            return new_value
+        
+        dist_args = () if dist.shapes is None else dist.shapes
+        dist_params = ("loc", "scale", *dist_args)
+        unmatched_params = [k for k in new_value.keys() if k not in dist_params]
+        if len(unmatched_params) > 0:
+            warnings.warn(
+                f"The parameters '{unmatched_params}' did not follow the scipy "+
+                "protocol. "+
+                "This can lead to inconsistent behavior. "+
+                "It is recommended to use the scipy distribution protocol "+
+                "where possible. "+
+                "https://docs.scipy.org/doc/scipy/reference/stats.html"
+            )
+        return new_value
 
 def string_to_prior_dict(prior_str: str):
     # Step 1: Parse the string to extract the function name and its arguments.
@@ -210,3 +238,81 @@ class Param(BaseModel):
             self.free == other.free
         )
 
+
+scipy_to_scipy = {
+    # Continuous Distributions
+    "norm": (scipy.stats.norm, {}),
+    "normal": (scipy.stats.norm, {}),
+    "expon": (scipy.stats.expon, {}),
+    "exponential": (scipy.stats.expon, {}),
+    "uniform": (scipy.stats.uniform, {}),
+    "beta": (scipy.stats.beta, {}),
+    "gamma": (scipy.stats.gamma, {}),
+    "lognorm": (scipy.stats.lognorm, {}),
+    "lognormal": (scipy.stats.lognorm, {}),
+    "chi2": (scipy.stats.chi2, {}),
+    "pareto": (scipy.stats.pareto, {}),
+    "t": (scipy.stats.t, {}),
+    "cauchy": (scipy.stats.cauchy, {}),
+    "weibull_min": (scipy.stats.weibull_min, {}),
+    "weibull_max": (scipy.stats.weibull_max, {}),
+    "gumbel_r": (scipy.stats.gumbel_r, {}),
+    "gumbel_l": (scipy.stats.gumbel_l, {}),
+    "exponweib": (scipy.stats.exponweib, {}),
+    "exponpow": (scipy.stats.exponpow, {}),
+    "gamma": (scipy.stats.gamma, {}),
+    "logistic": (scipy.stats.logistic, {}),
+    "norminvgauss": (scipy.stats.norminvgauss, {}),
+    "kstwobign": (scipy.stats.kstwobign, {}),
+    "halfnorm": (scipy.stats.halfnorm, {}),
+    "halfnormal": (scipy.stats.halfnorm, {}),
+    "fatiguelife": (scipy.stats.fatiguelife, {}),
+    "nakagami": (scipy.stats.nakagami, {}),
+    "wald": (scipy.stats.wald, {}),
+    "gompertz": (scipy.stats.gompertz, {}),
+    "genextreme": (scipy.stats.genextreme, {}),
+    "levy": (scipy.stats.levy, {}),
+    "levy_stable": (scipy.stats.levy_stable, {}),
+    "laplace": (scipy.stats.laplace, {}),
+    "loggamma": (scipy.stats.loggamma, {}),
+    "vonmises": (scipy.stats.vonmises, {}),
+    "pareto": (scipy.stats.pareto, {}),
+    "powerlaw": (scipy.stats.powerlaw, {}),
+    "rayleigh": (scipy.stats.rayleigh, {}),
+    "rice": (scipy.stats.rice, {}),
+    "semicircular": (scipy.stats.semicircular, {}),
+    "triang": (scipy.stats.triang, {}),
+    "truncexpon": (scipy.stats.truncexpon, {}),
+    "truncnorm": (scipy.stats.truncnorm, {}),
+    "truncnormal": (scipy.stats.truncnorm, {}),
+    "tukeylambda": (scipy.stats.tukeylambda, {}),
+    "uniform": (scipy.stats.uniform, {}),
+    "wrapcauchy": (scipy.stats.wrapcauchy, {}),
+    
+    # Discrete Distributions
+    "binom": (scipy.stats.binom, {}),
+    "bernoulli": (scipy.stats.bernoulli, {}),
+    "geom": (scipy.stats.geom, {}),
+    "hypergeom": (scipy.stats.hypergeom, {}),
+    "poisson": (scipy.stats.poisson, {}),
+    "skellam": (scipy.stats.skellam, {}),
+    "nbinom": (scipy.stats.nbinom, {}),
+    "logser": (scipy.stats.logser, {}),
+    "planck": (scipy.stats.planck, {}),
+    "boltzmann": (scipy.stats.boltzmann, {}),
+    "randint": (scipy.stats.randint, {}),
+    "zipf": (scipy.stats.zipf, {}),
+    "dlaplace": (scipy.stats.dlaplace, {}),
+    "yulesimon": (scipy.stats.yulesimon, {}),
+    "hypergeom": (scipy.stats.hypergeom, {}),
+    "betabinom": (scipy.stats.betabinom, {}),
+    "nbinom": (scipy.stats.nbinom, {}),
+    "binom": (scipy.stats.binom, {}),
+    "randint": (scipy.stats.randint, {}),
+    "boltzmann": (scipy.stats.boltzmann, {}),
+    "planck": (scipy.stats.planck, {}),
+    "logser": (scipy.stats.logser, {}),
+    "zipf": (scipy.stats.zipf, {}),
+    "dlaplace": (scipy.stats.dlaplace, {}),
+    "skellam": (scipy.stats.skellam, {}),
+}
