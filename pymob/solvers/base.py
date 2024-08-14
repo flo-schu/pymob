@@ -120,35 +120,147 @@ class SolverBase:
             )
 
     def preprocess_parameters(self, parameters, num_backend: ModuleType=numpy):
-        ode_args = mappar(self.model, parameters, exclude=self.exclude_kwargs_model)
-        pp_args = mappar(self.post_processing, parameters, exclude=self.exclude_kwargs_postprocessing)
+        ode_args = mappar(
+            self.model, 
+            parameters, 
+            exclude=self.exclude_kwargs_model, 
+            to="dict"
+        )
+        ode_args_broadcasted = self._broadcast_args(
+            arg_dict=frozendict(ode_args), # type: ignore
+            num_backend=num_backend
+        )
         
+        pp_args = mappar(
+            self.post_processing, 
+            parameters, 
+            exclude=self.exclude_kwargs_postprocessing, 
+            to="dict"
+        )
+        pp_args_broadcasted = self._broadcast_args(
+            arg_dict=frozendict(pp_args), # type: ignore
+            num_backend=num_backend
+        )
+
+        return ode_args_broadcasted, pp_args_broadcasted
+
+
+    def _broadcast_args(self, arg_dict: frozendict[str, numpy.ndarray], num_backend: ModuleType=numpy):
         # simply broadcast the parameters along the batch dimension
         # if there is no other index provided
-        if len(self.indices) == 0:
-            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
-            n_batch = len(batch_coordinates)
-            ode_args_indexed = [
-                num_backend.tile(num_backend.array(a, ndmin=1), n_batch)\
-                    .reshape((n_batch, *num_backend.array(a, ndmin=1).shape))
-                for a in ode_args
-            ]
-            pp_args_indexed = [
-                num_backend.tile(num_backend.array(a, ndmin=1), n_batch)\
-                    .reshape((n_batch, *num_backend.array(a, ndmin=1).shape))
-                for a in pp_args
-            ]
-        else:
-            idxs = list(self.indices.values())
-            n_index = len(idxs[0])
-            ode_args_indexed = [
-                num_backend.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
-                for a in ode_args
-            ]
-            pp_args_indexed = [
-                num_backend.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
-                for a in pp_args
-            ]
+        # batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
+        args = []
+        for arg_name, arg in arg_dict.items():
+            # you can expect that any of the expected parameter_shapes have the
+            # size of the batch_dimension in the first axis.
+            target_shape = self.parameter_shapes[arg_name]
+
+            # make sure the argument is an array with one dimension
+            # promoting to two dimension (including a batch dimension will be done)
+            # in the different conditional branches
+            arg_promoted = num_backend.array(arg, ndmin=1)
+            
+            # if the size of the 1st dimension of the argument array 
+            # is identical to the size of the specified first dimension
+            # we know that the input array was constructed to match the size.
+            # The length of the batch coordinates is at least 1
+            # There are weird cases in which the input arrays are square,
+            # and the dimensions of the parameter have been specified in a 
+            # different order (other than batch_dimension first)
+            # This problem has been fixed, as the dimensional order is now
+            # checked in the Evaluator.__init__
+            if arg_promoted.shape[0] == target_shape[0]:
+                # if the dimensionality of the argument array is 1
+                # we add a dummy dimension at the end, in order
+                # to harmonize it with arguments that are vectors
+                if arg.ndim == 1:
+                    arg_broadcasted = num_backend.expand_dims(arg_promoted, -1)
+                else:
+                    # if greater zero (zero dim not possible because of the 
+                    # promotion to 1D arrays at the beginning of the loop)
+                    # then it is assumed that the array correctly contains 
+                    # more than one value for each id in the batch dimension
+                    # i.e. vector, matrix or nd-array parameters in the ODE
+                    # We leave the array as is
+                    pass
+
+            elif (
+                # this is when passed and expected shapes have the same number
+                # of dimensions
+                arg_promoted.shape[0] == 1 or 
+                # this is when the shape of the later dimensions match.
+                # I.e. the batch_dimension is not in the passed argument values
+                # This happens frequently, when parameters are not broadcasted
+                # to the batch dimension before being passed to the solver
+                #
+                # An example for the syntax below:
+                # arg_promoted.shape >>> (2,5) 
+                # target_shape >>> (10,2,5)
+                # len(arg_promoted.shape) >>> 2
+                # target_shape[-2:] >>> (2,5)
+                # (2,5) == (2,5) >>> True
+                arg_promoted.shape == target_shape[-len(arg_promoted.shape):]
+            ):
+                # Note that this will also broadcast parameters across multiple
+                # dimension e.g. (5,) -> (10,2,5)
+                if arg_promoted.ndim > len(self.parameter_shapes[arg_name]):
+                    raise ValueError(
+                        f"Parameter '{arg_name}' values have shape "+
+                        f"{arg_promoted.shape}. This is in conflict with the "+
+                        f"specified shape {self.parameter_shapes[arg_name]} "+
+                        f"from the dimensions {self.parameter_dims[arg_name]}."
+                    )
+                # the operation will broadcase argument arrays that have the
+                # same number of dimensions (and the first dimension is )
+                arg_broadcasted = num_backend.broadcast_to(
+                    arg_promoted, shape=self.parameter_shapes[arg_name]
+                )
+
+                # also here we apply broadcasting to the array if the result has 
+                # only one dimension
+                if arg_broadcasted.ndim == 1:
+                    arg_broadcasted = num_backend.expand_dims(arg_broadcasted, -1)
+            else:
+                raise ValueError(
+                    f"The values of parameter '{arg_name}' with the shape "+
+                    f"{arg_promoted.shape} could not be broadcasted to the "+
+                    f"specified shape {self.parameter_shapes[arg_name]} "+
+                    f"from the dimensions {self.parameter_dims[arg_name]}. "+
+                    f"Make sure you add the missing dimensions in the "+
+                    f"parameter specification Param(..., dims=(...,)) "+
+                    f"and handle parameter indexing appropriately. Note that "+
+                    f"the batch dimension {self.batch_dimension} is added "+
+                    f"automatically."
+                )
+            
+            args.append(arg_broadcasted)
+
+        return tuple(args)
+
+
+        # if len(self.indices) == 0:
+        #     n_batch = len(batch_coordinates)
+        #     ode_args_indexed = [
+        #         num_backend.tile(num_backend.array(a, ndmin=1), n_batch)\
+        #             .reshape((n_batch, *num_backend.array(a, ndmin=1).shape))
+        #         for a in ode_args
+        #     ]
+        #     pp_args_indexed = [
+        #         num_backend.tile(num_backend.array(a, ndmin=1), n_batch)\
+        #             .reshape((n_batch, *num_backend.array(a, ndmin=1).shape))
+        #         for a in pp_args
+        #     ]
+        # else:
+        #     idxs = list(self.indices.values())
+        #     n_index = len(idxs[0])
+        #     ode_args_indexed = [
+        #         num_backend.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
+        #         for a in ode_args
+        #     ]
+        #     pp_args_indexed = [
+        #         num_backend.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
+        #         for a in pp_args
+        #     ]
 
         return ode_args_indexed, pp_args_indexed
 
