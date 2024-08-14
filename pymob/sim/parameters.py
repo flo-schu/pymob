@@ -6,7 +6,7 @@ from typing_extensions import Annotated
 
 import scipy
 import numpy as np
-from pydantic import BaseModel, ConfigDict, model_serializer, field_validator
+from pydantic import BaseModel, ConfigDict, model_serializer, field_validator, model_validator
 from pydantic.functional_validators import BeforeValidator
 from numpydantic import NDArray, Shape
 from nptyping import Float64, Int64
@@ -203,6 +203,30 @@ OptionRV = Annotated[
 class Param(BaseModel):
     """This class serves as a Basic model for declaring parameters
     Including a distribution with optional depdendencies
+
+    Parameters
+    ----------
+
+    value : float|NumericArray
+        The parameter value. If it is not a 0-d array, float or 1-d array of 
+        length one, it should be accompanied by a dimension for each axis in 
+        the array. The array coordinates must be specified in the observation
+        coordinates or in index coordinates
+
+    dims : Tuple[str, ...]
+        Dimensions of the parameter. If the batch dimension is not specified
+        here, it will be automatically added in the Evaluator 
+        (dispatch_constructor). If dims are specified here, they should be
+        present in:
+        1) dimension in sim.config.data_structure and sim.coordinates  
+        2) dimension in sim.config.parameters (so here) and sim.coordinates  
+        3) dimension in sim.indices 
+
+    prior : Optional[RandomVariable]
+        This is a string or pymob.sim.parameters.RandomVariable that specifies 
+        the prior. Strings are automatically parsed to RandomVariables if the 
+        syntax is correct. The prior should follow the specification of 
+        scipy.stats
     """
     model_config = ConfigDict(
         arbitrary_types_allowed=True, 
@@ -234,7 +258,27 @@ class Param(BaseModel):
             self.hyper == other.hyper and
             self.free == other.free
         )
+  
+    @model_validator(mode="after")
+    def post_update(self):
+        shape_value = np.array(self.value, ndmin=1).shape
+        if max(shape_value) > 1 and len(self.dims) == 0:
+            warnings.warn(
+                f"Declaring parameter values of a shapes {shape_value} > 1"+
+                "without specifiying Param(..., dims=(...)) is dangerous."+
+                "If the dimension should represent only the batch dimension (e.g.)"+
+                "the replicate dimension, you can simply add it here."+
+                "If the dimension is part of the model, you should absolutely"+
+                "specify it along with one of the following options: "+
+                "1) dimension in sim.config.data_structure and sim.coordinates "+
+                "2) dimension in sim.config.parameters and sim.coordinates "+
+                "3) dimension in sim.indices "+
+                "an index or a coordinate and DataVariable."+
+                "If this dimension is not somehow part of the datastructure of the"+
+                "simulation consider if you really need it."
+            )
 
+        return self
 
 scipy_to_scipy = {
     # Continuous Distributions

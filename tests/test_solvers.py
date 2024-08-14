@@ -64,6 +64,90 @@ def test_solver_preprocessing_replicated():
         [(2,1), (2,1), (2,1), (2,1)]
     )
 
+
+def test_solver_preprocessing_complex_parameters():
+    sim = init_lotkavolterra_simulation_replicated()
+
+    # step 1 of mischief ;) add a parameter with more than 1 dimension
+    # without declaring these coordinates. By using the same number
+    # of parameters as the batch_dimension no error is thrown.
+    # This is an expected behavior, but will issue a warning if declared
+    # without dimensions
+    sim.config.model_parameters.gamma.value = [0,1]
+    sim.config.model_parameters.gamma.dims = ("id",)
+
+    # test SolverBase
+    solver = setup_solver(sim, solver=SolverBase)
+
+    # test parameter processing
+    theta = sim.model_parameter_dict
+    theta_solver_ode, theta_solver_pp = solver.preprocess_parameters(theta)
+
+    # step 2 of mischief ;) this is not allowed and should raise an exception
+    sim.config.model_parameters.gamma.value = [0,1,2]
+    sim.config.model_parameters.gamma.dims = ()
+
+    # test parameter processing
+    solver = setup_solver(sim, solver=SolverBase)
+    theta = sim.model_parameter_dict
+
+    try:
+        theta_solver_ode, theta_solver_pp = solver.preprocess_parameters(theta)
+        raise AssertionError(
+            "This behavior should throw an exception. Multidimensional"+
+            "Array values were specified without explicitly defining dimensions"
+        )
+    except ValueError:
+        pass
+    
+    # step 3: fixing mischief conducted
+    # there should be a quick fix for this
+    # TODO: Add a dummy coordinate for the parameter dimension.
+    sim.config.model_parameters.gamma.dims = ("test_dim",)
+    
+    try:
+        sim.dimension_coords
+        raise AssertionError(
+            "This behavior should throw an exception. Parameter dimension"+
+            "was specified without explicitly defining coordinates for that "+
+            "dimension."
+        )
+    except KeyError:
+        pass
+    
+
+    # step 4: try to fix but should not work because dimension size does not match 
+    # value shape
+    sim.coordinates["test_dim"] = ["a", "b"]
+
+    sim.dimension_coords
+    sim.dimension_sizes
+
+    solver = setup_solver(sim, solver=SolverBase)
+    theta = sim.model_parameter_dict
+
+    try:
+        theta_solver_ode, theta_solver_pp = solver.preprocess_parameters(theta)
+        raise AssertionError(
+            "This behavior should throw an exception. Multidimensional"+
+            "Array values were specified without explicitly defining dimensions"
+        )
+    except ValueError:
+        pass
+    
+    
+    # step 5: Correct the coordinate shape
+    sim.coordinates["test_dim"] = ["a", "b", "c"]
+
+    solver = setup_solver(sim, solver=SolverBase)
+    theta = sim.model_parameter_dict
+    theta_solver_ode, theta_solver_pp = solver.preprocess_parameters(theta)
+
+    np.testing.assert_equal(
+        [t.shape for t in theta_solver_ode], 
+        [(2,1), (2,1), (2,3), (2,1)]
+    )
+
 def test_solver_dimensional_order():
     sim = init_lotkavolterra_simulation_replicated()
     theta = sim.model_parameter_dict

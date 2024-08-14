@@ -23,7 +23,7 @@ from numpy.typing import ArrayLike
 
 from pydantic import (
     BaseModel, Field, computed_field, field_validator, model_validator, 
-    ConfigDict, TypeAdapter, ValidationError
+    ConfigDict, TypeAdapter, ValidationError, validator
 )
 from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
@@ -634,6 +634,21 @@ class Modelparameters(BaseModel):
     def value_dict(self) -> Dict[str,float|NumericArray]:
         return {k:v.value for k, v in self.all.items()}
     
+    @property
+    def dimensions(self) -> List[str]:
+        # TODO: Remove when dimensions is not accessed any longer
+        warnings.warn(
+            "Legacy method, will be deprecated soon. This works only if all "
+            "Data variables have the same dimension",
+            category=DeprecationWarning
+        )
+        dims = []
+        for k, v in self.__pydantic_extra__.items():
+            for d in v.dims:
+                if d not in dims:
+                    dims.append(d)
+        return dims
+
     def remove(self, key) -> None:
         """Removes a Parameter"""
         if key not in self.all:

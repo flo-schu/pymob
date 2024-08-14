@@ -1366,18 +1366,48 @@ class SimulationBase:
         return data_structure
 
     @property
-    def dimension_sizes(self):
-        dim_sizes = {}
+    def dimension_coords(self) -> Dict[str, Tuple[str, ...]]:
+        """Goes through dimensions of data structure and adds coordinates,
+        then goes through dimensions of parameters and searches in coordinates
+        and indices to 
+        """
+        dim_coords = {}
         for dim in self.config.data_structure.dimensions:
             coord = self.coordinates[dim]
-            dim_sizes.update({dim: len(coord)})
+            dim_coords.update({dim: tuple(coord)})
 
-        for key, coord in self.coordinates_indices.items():
-            unique_coords = np.unique(coord)
-            assert key not in dim_sizes
-            dim_sizes.update({key: len(unique_coords)})
+        for dim in self.config.model_parameters.dimensions:
+            coord = self.coordinates.get(dim, None)
 
-        return dim_sizes
+            if coord is None:
+                coord = self.coordinates_indices.get(dim, None)
+            
+            if coord is None:
+                raise KeyError(
+                    f"No coordinates have been defined for parameter dimension "+
+                    f"{dim}. Use `sim.coordinates['{dim}'] = [...]` to define "+
+                    "the coordinates." 
+                )
+            
+            _, index = np.unique(coord, return_index=True)
+            unique_coords = tuple(coord[sorted(index)])
+
+            if dim in dim_coords and unique_coords != dim_coords[dim]:
+                raise ValueError(
+                    "unique coordinates in sim.indices were not identical to "+
+                    f"simulation coordinates of dimension '{dim}'"
+                )
+
+            dim_coords.update({dim: unique_coords})
+
+        return dim_coords
+    
+    @property
+    def dimension_sizes(self) -> Dict[str, int]:
+        return {
+            dim: len(coords) for dim, coords 
+            in self.dimension_coords.items()
+        }
 
     def reorder_dims(self, Y):
         results = {}

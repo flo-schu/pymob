@@ -87,7 +87,16 @@ class SolverBase:
                 if d == self.batch_dimension and d not in self.dimension_sizes:
                     dim_size = 1
                 else:
-                    dim_size = self.dimension_sizes[d]
+                    try:
+                        dim_size = self.dimension_sizes[d]
+                    except KeyError as err:
+                        raise KeyError(
+                            f"KeyError: Dimension '{d}' could not be found in "+
+                            f"any dimension specified for the simulation "+
+                            f"{self.dimension_sizes}. It must be either "+
+                            "specified via the `sim.indices` dict."
+                        )
+                
                 dim_shape.append(dim_size)
             par_shape_dict.update({par_name: tuple(dim_shape)})
 
@@ -240,7 +249,13 @@ class SolverBase:
                     f"from the dimensions {self.parameter_dims[arg_name]}. "+
                     f"Make sure you add the missing dimensions in the "+
                     f"parameter specification Param(..., dims=(...,)) "+
-                    f"and handle parameter indexing appropriately. Note that "+
+                    f"and handle parameter coordinates appropriately. "+
+                    "Parameter dimension coordinates can be specified either "+
+                    f"1) Add the missing dimension in sim.config.parameters.{arg_name} "+
+                    "and sim.coordinates['MISSING_DIM'] = [...]"+
+                    "2) Add the missing dimension in "+
+                    "sim.config.data_structure.ANY_DATA_VAR and sim.coordinates['MISSING_DIM'] "+
+                    "3) dimension in sim.indices "+
                     f"the batch dimension {self.batch_dimension} is added "+
                     f"automatically."
                 )
@@ -274,7 +289,7 @@ class SolverBase:
         #         for a in pp_args
         #     ]
 
-        return ode_args_indexed, pp_args_indexed
+        # return ode_args_indexed, pp_args_indexed
 
     def preprocess_x_in(self, x_in, num_backend:ModuleType=numpy):
         X_in_list = []
