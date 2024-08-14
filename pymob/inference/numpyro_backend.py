@@ -101,6 +101,9 @@ class ErrorModelFunction(Protocol):
 class NumpyroDistribution(Distribution):
     distribution_map: Dict[str,Tuple[dist.Distribution, Dict[str,str]]] = distribution_map
 
+    @property
+    def dist_name(self):
+        return self.distribution.__name__
 
 class NumpyroBackend(InferenceBackend):
     _distribution = NumpyroDistribution
@@ -132,12 +135,6 @@ class NumpyroBackend(InferenceBackend):
 
         # combine the model
         self.inference_model = self.parse_probabilistic_model()
-
-
-    @property
-    def distribution_map(self):
-        return distribution_map
-    
 
     @property
     def user_defined_probability_model(self):
@@ -257,27 +254,11 @@ class NumpyroBackend(InferenceBackend):
         extra = {"EPS": EPS}
         gaussian_base = self.gaussian_base_distribution
 
-        def lookup(val, deterministic, prior_samples, observations):
-            if val in deterministic:
-                return deterministic[val]
-            
-            elif val in prior_samples:
-                return prior_samples[val]
-            
-            elif val in observations:
-                return observations[val]
-            
-            elif val in extra:
-                return extra[val]
-
-            else:
-                return val
-
         def sample_prior(prior: Dict, obs: Dict):
             theta = {}
+            context = [theta, obs, extra]
             for prior_name, prior_dist in prior.items():
-                lup = partial(lookup, deterministic={}, prior_samples=theta, observations=obs)
-                dist = prior_dist.construct(lup)
+                dist = prior_dist.construct(context=context)
 
                 theta_i = numpyro.sample(
                     name=prior_name,
@@ -291,9 +272,9 @@ class NumpyroBackend(InferenceBackend):
         def sample_prior_gaussian_base(prior: Dict, obs: Dict):
             theta = {}
             theta_base = {}
+            context = [theta, obs, extra]
             for prior_name, prior_dist in prior.items():
-                lup = partial(lookup, deterministic={}, prior_samples=theta, observations=obs)
-                dist = prior_dist.construct(lup)
+                dist = prior_dist.construct(context=context)
 
                 try:
                     transforms = getattr(dist, "transforms")
@@ -330,14 +311,9 @@ class NumpyroBackend(InferenceBackend):
 
         def likelihood(theta, simulation_results, observations, masks):
             """Uses lookup and error model from the local function context"""
-            lup = partial(lookup, 
-                deterministic=simulation_results, 
-                prior_samples=theta, 
-                observations=observations
-            )
-
+            context = [simulation_results, theta, observations, extra]
             for error_model_name, error_model_dist in error_model.items():
-                dist = error_model_dist.construct(lup)
+                dist = error_model_dist.construct(context=context)
 
                 _ = numpyro.sample(
                     name=error_model_name + "_obs",
