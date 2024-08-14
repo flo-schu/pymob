@@ -16,8 +16,8 @@ class Simulation(SimulationBase):
         self.model_parameters["parameters"] =  dict(
             alpha = 0.5,  # Prey birth rate
             beta = 0.02,  # Rate at which predators decrease prey population
-            gamma = 0.3,  # Predator reproduction rate
-            delta = 0.01,  # Predator death rate
+            gamma = 0.3,  # Predator death rate
+            delta = 0.01,  # Predator reproduction rate
         )
         
         self.observations = xr.load_dataset(input[1])
@@ -88,18 +88,18 @@ class HierarchicalSimulation(Simulation):
         )
         # Rate at which predators decrease prey population.
         self.config.model_parameters.beta = Param(value=0.02, free=True, prior="lognorm(s=[0.1],scale=0.02)")
-        # Predator reproduction rate
-        self.config.model_parameters.gamma = Param(value=0.3, free=False)
         # Predator death rate
+        self.config.model_parameters.gamma = Param(value=0.3, free=False)
+        # Predator reproduction rate
         self.config.model_parameters.delta = Param(value=0.01, free=False)
 
-        self.config.data_structure.wolves = DataVariable(
-            dimensions=["id", "time"], observed=False, dimensions_evaluator=["id", "time"])
         self.config.data_structure.rabbits = DataVariable(
             dimensions=["id", "time"], observed=False, dimensions_evaluator=["id", "time"]
         )
+        self.config.data_structure.wolves = DataVariable(
+            dimensions=["id", "time"], observed=False, dimensions_evaluator=["id", "time"]
+        )
 
-        self.coordinates["time"] = np.arange(0, 200, 0.1)
         self.define_observations_replicated_multi_experiment(n=12)
 
         y0 = self.parse_input("y0", drop_dims=["time"])
@@ -166,8 +166,8 @@ class HierarchicalSimulation(Simulation):
         t0_wolves = list(rng.integers(2, 15, n))
         t0_rabbits = list(rng.integers(35, 70, n))
         self.config.simulation.y0 = [
-            f"wolves=Array({str(t0_wolves).replace(' ','')})", 
-            f"rabbits=Array({str(t0_rabbits).replace(' ','')})"
+            f"rabbits=Array({str(t0_rabbits).replace(' ','')})",
+            f"wolves=Array({str(t0_wolves).replace(' ','')})"
         ]
 
     @staticmethod
