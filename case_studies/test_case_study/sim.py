@@ -102,10 +102,13 @@ class HierarchicalSimulation(Simulation):
         )
 
         self.define_observations_replicated_multi_experiment(n=12)
+        self.coordinates["time"] = np.arange(0, 200, 0.1)
 
         y0 = self.parse_input("y0", drop_dims=["time"])
         self.model_parameters["y0"] = y0
         
+        self.config.error_model.rabbits = "lognorm(scale=rabbits+EPS,s=0.1)"
+        self.config.error_model.wolves = "lognorm(scale=wolves+EPS,s=0.1)"
         
     
     def define_observations_replicated_multi_experiment(self, n):
