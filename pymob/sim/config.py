@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import ast
+from ast import literal_eval as make_tuple
 from dataclasses import dataclass
 from glob import glob
 import configparser
@@ -194,12 +195,21 @@ def string_to_dict(
                 except ValueError:
                     pass
 
-            if not parsed and  v[0]=="[" and v[-1]=="]" in v:
+            if not parsed and v[0] == "(" and v[-1] == ")":
+                try:
+                    parsed_value = make_tuple(v)
+                    parsed = True
+                except ValueError:
+                    pass
+
+            # TODO: This expression seems to be wrong, but it causes no errors
+            if not parsed and  v[0]=="[" and v[-1]=="]":
                 try:
                     v_ = v.strip("[]").split(",")
                     # remove double quotes
                     v_ = [re.sub(r'^"|"$', '', s) for s in v_]
                     v_ = [re.sub(r"^'|'$", '', s) for s in v_]
+                    v_ = [v_i for v_i in v_ if v_i != ""]
                     parsed_value = TypeAdapter(List[str]).validate_python(v_)
                     parsed = True
                 except ValidationError:
