@@ -42,14 +42,14 @@ def test_solver_preprocessing_replicated():
     np.testing.assert_equal([y.shape for y in y0_solver], [(2,1), (2,1)])
     np.testing.assert_equal(y0_solver, [np.array([[9],[5]]), np.array([[40], [50]])])
 
-    sim.config.jaxsolver.batch_dimension = "idx" # this is not existing
+    sim.config.simulation.batch_dimension = "idx" # this is not existing
     solver = setup_solver(sim, solver=JaxSolver)
     y0 = sim.parse_input("y0",drop_dims=["time"])
     y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
     np.testing.assert_equal([y.shape for y in y0_solver], [(1,2), (1,2)])
     np.testing.assert_equal(y0_solver, [np.array([[9, 5]]), np.array([[40, 50]])])
     
-    sim.config.jaxsolver.batch_dimension = "id" # This exists!
+    sim.config.simulation.batch_dimension = "id" # This exists!
     solver = setup_solver(sim, solver=JaxSolver)
     y0 = sim.parse_input("y0",drop_dims=["time"])
     y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))

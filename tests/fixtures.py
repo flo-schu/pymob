@@ -27,8 +27,7 @@ def init_lotkavolterra_simulation_replicated():
     sim.config.case_study.scenario = "test_replicated"
     sim._observations = xr.Dataset()
 
-    sim.config.solverbase.batch_dimension = "id"
-    sim.config.jaxsolver.batch_dimension = "id"
+    sim.config.simulation.batch_dimension = "id"
 
     sim.config.model_parameters.gamma = Param(value=0.3)
     sim.config.model_parameters.delta = Param(value=0.01)
@@ -135,11 +134,11 @@ def setup_solver(sim: SimulationBase, solver: type):
 
 
 def create_composite_priors():
-    prior_mu = RandomVariable(distribution="normal", parameters={"loc": Expression("5"), "scale": Expression("2.0")}, dims=("experiment",))
+    prior_mu = RandomVariable(distribution="normal", parameters={"loc": Expression("5"), "scale": Expression("2.0")})
     prior_k = RandomVariable(distribution="normal", parameters={"loc": Expression("mu"), "scale": Expression("1.0")})
     prior_k = RandomVariable(distribution="normal", parameters={"loc": Expression("mu + Array([5,5])"), "scale": Expression("1.0")})
 
-    mu = Param(prior=prior_mu, hyper=True)
+    mu = Param(prior=prior_mu, hyper=True, dims=("experiment",))
     k = Param(prior=prior_k)
 
     theta = Modelparameters() # type: ignore

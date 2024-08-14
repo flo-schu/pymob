@@ -127,7 +127,7 @@ def test_standalone_casestudy():
 def test_parameter_parsing():
     config = Config()
 
-    io = "value=1.0 min=0.0 max=3.0 hyper=False free=True"
+    io = "value=1.0 dims=[] min=0.0 max=3.0 hyper=False free=True"
 
     # test scripting input
     test = Param(value=1.0, min=0.0, max=3.0)
@@ -149,7 +149,7 @@ def test_parameter_parsing():
 def test_parameter_array():
     config = Config()
 
-    io = "value=[1.0,2.0,3.0] hyper=False free=True"
+    io = "value=[1.0,2.0,3.0] dims=['test_dim'] hyper=False free=True"
 
     # test scripting input
     test = Param(value=np.array([1.0,2.0,3.0]))
@@ -170,12 +170,11 @@ def test_parameter_array():
 def test_prior():
     config = Config()
 
-    io = "lognorm(scale=[1.0,1.0,a],s=1.5,dims=('hello',))"
+    io = "lognorm(scale=[1.0,1.0,a],s=1.5)"
 
     test_prior = RandomVariable(
         distribution="lognorm", 
         parameters={"scale": Expression("[1.0,1.0,a]"), "s": Expression("1.5")},
-        dims=("hello",)
     )
 
     # test scripting input
@@ -199,8 +198,8 @@ def test_prior():
 def test_parameter_array_with_prior():
     config = Config()
 
-    io = "value=[1.0,2.0,3.0] prior=lognorm(scale=[1.0,1.0,1.0],s=1.0,dims=()) hyper=False free=True"
-    test = Param(value=[1.0,2.0,3.0], prior="lognorm(scale=[1.0,1.0,1.0],s=1.0,dims=())") # type:ignore
+    io = "value=[1.0,2.0,3.0] dims=[] prior=lognorm(scale=[1.0,1.0,1.0],s=1.0) hyper=False free=True"
+    test = Param(value=[1.0,2.0,3.0], prior="lognorm(scale=[1.0,1.0,1.0],s=1.0)") # type:ignore
 
     # test config file input
     config.model_parameters.test = io
