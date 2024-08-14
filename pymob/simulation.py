@@ -444,6 +444,26 @@ class SimulationBase:
             if k in input_vars
         }
 
+    @property
+    def coordinates_indices(self):
+        return {
+            idx_name: idx_val.coords[idx_name].values
+            for idx_name, idx_val in self.indices.items() 
+        }
+
+    @property
+    def parameter_dims(self) -> Dict[str, Tuple[str, ...]]:
+        return {
+            par_name: param.dims
+            for par_name, param in self.config.model_parameters.all.items() 
+        }
+
+    @property
+    def parameter_shapes(self) -> Dict[str, Tuple[int, ...]]:
+        return {
+            par_name: tuple([self.dimension_sizes[d] for d in param.dims])
+            for par_name, param in self.config.model_parameters.all.items() 
+        }
 
     def dispatch_constructor(self, **evaluator_kwargs):
         """Construct the dispatcher and pass everything to the evaluator that is 
@@ -515,8 +535,9 @@ class SimulationBase:
         self.evaluator = Evaluator(
             model=model,
             solver=solver,
-            # parameters=model_parameters,
+            parameter_dims=self.parameter_dims,
             dimensions=self.dimensions,
+            dimension_sizes=self.dimension_sizes,
             n_ode_states=self.config.simulation.n_ode_states,
             var_dim_mapper=self.var_dim_mapper,
             data_structure=self.data_structure,
@@ -524,10 +545,12 @@ class SimulationBase:
             data_variables=self.data_variables,
             coordinates=self.coordinates,
             coordinates_input_vars=self.coordinates_input_vars,
+            coordinates_indices=self.coordinates_indices,
             # TODO: pass the whole simulation settings section
             stochastic=True if stochastic == "stochastic" else False,
             indices=self.indices,
             post_processing=post_processing,
+            batch_dimension=self.config.simulation.batch_dimension,
             solver_options=solver_options,
             **evaluator_kwargs
         )
@@ -1348,6 +1371,11 @@ class SimulationBase:
         for dim in self.config.data_structure.dimensions:
             coord = self.coordinates[dim]
             dim_sizes.update({dim: len(coord)})
+
+        for key, coord in self.coordinates_indices.items():
+            unique_coords = np.unique(coord)
+            assert key not in dim_sizes
+            dim_sizes.update({key: len(unique_coords)})
 
         return dim_sizes
 

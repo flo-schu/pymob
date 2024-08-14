@@ -28,11 +28,11 @@ class Distribution:
     """
     distribution_map: Dict[str,Tuple[Callable, Dict[str,str]]] = {}
     _context = {}
-    def __init__(self, name: str, random_variable: RandomVariable) -> None:
+    def __init__(self, name: str, random_variable: RandomVariable, dims: Tuple[str, ...]) -> None:
         self.name = name
         self._dist_str = random_variable.distribution
         self._parameter_expression = random_variable.parameters
-        self._dims = random_variable.dims
+        self._dims = dims
 
         dist, params, uargs = self.parse_distribution(random_variable)
         self.distribution: Callable = dist
@@ -155,7 +155,11 @@ class InferenceBackend(ABC):
                     f"sim.config.model_parameters.{par} = lognorm(loc=1, scale=2)"
                 )
 
-            dist = cls._distribution(name=key, random_variable=par.prior)
+            dist = cls._distribution(
+                name=key, 
+                random_variable=par.prior,
+                dims=par.dims
+            )
             priors.update({key: dist})
         return priors
     
@@ -168,7 +172,8 @@ class InferenceBackend(ABC):
         for data_var, error_distribution in error_models.items():
             error_dist = cls._distribution(
                 name=data_var, 
-                random_variable=error_distribution
+                random_variable=error_distribution,
+                dims=()
             )
                
             error_model.update({data_var: error_dist})

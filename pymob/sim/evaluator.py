@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 import inspect
 from frozendict import frozendict
 from copy import deepcopy
@@ -79,14 +79,18 @@ class Evaluator:
             model: Callable,
             solver: type|Callable,
             dimensions: Sequence[str],
+            dimension_sizes: Dict[str, int],
+            parameter_dims: Dict[str, Tuple[str, ...]],
             n_ode_states: int,
             var_dim_mapper: Dict,
             data_structure: Dict,
             data_structure_and_dimensionality: Dict,
             coordinates: Dict,
             coordinates_input_vars: Dict,
+            coordinates_indices: Dict,
             data_variables: Sequence[str],
             stochastic: bool,
+            batch_dimension: str,
             indices: Dict = {},
             post_processing: Optional[Callable] = None,
             solver_options: Dict = {},
@@ -131,16 +135,50 @@ class Evaluator:
         
         self._parameters = frozendict()
         self.dimensions = dimensions
+        self.dimension_sizes = dimension_sizes
         self.n_ode_states = n_ode_states
         self.var_dim_mapper = var_dim_mapper
         self.data_structure = data_structure
         self.data_structure_and_dimensionality = data_structure_and_dimensionality
         self.data_variables = data_variables
         self.coordinates = coordinates
+        self.coordinates_input_vars = coordinates_input_vars
+        self.coordinates_indices = coordinates_indices
         self.is_stochastic = stochastic
         self.indices = indices
+        self.batch_dimension = batch_dimension
         self.solver_options = solver_options
         
+        _param_dims = {}
+        model_args = mappar(model, {}, to="names")
+        for par_name, par_dims in parameter_dims.items():
+            if par_name in model_args:
+                if self.batch_dimension in par_dims:
+                    if par_dims[0] != self.batch_dimension:
+                        raise ValueError(
+                            f"If the batch dimension '{self.batch_dimension}' is "+
+                            f"specified in a model parameter it must always be "+
+                            f"the 0th dimension ('{self.batch_dimension}', ...). "+
+                            f"For parameter '{par_name}' you have provided {par_dims}"
+                        )
+                    else:
+                        # everything okay in this case the dimensional specification
+                        # is good
+                        pass
+                    
+                else:
+                    # add the batch dimension at index 0. If no or other
+                    # dimensions have been specified but not the batch dimension
+                    par_dims = (self.batch_dimension, *par_dims)
+            
+            else:
+                # if the parameter is not part of the model args, there
+                # is no need to do anything
+                pass
+            
+            _param_dims.update({par_name: par_dims})
+        self.parameter_dims = _param_dims
+
         # can be initialized
         if post_processing is None:
             self.post_processing = lambda results, time, interpolation: results
@@ -171,6 +209,10 @@ class Evaluator:
                     for k, v in coordinates_input_vars.items()
                 })
 
+                frozen_coordinates_indices = frozendict({
+                    k: tuple(v) for k, v in coordinates_indices.items()
+                })
+
                 data_structure_dims = frozendict({
                     dv: frozendict({d: lendim for d, lendim in dimdict.items()}) 
                     for dv, dimdict 
@@ -195,13 +237,17 @@ class Evaluator:
                     
                     coordinates=frozen_coordinates,
                     coordinates_input_vars=frozen_coordinates_input_vars,
+                    coordinates_indices=frozen_coordinates_indices,
                     dimensions=tuple(self.dimensions),
+                    dimension_sizes=frozendict(self.dimension_sizes),
+                    parameter_dims=frozendict(self.parameter_dims),
                     data_variables=tuple(self.data_variables),
                     data_structure_and_dimensionality=data_structure_dims,
 
                     indices=frozendict({k: tuple(v.values) for k, v in self.indices.items()}),
                     n_ode_states=self.n_ode_states,
                     is_stochastic=self.is_stochastic,
+                    batch_dimension=self.batch_dimension,
                     **solver_options
 
                 )

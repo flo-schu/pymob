@@ -64,12 +64,12 @@ class HierarchicalSimulation(Simulation):
     def initialize(self, input):
         self.config.case_study.scenario = "test_hierarchical"
 
-        self.config.solverbase.batch_dimension = "id"
-        self.config.jaxsolver.batch_dimension = "id"
+        self.config.simulation.batch_dimension = "id"
 
         # prey birth rate
         self.config.model_parameters.alpha_species = Param(
             value=0.5, free=True, hyper=True,
+            dims=('rabbit_species','experiment'),
             # take good care to specify hyperpriors correctly. 
             # Dimensions are broadcasted following the normal rules of 
             # numpy. The below means, in dimension one, we have two different
@@ -79,12 +79,13 @@ class HierarchicalSimulation(Simulation):
             # is so low that you can be specific about the priors. I.e.:
             # scale = [[1,1,1],[3,3,3]]. This of course expects you know about
             # the dimensionality of the prior (i.e. the unique coordinates of the dimensions)
-            prior="halfnorm(scale=[[1],[3]],dims=('rabbit_species','experiment'))" # type: ignore
+            prior="halfnorm(scale=[[1],[3]])" # type: ignore
         )
         # prey birth rate
         self.config.model_parameters.alpha = Param(
-            value=0.5, free=True, hyper=True,
-            prior="lognorm(s=0.1,scale=alpha_species[rabbit_species_index, experiment_index],dims=('id',))" # type: ignore
+            value=0.5, free=True, hyper=False,
+            dims=("id",),
+            prior="lognorm(s=0.1,scale=alpha_species[rabbit_species_index, experiment_index])" # type: ignore
         )
         # Rate at which predators decrease prey population.
         self.config.model_parameters.beta = Param(value=0.02, free=True, prior="lognorm(s=[0.1],scale=0.02)")

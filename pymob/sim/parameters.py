@@ -89,7 +89,6 @@ class RandomVariable(BaseModel):
 
     distribution: str
     parameters: Dict[str, Expression]
-    dims: Tuple[str, ...] = ()
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, RandomVariable):
@@ -97,7 +96,6 @@ class RandomVariable(BaseModel):
         
         return bool(
             self.distribution == other.distribution and
-            self.dims == other.dims and
             self.parameters.keys() == other.parameters.keys() and
             all([str(self.parameters[k]) == str(other.parameters[k]) 
                 for k in self.parameters.keys()])
@@ -106,8 +104,7 @@ class RandomVariable(BaseModel):
     @model_serializer(when_used="json", mode="plain")
     def model_ser(self) -> str:
         distribution = self.distribution
-        param_dim_dict = dict(**self.parameters, dims=self.dims)
-        parameters = dict_to_string(param_dim_dict, jstr=",")
+        parameters = dict_to_string(self.parameters, jstr=",")
         
         return f"{distribution}({parameters})"
 
@@ -168,12 +165,10 @@ def string_to_prior_dict(prior_str: str):
         value = Expression(kw.value)
         kwargs[key] = value
     
-    dims = kwargs.pop("dims", Expression("()"))
     # Step 3: Return the symbolic expression and the argument dictionary
     return {
         "distribution": func_name, 
         "parameters": kwargs, 
-        "dims": dims.evaluate({})
     }
 
 def to_rv(option: Union[str,RandomVariable,Dict]) -> RandomVariable:
@@ -216,6 +211,7 @@ class Param(BaseModel):
     )
     name: Optional[str] = None
     value: float|NumericArray = 0.0
+    dims: Tuple[str, ...] = ()
     prior: Optional[OptionRV] = None
     min: Optional[float|NumericArray] = None
     max: Optional[float|NumericArray] = None
@@ -229,6 +225,7 @@ class Param(BaseModel):
         
         return bool(
             self.name == other.name and
+            self.dims == self.dims and
             np.all(self.value == other.value) and
             np.all(self.min == other.min) and
             np.all(self.max == other.max) and

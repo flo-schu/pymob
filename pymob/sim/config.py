@@ -435,7 +435,7 @@ class Simulation(BaseModel):
     input_files: OptionListStr = []
     # data_variables: OptionListStr = []
     n_ode_states: int = -1
-    batch_dimension: Optional[str] = None
+    batch_dimension: str = "batch_id"
     modeltype: Literal["stochastic", "deterministic"] = "deterministic"
     solver_post_processing: Optional[str] = Field(default=None, validate_default=True)
     seed: Annotated[int, to_str] = 1
@@ -551,7 +551,6 @@ class Solverbase(BaseModel):
         validate_assignment=True, 
         extra="forbid"
     )
-    batch_dimension: str = "batch_id"
     x_dim: str = "time"
     exclude_kwargs_model: OptionTupleStr = ("t", "time", "x_in", "y", "x", "Y", "X")
     exclude_kwargs_postprocessing: OptionTupleStr = ("t", "time", "interpolation", "results")

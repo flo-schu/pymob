@@ -19,9 +19,12 @@ class SolverBase:
     """
     model: Callable
     dimensions: Tuple
+    dimension_sizes: frozendict[str, int]
+    parameter_dims: frozendict[str, Tuple[str, ...]]
     n_ode_states: int
     coordinates: frozendict[str, Tuple] = field(repr=False)
     coordinates_input_vars: frozendict[str, frozendict]
+    coordinates_indices: frozendict[str, tuple]
     data_variables: Tuple
     data_structure_and_dimensionality: frozendict[str, frozendict[str, int]]
     is_stochastic: bool
@@ -36,6 +39,8 @@ class SolverBase:
 
     # fields that are computed post_init
     x: Tuple[float] = field(init=False, repr=False)
+    index_coordinate_dimensionalities: Dict[str, int] = field(init=False, repr=False)
+    parameter_shapes: Dict[str, Tuple[int, ...]] = field(init=False, repr=False)
 
     def __post_init__(self, *args, **kwargs):
         x = self.coordinates[self.x_dim]
@@ -44,6 +49,12 @@ class SolverBase:
                 f"x_dim '{self.x_dim}' must be sorted in ascending order."
             )
         object.__setattr__(self, "x", x)
+
+        coord_dims = self._get_coordinate_unique_shapes()
+        object.__setattr__(self, "index_coordinate_dimensionalities", coord_dims)
+        
+        parameter_shapes = self._get_parameter_shapes()
+        object.__setattr__(self, "parameter_shapes", parameter_shapes)
 
         # set extra attributes from solver_kwargs, which are specified through
         # the dispatch_constructor. Those don't receive post-processing
@@ -55,6 +66,26 @@ class SolverBase:
     def __call__(self, **kwargs):
         return self.solve(**kwargs)
     
+    def _get_coordinate_unique_shapes(self, ) -> frozendict[str, int]:
+        coordinate_shape_dict = {}
+        for key, coords in self.coordinates.items():
+            n_coords = len(coords)
+            coordinate_shape_dict.update({key: n_coords})
+
+        for key, coords in self.coordinates_indices.items():
+            unique_coords = set(coords)
+            n_coords = len(unique_coords)
+            coordinate_shape_dict.update({key: n_coords})
+
+        return frozendict(coordinate_shape_dict)
+
+    def _get_parameter_shapes(self, ) -> frozendict[str, Tuple[int, ...]]:
+        return frozendict({
+            par_name: tuple([self.dimension_sizes[d] for d in par_dims])
+            for par_name, par_dims in self.parameter_dims.items() 
+        })
+
+
     def test_matching_batch_dims(self):
         bc = self.coordinates.get(self.batch_dimension, None)
 
