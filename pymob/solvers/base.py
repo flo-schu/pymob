@@ -80,11 +80,18 @@ class SolverBase:
         return frozendict(coordinate_shape_dict)
 
     def _get_parameter_shapes(self, ) -> frozendict[str, Tuple[int, ...]]:
-        return frozendict({
-            par_name: tuple([self.dimension_sizes[d] for d in par_dims])
-            for par_name, par_dims in self.parameter_dims.items() 
-        })
+        par_shape_dict = {}
+        for par_name, par_dims in self.parameter_dims.items():
+            dim_shape = []
+            for d in par_dims:
+                if d == self.batch_dimension and d not in self.dimension_sizes:
+                    dim_size = 1
+                else:
+                    dim_size = self.dimension_sizes[d]
+                dim_shape.append(dim_size)
+            par_shape_dict.update({par_name: tuple(dim_shape)})
 
+        return frozendict(par_shape_dict)
 
     def test_matching_batch_dims(self):
         bc = self.coordinates.get(self.batch_dimension, None)
@@ -148,12 +155,17 @@ class SolverBase:
     def _broadcast_args(self, arg_dict: frozendict[str, numpy.ndarray], num_backend: ModuleType=numpy):
         # simply broadcast the parameters along the batch dimension
         # if there is no other index provided
-        # batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
+        batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
+        n_batch = len(batch_coordinates)
+
         args = []
         for arg_name, arg in arg_dict.items():
             # you can expect that any of the expected parameter_shapes have the
             # size of the batch_dimension in the first axis.
-            target_shape = self.parameter_shapes[arg_name]
+            # Note that this is the taget shape without any extended dimension.
+            # Dimensions are only extended, if there is no batch dimension already
+            # present
+            target_shape = self.parameter_shapes.get(arg_name, (n_batch, ))
 
             # make sure the argument is an array with one dimension
             # promoting to two dimension (including a batch dimension will be done)
@@ -173,7 +185,7 @@ class SolverBase:
                 # if the dimensionality of the argument array is 1
                 # we add a dummy dimension at the end, in order
                 # to harmonize it with arguments that are vectors
-                if arg.ndim == 1:
+                if arg_promoted.ndim == 1:
                     arg_broadcasted = num_backend.expand_dims(arg_promoted, -1)
                 else:
                     # if greater zero (zero dim not possible because of the 
@@ -182,7 +194,7 @@ class SolverBase:
                     # more than one value for each id in the batch dimension
                     # i.e. vector, matrix or nd-array parameters in the ODE
                     # We leave the array as is
-                    pass
+                    arg_broadcasted = arg_promoted
 
             elif (
                 # this is when passed and expected shapes have the same number

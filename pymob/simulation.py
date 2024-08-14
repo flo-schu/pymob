@@ -417,7 +417,7 @@ class SimulationBase:
 
     def subset_by_batch_dimension(self, data):
         batch_dim = self.config.simulation.batch_dimension
-        if batch_dim is None:
+        if batch_dim not in self.coordinates:
             return data
         mask = data[batch_dim].isin(self.coordinates[batch_dim])
         return data.where(mask, drop=True)
