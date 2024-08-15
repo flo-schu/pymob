@@ -6,6 +6,7 @@ from pymob.solvers.base import mappar, SolverBase
 from frozendict import frozendict
 from dataclasses import dataclass, field
 import jax.numpy as jnp
+from jax import Array
 import jax
 import diffrax
 from diffrax.solver.base import _MetaAbstractSolver
@@ -50,6 +51,8 @@ class JaxSolver(SolverBase):
     max_steps: int = int(1e5)
     throw_exception: bool = True
 
+    x_in_jumps: Tuple[float, ...] = field(init=False, repr=False)
+
     def __post_init__(self, *args, **kwargs):
         super().__post_init__(*args, **kwargs)
 
@@ -63,8 +66,37 @@ class JaxSolver(SolverBase):
                 )
             object.__setattr__(self, "diffrax_solver", diffrax_solver)
 
+        x_in_jumps = self._get_x_in_jumps()
+        object.__setattr__(self, "x_in_jumps", x_in_jumps)
 
         hash(self)
+
+    def _get_x_in_jumps(self) -> Optional[Tuple[float, ...]]:
+        """In case there are multiple interpolations present, this function
+        ensures that all jumps are handled appropriately
+        """
+        xs_vars = []
+        for _, data_var_coords in self.coordinates_input_vars["x_in"].items():
+            x_var = data_var_coords[self.x_dim]
+
+            xs_vars.append(jnp.array(x_var, dtype=float))
+
+        if len(xs_vars) == 0:
+            return None
+        else:
+            # unique returns a sorted and unique array, so it is perfect for 
+            # the job
+            x_in_jumps = jnp.unique(jnp.concatenate(xs_vars))
+
+            # we need to cut off any jumps that are greater or equal to the
+            # last observation, so that no infinities are returned for the
+            # last x that is evaluated by the solver
+            x_in_jumps_trimmed = x_in_jumps[x_in_jumps < self.x[-1]]
+            # x_in[0][self.coordinates_input_vars["x_in"][self.x_dim] < self.x[-1]]
+            
+            return tuple(x_in_jumps_trimmed.tolist())
+
+
 
     @partial(jax.jit, static_argnames=["self"])
     def solve(self, parameters: Dict, y0:Dict={}, x_in:Dict={}):
@@ -150,9 +182,19 @@ class JaxSolver(SolverBase):
         f = lambda t, y, args: self.model(t, y, *args)
         
         if len(x_in) > 0:
+            if len(x_in) > 2:
+                raise NotImplementedError(
+                    "Currently only one interpolation is implemented, but "+
+                    "it should be relatively simple to implement multiple "+
+                    "interpolations. I assume, the interpolations could be "+
+                    "passed as a list and expanded in the model. If you are "+
+                    "dealing with this. Try pre-compute the interpolations. "+
+                    "This should speed up the solver. "
+                )
             interp = LinearInterpolation(ts=x_in[0], ys=x_in[1])
             args=(interp, *args)
-            jumps = x_in[0][self.coordinates_input_vars["x_in"][self.x_dim] < self.x[-1]]
+            # jumps = x_in[0][self.coordinates_input_vars["x_in"][self.x_dim] < self.x[-1]]
+            jumps = jnp.array(self.x_in_jumps, dtype=float)
         else:
             interp = None
             args=args

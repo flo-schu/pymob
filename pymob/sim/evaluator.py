@@ -4,6 +4,7 @@ from frozendict import frozendict
 from copy import deepcopy
 import xarray as xr
 import numpy as np
+from numpy.typing import NDArray
 from pymob.solvers.base import mappar, SolverBase
 
 def create_dataset_from_numpy(Y, Y_names, coordinates):
@@ -85,8 +86,9 @@ class Evaluator:
             var_dim_mapper: Dict,
             data_structure: Dict,
             data_structure_and_dimensionality: Dict,
-            coordinates: Dict,
-            coordinates_input_vars: Dict,
+            coordinates: Dict[str, NDArray],
+            coordinates_input_vars: Dict[str, Dict[str, Dict[str, NDArray]]],
+            dims_input_vars: Dict[str, Dict[str, Tuple[str, ...]]],
             coordinates_indices: Dict,
             data_variables: Sequence[str],
             stochastic: bool,
@@ -149,35 +151,21 @@ class Evaluator:
         self.batch_dimension = batch_dimension
         self.solver_options = solver_options
         
-        _param_dims = {}
-        model_args = mappar(model, {}, to="names")
-        for par_name, par_dims in parameter_dims.items():
-            if par_name in model_args:
-                if self.batch_dimension in par_dims:
-                    if par_dims[0] != self.batch_dimension:
-                        raise ValueError(
-                            f"If the batch dimension '{self.batch_dimension}' is "+
-                            f"specified in a model parameter it must always be "+
-                            f"the 0th dimension ('{self.batch_dimension}', ...). "+
-                            f"For parameter '{par_name}' you have provided {par_dims}"
-                        )
-                    else:
-                        # everything okay in this case the dimensional specification
-                        # is good
-                        pass
-                    
-                else:
-                    # add the batch dimension at index 0. If no or other
-                    # dimensions have been specified but not the batch dimension
-                    par_dims = (self.batch_dimension, *par_dims)
-            
-            else:
-                # if the parameter is not part of the model args, there
-                # is no need to do anything
-                pass
-            
-            _param_dims.update({par_name: par_dims})
-        self.parameter_dims = _param_dims
+
+        self.parameter_dims = self._regularize_batch_dimensions(
+            arg_names=mappar(model, {}, to="names"), # type: ignore
+            arg_dims=parameter_dims
+        )
+
+        self.dims_input_vars = {}
+        self.dims_input_vars["y0"] = self._regularize_batch_dimensions(
+            arg_names=list(self.coordinates_input_vars["y0"].keys()),
+            arg_dims=dims_input_vars["y0"]
+        )
+        self.dims_input_vars["x_in"] = self._regularize_batch_dimensions(
+            arg_names=list(self.coordinates_input_vars["x_in"].keys()),
+            arg_dims=dims_input_vars["x_in"]
+        )
 
         # can be initialized
         if post_processing is None:
@@ -205,8 +193,22 @@ class Evaluator:
         if isinstance(solver, type):
             if issubclass(solver, SolverBase):
                 frozen_coordinates_input_vars = frozendict({
-                    k: frozendict({ck: tuple(cv) for ck, cv  in v.items()}) 
-                    for k, v in coordinates_input_vars.items()
+                    k_input_var: frozendict({
+                        k_datavar: frozendict({
+                            k_coord: tuple(v_coord)
+                            for k_coord, v_coord in v_datavar.items()
+                        }) 
+                        for k_datavar, v_datavar in v_input_var.items()
+                    }) 
+                    for k_input_var, v_input_var in coordinates_input_vars.items()
+                })
+
+                frozen_dims_input_vars = frozendict({
+                    k_input_var: frozendict({
+                        k_datavar: tuple(dims_datavar)
+                        for k_datavar, dims_datavar in v_input_var.items()
+                    }) 
+                    for k_input_var, v_input_var in self.dims_input_vars.items()
                 })
 
                 frozen_coordinates_indices = frozendict({
@@ -237,6 +239,7 @@ class Evaluator:
                     
                     coordinates=frozen_coordinates,
                     coordinates_input_vars=frozen_coordinates_input_vars,
+                    dims_input_vars=frozen_dims_input_vars,
                     coordinates_indices=frozen_coordinates_indices,
                     dimensions=tuple(self.dimensions),
                     dimension_sizes=frozendict(self.dimension_sizes),
@@ -269,6 +272,40 @@ class Evaluator:
                 f"Solver {solver} is neither a subclass of "
                 "`pymob.solvers.base.SolverBase` nor a callable."
             )
+
+    def _regularize_batch_dimensions(
+        self, 
+        arg_names: List[str], 
+        arg_dims: Dict[str, Tuple[str, ...]]
+    ) -> Dict[str, Tuple[str, ...]]:
+        _param_dims = {}
+        for par_name, par_dims in arg_dims.items():
+            if par_name in arg_names:
+                if self.batch_dimension in par_dims:
+                    if par_dims[0] != self.batch_dimension:
+                        raise ValueError(
+                            f"If the batch dimension '{self.batch_dimension}' is "+
+                            f"specified in a model parameter it must always be "+
+                            f"the 0th dimension ('{self.batch_dimension}', ...). "+
+                            f"For parameter '{par_name}' you have provided {par_dims}"
+                        )
+                    else:
+                        # everything okay in this case the dimensional specification
+                        # is good
+                        pass
+                    
+                else:
+                    # add the batch dimension at index 0. If no or other
+                    # dimensions have been specified but not the batch dimension
+                    par_dims = (self.batch_dimension, *par_dims)
+            
+            else:
+                # if the parameter is not part of the model args, there
+                # is no need to do anything
+                pass
+            
+            _param_dims.update({par_name: par_dims})
+        return _param_dims
 
     # can be initialized
     def get_call_signature(self):

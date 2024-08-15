@@ -15,7 +15,7 @@ import re
 from collections import OrderedDict
 
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 import xarray as xr
 import dpath as dp
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -423,25 +423,38 @@ class SimulationBase:
         return data.where(mask, drop=True)
 
     @property
-    def coordinates_input_vars(self):
+    def coordinates_input_vars(self) -> Dict[str, Dict[str, Dict[str, NDArray]]]:
         input_vars = ["x_in", "y0"]
 
         # This is a function that could replace the below, to return always
         # dictionaries for any possible input vars. Default: Empty dict
-        # coordinates = {}
-        # for k in input_vars:
-        #     if k in self.model_parameters:
-        #         v = self.model_parameters[k]
-        #         coords = {ck: cv.values for ck, cv in v.coords.items()}
-        #     else:
-        #         coords = {}
+        coordinates = {}
+        for k in input_vars:
+            if k in self.model_parameters:
+                dataset: xr.Dataset = self.model_parameters[k]
+                data_var_coords = {}
+                for var_name, var_data in dataset.data_vars.items():
+                    var_coords = {ck: cv.values for ck, cv in var_data.coords.items()}
+                    data_var_coords.update({var_name:var_coords})
+            else:
+                data_var_coords = {}
 
-        #     coordinates.update({k: coords})
-        # return coordinates
+            coordinates.update({k: data_var_coords})
+        return coordinates
+        # return {
+        #     k: {ck: cv.values for ck, cv in v.coords.items()} 
+        #     for k, v in self.model_parameters.items() 
+        #     if k in input_vars
+        # }
+
+    @property
+    def dims_input_vars(self) -> Dict[str, Dict[str, Tuple[str, ...]]]:
         return {
-            k: {ck: cv.values for ck, cv in v.coords.items()} 
-            for k, v in self.model_parameters.items() 
-            if k in input_vars
+            kiv: {
+                k_var: tuple([k for k in v_var.keys()]) 
+                for k_var, v_var in viv.items()
+            } 
+            for kiv, viv in self.coordinates_input_vars.items()
         }
 
     @property
@@ -545,6 +558,7 @@ class SimulationBase:
             data_variables=self.data_variables,
             coordinates=self.coordinates,
             coordinates_input_vars=self.coordinates_input_vars,
+            dims_input_vars=self.dims_input_vars,
             coordinates_indices=self.coordinates_indices,
             # TODO: pass the whole simulation settings section
             stochastic=True if stochastic == "stochastic" else False,
@@ -1390,7 +1404,7 @@ class SimulationBase:
                 )
             
             _, index = np.unique(coord, return_index=True)
-            unique_coords = tuple(coord[sorted(index)])
+            unique_coords = tuple(np.array(coord)[sorted(index)])
 
             if dim in dim_coords and unique_coords != dim_coords[dim]:
                 raise ValueError(

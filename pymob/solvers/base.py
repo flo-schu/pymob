@@ -3,7 +3,9 @@ import numpy as np
 from numpy.typing import ArrayLike
 from types import ModuleType
 import xarray as xr
-from typing import Callable, Dict, List, Optional, Sequence, Literal, Tuple
+from typing import (
+    Callable, Dict, List, Optional, Sequence, Literal, Tuple, Union
+)
 from frozendict import frozendict
 from dataclasses import dataclass, field
 import inspect
@@ -23,7 +25,8 @@ class SolverBase:
     parameter_dims: frozendict[str, Tuple[str, ...]]
     n_ode_states: int
     coordinates: frozendict[str, Tuple] = field(repr=False)
-    coordinates_input_vars: frozendict[str, frozendict]
+    coordinates_input_vars: frozendict[str, frozendict[str, frozendict[str, Tuple[Union[float,int,str], ...]]]]
+    dims_input_vars: frozendict[str, frozendict[str, Tuple[str, ...]]]
     coordinates_indices: frozendict[str, tuple]
     data_variables: Tuple
     data_structure_and_dimensionality: frozendict[str, frozendict[str, int]]
@@ -39,8 +42,11 @@ class SolverBase:
 
     # fields that are computed post_init
     x: Tuple[float] = field(init=False, repr=False)
-    index_coordinate_dimensionalities: Dict[str, int] = field(init=False, repr=False)
-    parameter_shapes: Dict[str, Tuple[int, ...]] = field(init=False, repr=False)
+    shapes_coordinates: Dict[str, int] = field(init=False, repr=False)
+    shapes_parameter_coordinates: Dict[str, Tuple[int, ...]] = field(init=False, repr=False)
+    shapes_input_vars_coordinates: frozendict[str, frozendict[str, Tuple[int, ...]]] = field(init=False, repr=False)
+    len_batch_coordinate: int = field(init=False)
+    x_shape_batched: Tuple[int, ...] = field(init=False)
 
     def __post_init__(self, *args, **kwargs):
         x = self.coordinates[self.x_dim]
@@ -51,10 +57,19 @@ class SolverBase:
         object.__setattr__(self, "x", x)
 
         coord_dims = self._get_coordinate_unique_shapes()
-        object.__setattr__(self, "index_coordinate_dimensionalities", coord_dims)
+        object.__setattr__(self, "shapes_coordinates", coord_dims)
         
         parameter_shapes = self._get_parameter_shapes()
-        object.__setattr__(self, "parameter_shapes", parameter_shapes)
+        object.__setattr__(self, "shapes_parameter_coordinates", parameter_shapes)
+
+        input_vars_shapes = self._get_input_vars_shapes()
+        object.__setattr__(self, "shapes_input_vars_coordinates", input_vars_shapes)
+
+        batch_length = self._get_batch_length()
+        object.__setattr__(self, "len_batch_coordinate", batch_length)
+
+        x_shape_batched = self._get_x_shape_batched()
+        object.__setattr__(self, "x_shape_batched", x_shape_batched)
 
         # set extra attributes from solver_kwargs, which are specified through
         # the dispatch_constructor. Those don't receive post-processing
@@ -66,6 +81,15 @@ class SolverBase:
     def __call__(self, **kwargs):
         return self.solve(**kwargs)
     
+    def _get_batch_length(self) -> int:
+        batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
+        return len(batch_coordinates)
+
+    def _get_x_shape_batched(self) -> Tuple[int, ...]:
+        n_batch = self.len_batch_coordinate
+        n_x = self.dimension_sizes[self.x_dim]
+        return (n_batch, n_x)
+
     def _get_coordinate_unique_shapes(self, ) -> frozendict[str, int]:
         coordinate_shape_dict = {}
         for key, coords in self.coordinates.items():
@@ -102,6 +126,79 @@ class SolverBase:
 
         return frozendict(par_shape_dict)
 
+    def _get_input_vars_shapes(self, ) -> frozendict[str, frozendict[str, Tuple[int, ...]]]:
+        input_vars_shape_dict = {}
+        for input_var_name, input_var_dict in self.dims_input_vars.items():
+            data_var_shape_dict = {}
+            for data_var_name, data_var_dims in input_var_dict.items():
+                dim_shape = []
+                for d in data_var_dims:
+                    # look for the dimension in the coodinates of the input vars
+                    coords_data_var = self.coordinates_input_vars[input_var_name][data_var_name]
+                    coords = coords_data_var.get(d, None)
+                    
+                    # if it is found use its length as a dimension size
+                    if coords is not None:
+                        dim_size = len(coords)
+                    
+                    # if it is not found, see if the dim is the batch dimensions
+                    # and handle the batch dimension size
+                    # this is done, in cases where there is a batch dimension, 
+                    # but it was not specified for the input, because it is 
+                    # expected that it simply broadcasts to the batch dimension
+                    elif d == self.batch_dimension:
+                        if d not in self.dimension_sizes:
+                            dim_size = 1
+                        else:
+                            dim_size = self.dimension_sizes[d]
+
+                    # if the dimension is not in the coordinates of the input vars
+                    # or not as a batch dimension in the dimension sizes dict
+                    # something is severely wrong
+                    else:
+                        raise KeyError(
+                            f"KeyError: Dimension: '{d}' for data_var: "+
+                            f"'{data_var_name}' in input var: '{input_var_name}' "+
+                            f"could not be found in the coordinate dimensions: "+
+                            f"{list(coords_data_var.keys())}. "+
+                            f"Make sure `sim.model_parameters['{input_var_name}']` "+
+                            "is correctly specified. It is recommended to "+
+                            "specify the model_input with `sim.config.simulation."+
+                            f"{input_var_name} = ['...', '{data_var_name}=...', '...']` "+
+                            f"and use `sim.parse_input(input='{input_var_name}', "+
+                            f"reference_data=..., drop_dims=[...])` to parse the "+
+                            "input."
+                        )
+                    
+                    dim_shape.append(dim_size)
+                data_var_shape_dict.update({data_var_name: tuple(dim_shape)})
+            input_vars_shape_dict.update({
+                input_var_name: frozendict(data_var_shape_dict)
+            })
+        return frozendict(input_vars_shape_dict)
+
+    # def _get_input_vars_shapes(self, ) -> frozendict[str, frozendict[str, Tuple[int, ...]]]:
+    #     frozen_shapes_input_vars = frozendict({
+    #         k_input_var: frozendict({
+    #             k_datavar: tuple([
+    #                 len(v_coord)
+    #                 for _, v_coord in v_datavar.items()
+    #             ]) 
+    #             for k_datavar, v_datavar in v_input_var.items()
+    #         }) 
+    #         for k_input_var, v_input_var in self.coordinates_input_vars.items()
+    #     })
+
+    #     return frozen_shapes_input_vars
+
+    #     raise NotImplementedError(
+    #         "Currently, it is expected that x_in is already in the correct "+
+    #         "shape (minus the batch dimension), when passed to the Evaluator. "+
+    #         "This is why no definite shapes can be defined on initialization. "+
+    #         "The only broadcasting that can be sensibly made is to promote the "+
+    #         "input vectors to the batch dimension, if this has not yet been done."
+    #     )
+
     def test_matching_batch_dims(self):
         bc = self.coordinates.get(self.batch_dimension, None)
 
@@ -114,24 +211,27 @@ class SolverBase:
 
             if not all(matching_batch_coords_if_present):
                 raise IndexError(
-                    f"Batch coordinates '{self.batch_dimension}' of input "
-                    "variables do not have the same size "
+                    f"Batch coordinates '{self.batch_dimension}' of input "+
+                    "variables do not have the same size "+
                     "as the batch dimension of the observations."
                 )
 
     def test_x_coordinates(self):
         x = self.coordinates[self.x_dim]
-        if "x_in" not in self.coordinates_input_vars:
+        if len(self.coordinates_input_vars["x_in"]) == 0:
             return
         
-        x_xin = self.coordinates_input_vars["x_in"][self.x_dim]
+        x_xin = [
+            np.max(v.get(self.x_dim, [0])) 
+            for v in self.coordinates_input_vars["x_in"].values()
+        ]
 
         if np.max(x) > np.max(x_xin):
             raise AssertionError(
-                f"The {self.x_dim}-coordinate on the observations (sim.coordinates) "
-                f"goes to a higher {self.x_dim} than the {self.x_dim}-coordinate "
-                "of the model_parameters['x_in']. "
-                "Make sure to run the simulation only until the provided x_in "
+                f"The {self.x_dim}-coordinate on the observations (sim.coordinates) "+
+                f"goes to a higher {self.x_dim} than the {self.x_dim}-coordinate "+
+                "of the model_parameters['x_in']. "+
+                "Make sure to run the simulation only until the provided x_in "+
                 "values, or extend the x_in values until the required time"
             )
 
@@ -164,8 +264,7 @@ class SolverBase:
     def _broadcast_args(self, arg_dict: frozendict[str, numpy.ndarray], num_backend: ModuleType=numpy):
         # simply broadcast the parameters along the batch dimension
         # if there is no other index provided
-        batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
-        n_batch = len(batch_coordinates)
+        n_batch = self.len_batch_coordinate
 
         args = []
         for arg_name, arg in arg_dict.items():
@@ -174,12 +273,12 @@ class SolverBase:
             # Note that this is the taget shape without any extended dimension.
             # Dimensions are only extended, if there is no batch dimension already
             # present
-            target_shape = self.parameter_shapes.get(arg_name, (n_batch, ))
+            target_shape = self.shapes_parameter_coordinates.get(arg_name, (n_batch, ))
 
             # make sure the argument is an array with one dimension
             # promoting to two dimension (including a batch dimension will be done)
             # in the different conditional branches
-            arg_promoted = num_backend.array(arg, ndmin=1)
+            arg_promoted = num_backend.array(arg, ndmin=1, dtype=float)
             
             # if the size of the 1st dimension of the argument array 
             # is identical to the size of the specified first dimension
@@ -208,7 +307,7 @@ class SolverBase:
             elif (
                 # this is when passed and expected shapes have the same number
                 # of dimensions
-                arg_promoted.shape[0] == 1 or 
+                arg_promoted.shape[0] == 1 
                 # this is when the shape of the later dimensions match.
                 # I.e. the batch_dimension is not in the passed argument values
                 # This happens frequently, when parameters are not broadcasted
@@ -220,21 +319,21 @@ class SolverBase:
                 # len(arg_promoted.shape) >>> 2
                 # target_shape[-2:] >>> (2,5)
                 # (2,5) == (2,5) >>> True
-                arg_promoted.shape == target_shape[-len(arg_promoted.shape):]
+                or arg_promoted.shape == target_shape[-len(arg_promoted.shape):]
             ):
                 # Note that this will also broadcast parameters across multiple
                 # dimension e.g. (5,) -> (10,2,5)
-                if arg_promoted.ndim > len(self.parameter_shapes[arg_name]):
+                if arg_promoted.ndim > len(self.shapes_parameter_coordinates[arg_name]):
                     raise ValueError(
                         f"Parameter '{arg_name}' values have shape "+
                         f"{arg_promoted.shape}. This is in conflict with the "+
-                        f"specified shape {self.parameter_shapes[arg_name]} "+
+                        f"specified shape {self.shapes_parameter_coordinates[arg_name]} "+
                         f"from the dimensions {self.parameter_dims[arg_name]}."
                     )
                 # the operation will broadcase argument arrays that have the
                 # same number of dimensions (and the first dimension is )
                 arg_broadcasted = num_backend.broadcast_to(
-                    arg_promoted, shape=self.parameter_shapes[arg_name]
+                    arg_promoted, shape=self.shapes_parameter_coordinates[arg_name]
                 )
 
                 # also here we apply broadcasting to the array if the result has 
@@ -245,7 +344,7 @@ class SolverBase:
                 raise ValueError(
                     f"The values of parameter '{arg_name}' with the shape "+
                     f"{arg_promoted.shape} could not be broadcasted to the "+
-                    f"specified shape {self.parameter_shapes[arg_name]} "+
+                    f"specified shape {self.shapes_parameter_coordinates[arg_name]} "+
                     f"from the dimensions {self.parameter_dims[arg_name]}. "+
                     f"Make sure you add the missing dimensions in the "+
                     f"parameter specification Param(..., dims=(...,)) "+
@@ -265,56 +364,37 @@ class SolverBase:
         return tuple(args)
 
 
-        # if len(self.indices) == 0:
-        #     n_batch = len(batch_coordinates)
-        #     ode_args_indexed = [
-        #         num_backend.tile(num_backend.array(a, ndmin=1), n_batch)\
-        #             .reshape((n_batch, *num_backend.array(a, ndmin=1).shape))
-        #         for a in ode_args
-        #     ]
-        #     pp_args_indexed = [
-        #         num_backend.tile(num_backend.array(a, ndmin=1), n_batch)\
-        #             .reshape((n_batch, *num_backend.array(a, ndmin=1).shape))
-        #         for a in pp_args
-        #     ]
-        # else:
-        #     idxs = list(self.indices.values())
-        #     n_index = len(idxs[0])
-        #     ode_args_indexed = [
-        #         num_backend.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
-        #         for a in ode_args
-        #     ]
-        #     pp_args_indexed = [
-        #         num_backend.array(a, ndmin=1)[tuple(idxs)].reshape((n_index, 1))
-        #         for a in pp_args
-        #     ]
-
-        # return ode_args_indexed, pp_args_indexed
-
     def preprocess_x_in(self, x_in, num_backend:ModuleType=numpy):
         X_in_list = []
         for x_in_var, x_in_vals in x_in.items():
-            x_in_x = num_backend.array(self.coordinates_input_vars["x_in"][self.x_dim], dtype=float)
-            x_in_y = num_backend.array(x_in_vals)
+            # parse to array
+            x_in_x = num_backend.array(
+                self.coordinates_input_vars["x_in"][x_in_var][self.x_dim], 
+                dtype=float,
+                ndmin=1
+            )
+            x_in_y = num_backend.array(x_in_vals, ndmin=1, dtype=float)
 
-            # broadcast x to y and add a dummy
-            batch_coordinates = self.coordinates_input_vars["x_in"].get(self.batch_dimension, [0])
-            n_batch = len(batch_coordinates)
-            X_in_x = num_backend.tile(x_in_x, n_batch).reshape((n_batch, *x_in_x.shape))
+            # broadcast x
+            x_in_batched_shape = (self.len_batch_coordinate, *x_in_x.shape)
+            x_in_x_broadcasted = num_backend.broadcast_to(x_in_x, x_in_batched_shape)
 
-            # wrap x_in y data in a dummy batch dim if the batch dim is not
-            # included in the coordinates
-            if (
-                self.batch_dimension not in self.coordinates_input_vars["x_in"]
-                and len(self.indices) == 0
-            ):
-                X_in_y = num_backend.tile(x_in_y, n_batch)\
-                    .reshape((n_batch, *x_in_y.shape))
-            else:
-                X_in_y = num_backend.array(x_in_y)
+            # broadcast y
+            y_in_batched_shape = self.shapes_input_vars_coordinates["x_in"][x_in_var]
+            x_in_y_broadcasted = num_backend.broadcast_to(x_in_y, y_in_batched_shape) 
+
+            # also here we apply broadcasting to the array if the result has 
+            # only one dimension
+            if x_in_y_broadcasted.ndim == 1:
+                x_in_y_broadcasted = num_backend.expand_dims(
+                    x_in_y_broadcasted, -1
+                )
 
             # combine xs and ys to make them ready for interpolation
-            X_in = [num_backend.array(v) for v in [X_in_x, X_in_y]]
+            X_in = [
+                num_backend.array(v) for v in 
+                [x_in_x_broadcasted, x_in_y_broadcasted]
+            ]
 
             X_in_list.append(X_in)
 
@@ -324,28 +404,24 @@ class SolverBase:
         Y0 = []
 
         for y0_var, y0_vals in y0.items():
-            y0_data = num_backend.array(y0_vals, ndmin=1)
+            y0_vals_promoted = num_backend.array(y0_vals, ndmin=1, dtype=float)
             
             # wrap y0 data in a dummy batch dim if the batch dim is not
             # included in the coordinates
-            batch_coordinates = self.coordinates.get(self.batch_dimension, [0])
-            n_batch = len(batch_coordinates)
-            
-            if (
-                self.batch_dimension not in self.coordinates_input_vars["y0"]
-                and len(self.indices) == 0
-            ):
-                y0_batched = num_backend.tile(y0_data, n_batch)\
-                    .reshape((n_batch, *y0_data.shape))
-            else:
-                if len(y0_data.shape) == 1:
-                    y0_batched = y0_data\
-                        .reshape((*y0_data.shape, 1))
-                else:
-                    y0_batched = y0_data
-                
+            y0_var_shape = self.shapes_input_vars_coordinates["y0"][y0_var]
+            y0_vals_broadcasted = num_backend.broadcast_to(
+                y0_vals_promoted, 
+                y0_var_shape
+            ) 
 
-            Y0.append(y0_batched)
+            # also here we apply broadcasting to the array if the result has 
+            # only one dimension
+            if y0_vals_broadcasted.ndim == 1:
+                y0_vals_broadcasted = num_backend.expand_dims(
+                    y0_vals_broadcasted, -1
+                )
+
+            Y0.append(y0_vals_broadcasted)
         return Y0
 
 
