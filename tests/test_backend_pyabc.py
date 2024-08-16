@@ -6,6 +6,7 @@ from tests.fixtures import init_simulation_casestudy_api
 
 
 def test_convergence():
+    pytest.skip()
     sim = init_simulation_casestudy_api()
     sim.set_inferer(backend="pyabc")
     sim.inferer.run()

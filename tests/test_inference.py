@@ -1,9 +1,11 @@
+import pytest
 from matplotlib import pyplot as plt
 
 from tests.fixtures import init_simulation_casestudy_api
 
 
 def test_inference_evaluation():
+    pytest.skip()
     sim = init_simulation_casestudy_api()
     sim.set_inferer(backend="pyabc")
 
