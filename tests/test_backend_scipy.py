@@ -1,8 +1,10 @@
 import pytest
 import numpy as np
+
 from pymob.inference.scipy_backend import ScipyBackend
 from pymob.sim.parameters import Param
 from pymob.solvers.diffrax import JaxSolver
+
 from tests.fixtures import init_test_case_study_hierarchical
 
 def test_parameter_parsing_different_priors_on_species():
@@ -23,6 +25,8 @@ def test_parameter_parsing_different_priors_on_species():
         prior="norm(loc=[[1],[3]],scale=0.1)" # type: ignore
     )
     # prey birth rate
+    # to be clear, this says each replicate has a slightly varying birth
+    # rate depending on the valley where it was observed. Seems legit.
     sim.config.model_parameters.alpha = Param(
         value=0.5, free=True, hyper=False,
         dims=('id',),
@@ -57,12 +61,36 @@ def test_parameter_parsing_different_priors_on_species():
     sim.dispatch_constructor()
     e = sim.dispatch(theta=theta)
     e()
-    res_species = e.results.where(e.results.rabbit_species=="Cottontail", drop=True)
 
-    for i in res_species.id.values:
-        res_id = res_species.sel(id=i)
-        if i < 25:
-            sim.plot(res_id)
+    # res_species = e.results.where(e.results.rabbit_species=="Cottontail", drop=True)
+    # store simulated results
+    e.results.to_netcdf(
+        f"{sim.data_path}/simulated_data_hierarchical_species_year.nc"
+    )
+
+    # TODO: mark datavars as observed automatically
+    # set observations and mark as observed. This 
+    # could be automated by using length of data var > 0 to
+    # trigger marking data vars as observed.
+    sim.observations = e.results
+    sim.config.data_structure.rabbits.observed = True
+    sim.config.data_structure.wolves.observed = True
+
+    sim.dispatch_constructor()
+    sim.set_inferer("numpyro")
+
+    idata = sim.inferer.prior_predictions()
+
+    # test if numpyro predictions also match the specified priors
+    alpha_numpyro = idata.prior["alpha"].mean(("chain", "draw"))
+    alpha_numpyro_cottontail = np.mean(alpha_numpyro.values[sim.observations["rabbit_species"] == "Cottontail"])
+    alpha_numpyro_jackrabbit = np.mean(alpha_numpyro.values[sim.observations["rabbit_species"] == "Jackrabbit"])
+    # test if the priors that were broadcasted to the replicates 
+    # match the hyperpriors
+    np.testing.assert_array_almost_equal(
+        [alpha_numpyro_cottontail, alpha_numpyro_jackrabbit], [1, 3], decimal=1
+    )
+
 
 def test_parameter_parsing_different_priors_on_year():
     sim = init_test_case_study_hierarchical()
