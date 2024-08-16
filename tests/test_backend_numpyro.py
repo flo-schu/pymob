@@ -3,7 +3,7 @@ import numpy as np
 from click.testing import CliRunner
 from matplotlib import pyplot as plt
 from pymob.solvers.diffrax import JaxSolver
-from pymob.inference.numpyro_backend import NumpyroBackend, distribution_map
+from pymob.inference.numpyro_backend import NumpyroBackend
 
 from tests.fixtures import init_simulation_casestudy_api, create_composite_priors
 

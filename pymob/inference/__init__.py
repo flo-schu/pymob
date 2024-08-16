@@ -15,3 +15,4 @@ if pymoo is not None:
 numpyro = import_optional_dependency("numpyro", errors="ignore")
 if numpyro is not None:
     from . import numpyro_backend
+    from . import numpyro_dist_map

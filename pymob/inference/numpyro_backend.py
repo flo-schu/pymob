@@ -22,13 +22,15 @@ from pymob.inference.analysis import (
     cluster_chains, rename_extra_dims, plot_posterior_samples,
     add_cluster_coordinates
 )
-
+from pymob.inference.numpyro_dist_map import scipy_to_numpyro, transformed_dist_map
 
 import numpyro
 from numpyro import distributions as dist
 from numpyro.infer import Predictive
 from numpyro.distributions import Normal, transforms, TransformedDistribution
+from numpyro.distributions.distribution import DistributionMeta
 from numpyro import infer
+
 import jax
 import jax.numpy as jnp
 import sympy2jax
@@ -37,22 +39,6 @@ sympy2jax_extra_funcs = {
     sympy.Array: jnp.array,
     sympy.Tuple: tuple,
 }
-
-def LogNormalTrans(loc, scale):
-    return TransformedDistribution(
-        base_distribution=Normal(0,1), 
-        transforms=[
-            transforms.AffineTransform(loc=jnp.log(loc), scale=scale), 
-            exp()
-        ])
-
-def HalfNormalTrans(scale):
-    return TransformedDistribution(
-        base_distribution=Normal(0,1), 
-        transforms=[
-            transforms.AffineTransform(loc=0, scale=scale), 
-            transforms.AbsTransform()
-        ])
 
 
 def transform(transforms, x):
@@ -76,13 +62,13 @@ def catch_patterns(expression_str):
 
     return expression_str
 
-distribution_map =  {
-    "lognorm": (LogNormalTrans, {"scale": "loc", "s": "scale"}),
-    "binom": (dist.Binomial, {"n":"total_count", "p":"probs"}),
-    "normal": dist.Normal,
-    "halfnorm": HalfNormalTrans,
-    "poisson": (dist.Poisson, {"mu": "rate"}),
-}
+# distribution_map =  {
+#     "lognorm": (LogNormalTrans, {"scale": "loc", "s": "scale"}),
+#     "binom": (dist.Binomial, {"n":"total_count", "p":"probs"}),
+#     "normal": dist.Normal,
+#     "halfnorm": HalfNormalTrans,
+#     "poisson": (dist.Poisson, {"mu": "rate"}),
+# }
 
 exp = transforms.ExpTransform
 sigmoid = transforms.SigmoidTransform
@@ -99,7 +85,19 @@ class ErrorModelFunction(Protocol):
         ...
 
 class NumpyroDistribution(Distribution):
-    distribution_map: Dict[str,Tuple[dist.Distribution, Dict[str,str]]] = distribution_map
+    distribution_map: Dict[str,Tuple[DistributionMeta, Dict[str,str]]] = scipy_to_numpyro
+
+    def _get_distribution(self, distribution: str) -> Tuple[DistributionMeta, Dict[str, str]]:
+        # TODO: This is not satisfying. I think the transformed distributions
+        # should only be used when this is explicitly specified.
+        # I really wonder, why this makes such a large change in numpyro
+        numpyro_dist, parameter_mapping = self.distribution_map[distribution]
+        if numpyro_dist in transformed_dist_map:
+            transformed_dist = transformed_dist_map[numpyro_dist]
+            return transformed_dist, parameter_mapping
+        else:
+            # could not find the transformed distribution using normal
+            return numpyro_dist, parameter_mapping
 
     @property
     def dist_name(self):
@@ -107,6 +105,8 @@ class NumpyroDistribution(Distribution):
 
 class NumpyroBackend(InferenceBackend):
     _distribution = NumpyroDistribution
+    prior: Dict[str, DistributionMeta]
+
     def __init__(
         self, 
         simulation: SimulationBase

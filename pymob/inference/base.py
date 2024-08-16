@@ -61,11 +61,12 @@ class Distribution:
         }
         return self.distribution(**params, **extra_kwargs)
 
+    def _get_distribution(self, distribution: str) -> Tuple[Callable, Dict[str, str]]:
+        return self.distribution_map[distribution]
 
-    @classmethod
-    def parse_distribution(cls, random_variable: RandomVariable) -> Tuple[Any,Dict[str,Expression],set]:
+    def parse_distribution(self, random_variable: RandomVariable) -> Tuple[Any,Dict[str,Expression],set]:
 
-        distribution_mapping = cls.distribution_map[random_variable.distribution]
+        distribution_mapping = self._get_distribution(random_variable.distribution)
 
         if not isinstance(distribution_mapping, tuple):
             distribution = distribution_mapping
