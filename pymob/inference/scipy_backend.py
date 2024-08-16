@@ -12,6 +12,7 @@ from pymob.utils.config import lookup
 
 class ScipyDistribution(Distribution):
     distribution_map: Dict[str,Tuple[Union[rv_continuous,rv_discrete],Dict[str,str]]] = scipy_to_scipy
+    parameter_converter = staticmethod(lambda x: np.array(x))
     
     @property
     def dist_name(self) -> str:
@@ -22,7 +23,6 @@ class ScipyDistribution(Distribution):
 class ScipyBackend(InferenceBackend):
     _distribution = ScipyDistribution
     distribution: Union[rv_continuous,rv_discrete]
-    parameter_converter = staticmethod(lambda x: np.array(x))
 
     def __init__(self, simulation: SimulationBase) -> None:
         super().__init__(simulation)

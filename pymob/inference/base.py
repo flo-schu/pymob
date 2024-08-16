@@ -42,10 +42,7 @@ class Distribution:
         self._dist_str = random_variable.distribution
         self._parameter_expression = random_variable.parameters
         self.dims = dims
-        # make sure the number of dimensions of a distribution is at least 1
-        # this prevents floats form being returned, and just makes things
-        # simpler
-        self.shape = shape if len(shape) > 0 else (1,)
+        self.shape = shape if len(shape) > 0 else ()
 
         dist, params, uargs = self.parse_distribution(random_variable)
         self.distribution: Callable = dist
@@ -146,17 +143,17 @@ class InferenceBackend(ABC):
     def n_predictions(self):
         return self.config.inference.n_predictions
     
-    def get_dim_shape(self, dims: Tuple[str, ...]) -> Tuple[int, ...]:
-        dim_shape = []
-        for dim in dims:
-            self.simulation.parameter_shapes
-            coords = set(self.simulation.observations[dim].values.tolist())
-            n_coords = len(coords)
-            dim_shape.append(n_coords)
+    # def get_dim_shape(self, dims: Tuple[str, ...]) -> Tuple[int, ...]:
+    #     dim_shape = []
+    #     for dim in dims:
+    #         self.simulation.parameter_shapes
+    #         coords = set(self.simulation.observations[dim].values.tolist())
+    #         n_coords = len(coords)
+    #         dim_shape.append(n_coords)
 
-        if len(dim_shape) == 0:
-            dim_shape = (1,)
-        return tuple(dim_shape)
+    #     if len(dim_shape) == 0:
+    #         dim_shape = (1,)
+    #     return tuple(dim_shape)
 
     @classmethod
     def parse_model_priors(

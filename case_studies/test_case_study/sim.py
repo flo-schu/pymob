@@ -88,7 +88,7 @@ class HierarchicalSimulation(Simulation):
             prior="lognorm(s=0.1,scale=alpha_species[rabbit_species_index, experiment_index])" # type: ignore
         )
         # Rate at which predators decrease prey population.
-        self.config.model_parameters.beta = Param(value=0.02, free=True, prior="lognorm(s=[0.1],scale=0.02)")
+        self.config.model_parameters.beta = Param(value=0.02, free=True, prior="lognorm(s=0.1,scale=0.02)")
         # Predator death rate
         self.config.model_parameters.gamma = Param(value=0.3, free=False)
         # Predator reproduction rate
