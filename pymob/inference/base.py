@@ -7,6 +7,7 @@ from typing import (
     Mapping,
     Callable,
     Iterable,
+    Optional,
     Any
 )
 from abc import ABC, abstractmethod
@@ -27,12 +28,24 @@ class Distribution:
     _context variable
     """
     distribution_map: Dict[str,Tuple[Callable, Dict[str,str]]] = {}
+    parameter_converter: Callable = staticmethod(lambda x: x)
     _context = {}
-    def __init__(self, name: str, random_variable: RandomVariable, dims: Tuple[str, ...]) -> None:
+
+    def __init__(
+        self, 
+        name: str, 
+        random_variable: RandomVariable, 
+        dims: Tuple[str, ...],
+        shape: Tuple[int, ...],
+    ) -> None:
         self.name = name
         self._dist_str = random_variable.distribution
         self._parameter_expression = random_variable.parameters
-        self._dims = dims
+        self.dims = dims
+        # make sure the number of dimensions of a distribution is at least 1
+        # this prevents floats form being returned, and just makes things
+        # simpler
+        self.shape = shape if len(shape) > 0 else (1,)
 
         dist, params, uargs = self.parse_distribution(random_variable)
         self.distribution: Callable = dist
@@ -42,7 +55,8 @@ class Distribution:
     def __str__(self) -> str:
         dist = self.dist_name
         params = ", ".join([f"{k}={v}" for k, v in self.parameters.items()])
-        return f"{dist}({params}, dims={self._dims})"
+        dimshape = tuple([f'{d}={s}' for d, s in zip(self.dims, self.shape)])
+        return f"{dist}({params}, dims={dimshape})"
     
     def __repr__(self) -> str:
         return str(self)
@@ -56,7 +70,7 @@ class Distribution:
         _context.update(self._context)
         # evaluate the parameters given a context
         params = {
-            key: value.evaluate(context=_context) 
+            key: self.parameter_converter(value.evaluate(context=_context)) 
             for key, value in self.parameters.items()
         }
         return self.distribution(**params, **extra_kwargs)
@@ -106,6 +120,7 @@ class InferenceBackend(ABC):
         # parse model components
         self.prior = self.parse_model_priors(
             parameters=self.config.model_parameters.free,
+            dim_shapes=self.simulation.parameter_shapes
         )
 
         self.evaluator = self.parse_deterministic_model()
@@ -131,10 +146,10 @@ class InferenceBackend(ABC):
     def n_predictions(self):
         return self.config.inference.n_predictions
     
-    def get_dim_shape(self, distribution: Distribution) -> Tuple[int, ...]:
-        dims = distribution._dims
+    def get_dim_shape(self, dims: Tuple[str, ...]) -> Tuple[int, ...]:
         dim_shape = []
         for dim in dims:
+            self.simulation.parameter_shapes
             coords = set(self.simulation.observations[dim].values.tolist())
             n_coords = len(coords)
             dim_shape.append(n_coords)
@@ -147,6 +162,7 @@ class InferenceBackend(ABC):
     def parse_model_priors(
         cls, 
         parameters: Dict[str,Param], 
+        dim_shapes: Dict[str,Tuple[int, ...]]
     ):
         priors = {}
         for key, par in parameters.items():
@@ -159,7 +175,8 @@ class InferenceBackend(ABC):
             dist = cls._distribution(
                 name=key, 
                 random_variable=par.prior,
-                dims=par.dims
+                dims=par.dims,
+                shape=dim_shapes[key]
             )
             priors.update({key: dist})
         return priors
@@ -174,7 +191,8 @@ class InferenceBackend(ABC):
             error_dist = cls._distribution(
                 name=data_var, 
                 random_variable=error_distribution,
-                dims=()
+                dims=(),
+                shape=(),
             )
                
             error_model.update({data_var: error_dist})

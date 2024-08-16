@@ -1,6 +1,7 @@
 from functools import partial
 from typing import Dict, Tuple, Union
 
+import numpy as np
 from numpy.random import Generator, PCG64
 from scipy.stats._distn_infrastructure import rv_continuous, rv_discrete
 
@@ -21,6 +22,7 @@ class ScipyDistribution(Distribution):
 class ScipyBackend(InferenceBackend):
     _distribution = ScipyDistribution
     distribution: Union[rv_continuous,rv_discrete]
+    parameter_converter = staticmethod(lambda x: np.array(x))
 
     def __init__(self, simulation: SimulationBase) -> None:
         super().__init__(simulation)
@@ -39,10 +41,9 @@ class ScipyBackend(InferenceBackend):
         # prior is added here, so it is updated 
         context=[prior_samples,self.indices,observations]
         for name, prior in self.prior.items():
-            dist_shape = self.get_dim_shape(prior)
 
             dist = prior.construct(context=context)
-            sample = dist.rvs(size=dist_shape, random_state=self.random_state)
+            sample = dist.rvs(size=prior.shape, random_state=self.random_state)
             dist.rvs()
 
             prior_samples.update({name:sample})

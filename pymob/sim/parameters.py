@@ -38,7 +38,7 @@ class Expression:
     def __str__(self) -> str:
         return ast.unparse(self.expression)
     
-    def evaluate(self, context: Dict = {}) -> float|NDArray:
+    def evaluate(self, context: Dict = {}) -> Any:
         try:
             val = eval(self.compiled_expression, context)
             return val
