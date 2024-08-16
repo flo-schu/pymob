@@ -578,6 +578,7 @@ class Jaxsolver(Solverbase):
 class Inference(BaseModel):
     model_config = {"validate_assignment" : True}
 
+    eps: float = 1e-8
     objective_function: str = "total_average"
     n_objectives: Annotated[int, to_str] = 1
     objective_names: OptionListStr = []

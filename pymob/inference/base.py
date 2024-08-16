@@ -108,7 +108,6 @@ class InferenceBackend(ABC):
         self, 
         simulation: SimulationBase,
     ) -> None:
-        self.EPS = 1e-8
         
         self.simulation = simulation
         self.config = simulation.config
@@ -143,6 +142,10 @@ class InferenceBackend(ABC):
     def n_predictions(self):
         return self.config.inference.n_predictions
     
+    @property
+    def EPS(self):
+        return self.config.inference.eps
+
     # def get_dim_shape(self, dims: Tuple[str, ...]) -> Tuple[int, ...]:
     #     dim_shape = []
     #     for dim in dims:
