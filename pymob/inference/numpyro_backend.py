@@ -79,6 +79,7 @@ class ErrorModelFunction(Protocol):
         self, 
         theta: Dict, 
         simulation_results: Dict, 
+        indices: Dict,
         observations: Dict, 
         masks: Dict
     ) -> Any:
@@ -86,6 +87,7 @@ class ErrorModelFunction(Protocol):
 
 class NumpyroDistribution(Distribution):
     distribution_map: Dict[str,Tuple[DistributionMeta, Dict[str,str]]] = scipy_to_numpyro
+    parameter_converter = staticmethod(lambda x: jnp.array(x))
 
     def _get_distribution(self, distribution: str) -> Tuple[DistributionMeta, Dict[str, str]]:
         # TODO: This is not satisfying. I think the transformed distributions
@@ -237,6 +239,13 @@ class NumpyroBackend(InferenceBackend):
             # .transpose(*self.simulation.dimensions)
         data_vars = self.config.data_structure.observed_data_variables + self.extra_vars
 
+        if len(data_vars) == 0:
+            raise KeyError(
+                "No observed data_variables were found. Make sure you have marked"+
+                "All relevant data variables as observed before running inference"+
+                "`sim.config.data_variables.MY_DATA_VAR.observed = True`"
+            )
+
         masks = {}
         observations = {}
         for d in data_vars:
@@ -250,21 +259,27 @@ class NumpyroBackend(InferenceBackend):
     def parse_probabilistic_model(self):
         EPS = self.EPS
         prior = self.prior.copy()
+        # TODO: This should be passed to the model, becuase if the batch
+        #       dimension is subsetted, the index size is not anymore the same
+        #       and correspondingly, be parsed during parse_obs or so
+        indices = self.indices
         error_model = self.error_model.copy()
         extra = {"EPS": EPS}
         gaussian_base = self.gaussian_base_distribution
 
-        def sample_prior(prior: Dict, obs: Dict):
+        def sample_prior(prior: Dict, obs: Dict, indices: Dict):
             theta = {}
-            context = [theta, obs, extra]
+            context = [theta, indices, obs, extra]
             for prior_name, prior_dist in prior.items():
                 dist = prior_dist.construct(context=context)
 
+                # TODO: distribution expansion is not so trivial unfortunately
+                dist = dist.expand(batch_shape=prior_dist.shape)
+
                 theta_i = numpyro.sample(
                     name=prior_name,
-                    fn=dist
+                    fn=dist,
                 )
-
                 theta.update({prior_name: theta_i})
 
             return {}, theta
@@ -275,6 +290,7 @@ class NumpyroBackend(InferenceBackend):
             context = [theta, obs, extra]
             for prior_name, prior_dist in prior.items():
                 dist = prior_dist.construct(context=context)
+                dist = dist.expand(batch_shape=prior_dist.shape)
 
                 try:
                     transforms = getattr(dist, "transforms")
@@ -295,7 +311,6 @@ class NumpyroBackend(InferenceBackend):
                 theta_base_i = numpyro.sample(
                     name=f"{prior_name}_normal_base",
                     fn=Normal(loc=0, scale=1),
-                    sample_shape=dist.shape()                    
                 )
 
                 # apply the transforms 
@@ -309,9 +324,9 @@ class NumpyroBackend(InferenceBackend):
 
             return theta_base, theta
 
-        def likelihood(theta, simulation_results, observations, masks):
+        def likelihood(theta, simulation_results, indices, observations, masks):
             """Uses lookup and error model from the local function context"""
-            context = [simulation_results, theta, observations, extra]
+            context = [simulation_results, theta, indices, observations, extra]
             for error_model_name, error_model_dist in error_model.items():
                 dist = error_model_dist.construct(context=context)
 
@@ -337,6 +352,7 @@ class NumpyroBackend(InferenceBackend):
                 _, theta = sample_prior(
                     prior=prior, 
                     obs=obs, 
+                    indices=indices,
                 )
             
             if only_prior:
@@ -356,6 +372,7 @@ class NumpyroBackend(InferenceBackend):
                 _ = likelihood(
                     theta=theta,
                     simulation_results=sim_results,
+                    indices=indices,
                     observations=obs,
                     masks=masks,
                 )
@@ -363,6 +380,7 @@ class NumpyroBackend(InferenceBackend):
                 _ = user_error_model(
                     theta=theta,
                     simulation_results=sim_results,
+                    indices=indices,
                     observations=obs,
                     masks=masks
                 )
