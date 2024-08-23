@@ -284,10 +284,10 @@ class NumpyroBackend(InferenceBackend):
 
             return {}, theta
         
-        def sample_prior_gaussian_base(prior: Dict, obs: Dict):
+        def sample_prior_gaussian_base(prior: Dict, obs: Dict, indices=indices):
             theta = {}
             theta_base = {}
-            context = [theta, obs, extra]
+            context = [theta, indices, obs, extra]
             for prior_name, prior_dist in prior.items():
                 dist = prior_dist.construct(context=context)
                 dist = dist.expand(batch_shape=prior_dist.shape)
@@ -347,6 +347,7 @@ class NumpyroBackend(InferenceBackend):
                 theta_gaussian, theta = sample_prior_gaussian_base(
                     prior=prior, 
                     obs=obs, 
+                    indices=indices,
                 )
             else:
                 _, theta = sample_prior(
