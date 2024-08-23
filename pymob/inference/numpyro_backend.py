@@ -863,29 +863,47 @@ class NumpyroBackend(InferenceBackend):
     def svi_posterior(self, svi_result, model, guide, key, n=1000, only_parameters=False):
         key, *subkeys = jax.random.split(key, 4)
         keys = iter(subkeys)
-
         obs, masks = self.observation_parser()
+
+        # there is a very small remark in the numpyro API that explains that
+        # if data input for observed variables is None, the data are sampled
+        # from the distributions instead of returning the input data
+        # https://num.pyro.ai/en/stable/getting_started.html#a-simple-example-8-schools
+        obs_ = {
+            k: None if k in self.config.data_structure.observed_data_variables
+            else data 
+            for k, data in obs.items() 
+        }
+
+        # prepare model without obs, so obs are sampled from the posterior
+        model_ = partial(
+            model, 
+            solver=self.evaluator, 
+            **self.preprocessing(obs=obs_, masks=masks,)
+        )    
 
         params = svi_result.params
 
-        # predictive = Predictive(
-        #     model, guide=guide, params=params, 
-        #     num_samples=n, batch_ndims=2
-        # )
-        # samples = predictive(next(keys))    
-
+        # this gets the parameters of the normal_base_distributions
         predictive = Predictive(
             guide, params=params, 
             num_samples=n, batch_ndims=2
         )
         posterior_samples = predictive(next(keys))
 
+        # this gets all the parameters and predictions
         predictive = Predictive(
-            model, posterior_samples, params=params, 
+            model_, posterior_samples, params=params, 
             num_samples=n, batch_ndims=2
         )
         posterior_predictions = predictive(next(keys))
 
+        # For the likelihood observations should be present
+        model_ = partial(
+            model, 
+            solver=self.evaluator, 
+            **self.preprocessing(obs=obs, masks=masks,)
+        )    
 
         loglik = numpyro.infer.log_likelihood(
             model=model, 
@@ -911,7 +929,7 @@ class NumpyroBackend(InferenceBackend):
         idata = az.from_dict(
             observed_data=obs,
             posterior={k: v for k, v in posterior_predictions.items() if k in priors},
-            posterior_predictive={k: v for k, v in posterior_predictions.items() if k in preds},
+            posterior_predictive={k: v for k, v in posterior_predictions.items() if k in preds+preds_obs},
             log_likelihood=loglik,
             dims=data_structure,
             coords=posterior_coords,
