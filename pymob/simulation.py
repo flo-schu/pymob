@@ -419,6 +419,11 @@ class SimulationBase:
         batch_dim = self.config.simulation.batch_dimension
         if batch_dim not in self.coordinates:
             return data
+        
+        if batch_dim not in data:
+            raise KeyError(
+                "Batch dimension not in input data"
+            )
         mask = data[batch_dim].isin(self.coordinates[batch_dim])
         return data.where(mask, drop=True)
 

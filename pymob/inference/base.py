@@ -168,8 +168,8 @@ class InferenceBackend(ABC):
         for key, par in parameters.items():
             if par.prior is None:
                 raise AttributeError(
-                    f"No prior was defined for {par}. E.g.: "+
-                    f"sim.config.model_parameters.{par} = lognorm(loc=1, scale=2)"
+                    f"No prior was defined for parameter '{key}'. E.g.: "+
+                    f"`sim.config.model_parameters.{key}.prior = 'lognorm(loc=1, scale=2)'`"
                 )
 
             dist = cls._distribution(
