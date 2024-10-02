@@ -3,6 +3,7 @@ import warnings
 import numpy as np
 import xarray as xr
 import arviz as az
+from arviz.sel_utils import xarray_var_iter
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 
@@ -231,6 +232,9 @@ def create_table(posterior, error_metric="hdi", vars={}, nesting_dimension=None)
 
         return formatted_tab
     
+    else:
+        raise NotImplementedError("Must use one of 'sd' or 'hdi'")
+    
 
 def filter_not_converged_chains(idata, deviation=1.05):
     posterior = idata.posterior
@@ -408,3 +412,47 @@ def evaluate_posterior(sim, nesting_dimension, n_samples=10_000, vars_table={},
             plt.show()
         else:
             plt.close()
+
+
+
+def plot_pairs(posterior, likelihood):
+    parameters = list(posterior.data_vars.keys())
+
+    N = len(parameters)
+    parameters_ = parameters.copy()
+    fig = plt.figure(figsize=(3*N, 3*(N+1)))
+    gs = fig.add_gridspec(N, N+1, width_ratios=[1]*N+[0.2])
+    
+
+    i = 0
+    while len(parameters_) > 0:
+        par_x = parameters_.pop(0)
+        hist_ax = gs[i,i].subgridspec(1, 1).subplots()
+        plot_hist(
+            posterior[par_x].stack(sample=("chain", "draw")), 
+            ax=hist_ax, decorate=False, bins=20
+        )
+        hist_ax.set_title(par_x)
+        for j, par_y in enumerate(parameters_, start=i+1):
+            ax = gs[j,i].subgridspec(1, 1).subplots()
+
+            scatter = ax.scatter(
+                posterior[par_x], 
+                posterior[par_y], 
+                c=likelihood, 
+                alpha=0.25,
+                s=10,
+                cmap=mpl.colormaps["plasma_r"]
+            )
+
+            if j != len(parameters)-1:
+                ax.set_xticks([])
+        
+            ax.set_xlabel(par_x)            
+            ax.set_ylabel(par_y)
+
+        i += 1
+
+    # ax_colorbar = gs[:,N].subgridspec(1, 1).subplots()
+    # fig.colorbar(scatter, cax=ax_colorbar)
+    return fig
