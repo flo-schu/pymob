@@ -893,17 +893,17 @@ class NumpyroBackend(InferenceBackend):
         # if data input for observed variables is None, the data are sampled
         # from the distributions instead of returning the input data
         # https://num.pyro.ai/en/stable/getting_started.html#a-simple-example-8-schools
-        obs_ = {
-            k: None if k in self.config.data_structure.observed_data_variables
-            else data 
-            for k, data in obs.items() 
-        }
+        # obs_ = {
+        #     k: None if k in self.config.data_structure.observed_data_variables
+        #     else data 
+        #     for k, data in obs.items() 
+        # }
 
         # prepare model without obs, so obs are sampled from the posterior
         model_ = partial(
             model, 
             solver=self.evaluator, 
-            **self.preprocessing(obs=obs_, masks=masks,)
+            **self.preprocessing(obs=obs, masks=masks,)
         )    
 
         params = svi_result.params
@@ -922,15 +922,8 @@ class NumpyroBackend(InferenceBackend):
         )
         posterior_predictions = predictive(next(keys))
 
-        # For the likelihood observations should be present
-        model_ = partial(
-            model, 
-            solver=self.evaluator, 
-            **self.preprocessing(obs=obs, masks=masks,)
-        )    
-
         loglik = numpyro.infer.log_likelihood(
-            model=model, 
+            model=model_, 
             posterior_samples=posterior_samples, 
             batch_ndims=2, 
         )
