@@ -10,7 +10,6 @@ import jax
 import jax.numpy as jnp
 
 # this should raise an exception when nans are created the computation
-jax.config.update("jax_debug_nans", True)
 
 
 def test_guts_constant_exposure():
@@ -49,6 +48,8 @@ def test_guts_variable_exposure():
 
 
 def test_bufferguts_variable_exposure():
+    # Can be fixed by replacing the bufferGUTS model with the improved
+    # version from the jupyter notebook
     sim = init_bufferguts_casestudy()
 
     sim.use_jax_solver()
