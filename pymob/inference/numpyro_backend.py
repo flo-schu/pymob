@@ -290,17 +290,16 @@ class NumpyroBackend(InferenceBackend):
             context = [theta, indices, obs, extra]
             for prior_name, prior_dist in prior.items():
                 dist = prior_dist.construct(context=context)
-                dist = dist.expand(batch_shape=prior_dist.shape)
 
                 try:
                     transforms = getattr(dist, "transforms")
                 except:
                     raise RuntimeError(
-                        "The specified distribution had no transforms. If setting "+
+                        f"The specified distribution {prior_dist} had no transforms. If setting "+
                         "the option 'inference.numpyro.gaussian_base_distribution = 1', "+
                         "you are only allowed to use parameter distribution, which can "+
                         "be specified as transformed normal distributions. "+
-                        "Currently only 'lognorm' and 'halfnorm' are implemented. "+
+                        f"Currently {transformed_dist_map.keys()} are specified"+
                         "You can use the numypro.distributions.TransformedDistribution "+
                         "API to specify additional distributions with transforms."+
                         "And pass them to the inferer by updating the distribution map: "+
@@ -308,10 +307,12 @@ class NumpyroBackend(InferenceBackend):
                     )
 
                 # sample from a random normal distribution
+                # CHECK: Expanding before 
                 theta_base_i = numpyro.sample(
                     name=f"{prior_name}_normal_base",
-                    fn=Normal(loc=0, scale=1),
+                    fn=Normal(loc=0, scale=1).expand(batch_shape=prior_dist.shape),
                 )
+
 
                 # apply the transforms 
                 theta_i = numpyro.deterministic(
@@ -820,14 +821,14 @@ class NumpyroBackend(InferenceBackend):
         # if data input for observed variables is None, the data are sampled
         # from the distributions instead of returning the input data
         # https://num.pyro.ai/en/stable/getting_started.html#a-simple-example-8-schools
-        obs_ = {
-            k: None if k in self.config.data_structure.observed_data_variables
-            else data 
-            for k, data in obs.items() 
-        }
+        # obs_ = {
+        #     k: None if k in self.config.data_structure.observed_data_variables
+        #     else data 
+        #     for k, data in obs.items() 
+        # }
 
         model_kwargs = self.preprocessing(
-            obs=obs_, 
+            obs=obs, 
             masks=masks,
         )
         
