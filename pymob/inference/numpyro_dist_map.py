@@ -51,6 +51,15 @@ def LogNormalTrans(loc, scale):
         ]
     )
 
+# LogNormal Transformation
+def NormalTrans(loc, scale):
+    return TransformedDistribution(
+        base_distribution=Normal(0, 1),
+        transforms=[
+            transforms.AffineTransform(loc=loc, scale=scale),
+        ]
+    )
+
 # Exponential Transformation
 def ExponentialTrans(rate):
     return TransformedDistribution(
@@ -87,4 +96,5 @@ transformed_dist_map = {
     numpyro.distributions.Exponential: ExponentialTrans,
     numpyro.distributions.Uniform: UniformTrans,
     numpyro.distributions.HalfNormal: HalfNormalTrans,
+    numpyro.distributions.Normal: NormalTrans,
 }
