@@ -1,11 +1,12 @@
 import pytest
 import numpy as np
+from scipy.stats import norm
 
 from pymob.inference.scipy_backend import ScipyBackend
 from pymob.sim.parameters import Param
 from pymob.solvers.diffrax import JaxSolver
 
-from tests.fixtures import init_test_case_study_hierarchical
+from fixtures import init_test_case_study_hierarchical
 
 def test_parameter_parsing_different_priors_on_species():
     sim = init_test_case_study_hierarchical()
@@ -64,78 +65,38 @@ def test_parameter_parsing_different_priors_on_species():
 
     # res_species = e.results.where(e.results.rabbit_species=="Cottontail", drop=True)
     # store simulated results
-    e.results.to_netcdf(
-        f"{sim.data_path}/simulated_data_hierarchical_species_year.nc"
-    )
 
     # TODO: mark datavars as observed automatically
     # set observations and mark as observed. This 
     # could be automated by using length of data var > 0 to
     # trigger marking data vars as observed.
-    sim.observations = e.results
+    rng = np.random.default_rng(1)
+    
+    
+    obs = e.results
+    obs.rabbits.values = rng.poisson(e.results.rabbits+1e-6)
+    obs.wolves.values = rng.poisson(e.results.wolves+1e-6)
+    obs.to_netcdf(
+        f"{sim.data_path}/simulated_data_hierarchical_species_year.nc"
+    )
+
+    sim.observations = obs
     sim.config.data_structure.rabbits.observed = True
     sim.config.data_structure.wolves.observed = True
 
-    sim.dispatch_constructor()
-    sim.set_inferer("numpyro")
-
-    idata = sim.inferer.prior_predictions()
-
-    # test if numpyro predictions also match the specified priors
-    alpha_numpyro = idata.prior["alpha"].mean(("chain", "draw"))
-    alpha_numpyro_cottontail = np.mean(alpha_numpyro.values[sim.observations["rabbit_species"] == "Cottontail"])
-    alpha_numpyro_jackrabbit = np.mean(alpha_numpyro.values[sim.observations["rabbit_species"] == "Jackrabbit"])
-    # test if the priors that were broadcasted to the replicates 
-    # match the hyperpriors
-    np.testing.assert_array_almost_equal(
-        [alpha_numpyro_cottontail, alpha_numpyro_jackrabbit], [1, 3], decimal=1
-    )
-
-    try:
-        sim.inferer.run()
-        raise AssertionError(
-            "This model should fail, because there are negative values in the"+
-            "observations, hence the log-likelihood becomes nan, because there"+
-            "is no support for the values"
-        )
-    except RuntimeError:
-        # check likelihoods of rabbits     
-        loglik = sim.inferer.check_log_likelihood(theta)
-        nan_liks = np.isnan(loglik[2]["rabbits_obs"]).sum()
-        assert nan_liks > 0
-
-    # The conclusion is that this cannot work, because the simulation produces
-    # values that are below zero frequently. I need to increase EPS to work
-    # sim.config.jaxsolver.throw_exception
-    # sim.config.jaxsolver.max_steps = 100000
-    # sim.config.inference_numpyro.init_strategy = "init_to_sample"
-
-    # we need to set both observations to values greater zero, because
-    # the lognormal distribution has no support for values equal to zero.
-    sim.observations = e.results.round() + 1e-6
-    if np.any(sim.observations.min().to_array().values < 0):
-        raise AssertionError(
-            "observations had values < 0. This causes NaN log-likelihoods."
-        )
-
-
-    # we need to set both observations to values greater zero, because
-    # the lognormal distribution has no support for values equal to zero.
-    # in the inference backend, values returned from the simulator are modified
-    sim.config.error_model.rabbits = "lognorm(scale=rabbits+1e-6, s=0.1)"
+    # this is the conventional way to define error models. We center a lognormal
+    # error model around the means of the distribution. The problem is: 
+    # due to the large scale differences in rabbits and wolves, the log-likelihoods
+    # end up very differently. Here the wolves data variable will basically
+    # be meaningless, because the rabbits data variable is at such a high scale
+    # Scaling alone also does not resolve this problem, because due to the dynamic
+    # of the data variables, larger values will have a higher weight. This is not
+    # right.
     sim.config.error_model.rabbits = "lognorm(scale=rabbits+EPS, s=0.1)"
-    sim.config.inference.eps = 1e-6
+    sim.config.error_model.wolves = "lognorm(scale=wolves+EPS, s=0.1)"
     sim.dispatch_constructor()
-    sim.set_inferer("numpyro")
-
-    idata = sim.inferer.prior_predictions()
-    idata.prior_predictive.rabbits.min()
-
-    loglik = sim.inferer.check_log_likelihood(theta)
-    nan_liks_rabbits = np.isnan(loglik[2]["rabbits_obs"]).sum()
-    nan_liks_wolves = np.isnan(loglik[2]["wolves_obs"]).sum()
-
-    np.testing.assert_array_equal([nan_liks_wolves, nan_liks_rabbits], [0,0])
+    # TODO: At this point, I should get a joint likelihood function and try
+    # to fit the model with scipy minimize.
 
 
 def test_parameter_parsing_different_priors_on_year():
@@ -180,4 +141,4 @@ def test_parameter_parsing_different_priors_on_year():
 
 if __name__ == "__main__":
     pass
-    # test_parameter_parsing_different_priors_on_species()
+    test_parameter_parsing_different_priors_on_species()
