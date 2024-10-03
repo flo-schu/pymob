@@ -1,4 +1,5 @@
 import re
+import ast
 from typing import (
     Dict,
     Tuple,
@@ -30,6 +31,7 @@ class Distribution:
     distribution_map: Dict[str,Tuple[Callable, Dict[str,str]]] = {}
     parameter_converter: Callable = staticmethod(lambda x: x)
     _context = {}
+    _import_map = {"np": "numpy", "numpy":"numpy", "jnp":"jax.numpy", "jax.numpy": "jax.numpy"}
 
     def __init__(
         self, 
@@ -41,6 +43,7 @@ class Distribution:
         self.name = name
         self._dist_str = random_variable.distribution
         self._parameter_expression = random_variable.parameters
+        self._obs_transform: Optional[Expression] = random_variable.obs
         self.dims = dims
         self.shape = shape if len(shape) > 0 else ()
 
@@ -49,11 +52,13 @@ class Distribution:
         self.parameters: Dict[str, Expression] = params
         self.undefined_args: set = uargs
 
+        self.create_obs_transform_func()
+
     def __str__(self) -> str:
         dist = self.dist_name
         params = ", ".join([f"{k}={v}" for k, v in self.parameters.items()])
         dimshape = tuple([f'{d}={s}' for d, s in zip(self.dims, self.shape)])
-        return f"{dist}({params}, dims={dimshape})"
+        return f"{dist}({params}, dims={dimshape}, obs={self._obs_transform})"
     
     def __repr__(self) -> str:
         return str(self)
@@ -61,7 +66,49 @@ class Distribution:
     @property
     def dist_name(self) -> str:
         return self._dist_str
+    
+    def create_obs_transform_func(self):
+        if self._obs_transform is None:
+            self._obs_transform_module = None
+            self.obs_transform_func = None
+        
+        else:
+            expr = self._obs_transform
+            
+            imports = [a for a in expr.undefined_args if a in self._import_map]
+            args = [a for a in expr.undefined_args if a not in self._import_map]
 
+            # Create the function arguments
+            args = [ast.arg(arg=arg_name, annotation=None) for arg_name in args]
+            
+            # Build a function definition from the expression
+            func_def = ast.FunctionDef(
+                name=f"obs_transform_{self.name}",
+                args=ast.arguments(
+                    posonlyargs=[], args=args, vararg=None, kwonlyargs=[], 
+                    kw_defaults=[], defaults=[]
+                ),
+                body=[ast.Return(value=expr.expression.body)],
+                decorator_list=[]
+            )
+        
+            import_statements = [
+                ast.Import(names=[ast.alias(name=self._import_map[i], asname=i)])
+                for i in imports
+            ]
+            module = ast.Module(body=[*import_statements, func_def], type_ignores=[])
+            module = ast.fix_missing_locations(module)
+
+            # compile the function and retrieve object
+            code = compile(module, filename="<ast>", mode="exec")
+            func_env = {}
+            exec(code, func_env)    
+            func = func_env[f"obs_transform_{self.name}"]
+            
+            self._obs_transform_module = module
+            self.obs_transform_func = func
+
+    
     def construct(self, context: Iterable[Mapping], extra_kwargs: Dict = {}):
         _context = {arg: lookup_from(arg, context) for arg in self.undefined_args}
         _context.update(self._context)

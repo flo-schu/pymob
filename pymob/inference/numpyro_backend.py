@@ -330,11 +330,34 @@ class NumpyroBackend(InferenceBackend):
             for error_model_name, error_model_dist in error_model.items():
                 dist = error_model_dist.construct(context=context)
 
-                _ = numpyro.sample(
-                    name=error_model_name + "_obs",
-                    fn=dist.mask(masks[error_model_name]),
-                    obs=observations[error_model_name]
-                )
+                # this assumes that the transform function is only ever 
+                # characterized by algebraic transforms of the observations 
+                # and the determinsitic model of that variable 
+                # This should cover the vast majority of cases.
+                if error_model_dist.obs_transform_func is None:
+                    # TODO: consider if this should go into the 2nd ifelse condition
+                    #       because then, I could actually rename _obs and _res 
+                    #       and downstream use this information for creating inverse
+                    #       function
+                    _ = numpyro.sample(
+                        name=error_model_name + "_obs",
+                        fn=dist.mask(masks[error_model_name]),
+                        obs=observations[error_model_name]
+                    )
+                else:
+                    residuals = numpyro.deterministic(
+                        name=error_model_name + "_res",
+                        value=error_model_dist.obs_transform_func(
+                            obs=observations[error_model_name], 
+                            **{error_model_name: simulation_results[error_model_name]}, 
+                        )
+                    )
+
+                    _ = numpyro.sample(
+                        name=error_model_name + "_obs",
+                        fn=dist.mask(masks[error_model_name]),
+                        obs=residuals
+                    )
 
 
         def model(
