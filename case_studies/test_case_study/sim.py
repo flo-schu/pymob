@@ -62,7 +62,7 @@ class Simulation(SimulationBase):
 
 class HierarchicalSimulation(Simulation):
     def initialize(self, input):
-        self.config.case_study.scenario = "test_hierarchical"
+        # self.config.case_study.scenario = "test_hierarchical"
 
         self.config.simulation.batch_dimension = "id"
 
@@ -88,7 +88,7 @@ class HierarchicalSimulation(Simulation):
             prior="lognorm(s=0.1,scale=alpha_species[rabbit_species_index, experiment_index])" # type: ignore
         )
         # Rate at which predators decrease prey population.
-        self.config.model_parameters.beta = Param(value=0.02, free=True, prior="lognorm(s=0.1,scale=0.02)")
+        self.config.model_parameters.beta = Param(value=0.02, free=True, prior="lognorm(s=0.1,scale=0.02)") # type:ignore
         # Predator death rate
         self.config.model_parameters.gamma = Param(value=0.3, free=False)
         # Predator reproduction rate
@@ -111,6 +111,21 @@ class HierarchicalSimulation(Simulation):
         self.config.error_model.wolves = "lognorm(scale=wolves+EPS,s=0.1)"
         
     
+    def load_presimulated_observations(self):
+        # set indices and load data
+        self.config.data_structure.wolves.observed = False
+        self.config.data_structure.rabbits.observed = False
+        
+        self.define_observations_replicated_multi_experiment(n=120) # type: ignore
+        self.observations = xr.load_dataset(f"{self.data_path}/simulated_data_hierarchical_species_year.nc")
+        
+        self.config.data_structure.wolves.observed = True
+        self.config.data_structure.rabbits.observed = True
+
+        y0 = self.parse_input("y0", drop_dims=["time"])
+        self.model_parameters["y0"] = y0
+        self.model_parameters["parameters"] = self.config.model_parameters.value_dict
+
     def define_observations_replicated_multi_experiment(self, n):
         """This sets up the data structure of a Lotka-Volterra case study with 
         an example of observations that were taken from two rabbit populations 

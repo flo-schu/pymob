@@ -160,3 +160,14 @@ def init_test_case_study_hierarchical() -> SimulationBase:
     sim.config.save(force=True)
 
     return sim
+
+def init_test_case_study_hierarchical_presimulated() -> SimulationBase:
+    config = Config("case_studies/test_case_study/scenarios/test_hierarchical_presimulated/settings.cfg")
+    config.case_study.package = "case_studies"
+    config.import_casestudy_modules(reset_path=True)
+    Simulation = config.import_simulation_from_case_study()
+    
+    sim = Simulation(config)
+    sim.load_presimulated_observations()
+
+    return sim

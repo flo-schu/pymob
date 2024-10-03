@@ -4,8 +4,13 @@ from click.testing import CliRunner
 from matplotlib import pyplot as plt
 from pymob.solvers.diffrax import JaxSolver
 from pymob.inference.numpyro_backend import NumpyroBackend
+from pymob.sim.parameters import Param
 
-from tests.fixtures import init_simulation_casestudy_api, create_composite_priors
+from tests.fixtures import (
+    init_simulation_casestudy_api, 
+    create_composite_priors,
+    init_test_case_study_hierarchical_presimulated,
+)
 
 
 def test_prior_parsing():
@@ -231,6 +236,40 @@ def test_convergence_sa_kernel():
             prediction_data_variable=data_var,
             x_dim="time"
         )
+
+
+def test_hierarchical_lotka_volterra():
+    sim = init_test_case_study_hierarchical_presimulated()
+
+    sim.config.model_parameters.alpha_species.prior="lognorm(scale=[[2],[2]],s=0.2)" # type: ignore
+    sim.config.model_parameters.alpha.prior="lognorm(s=0.1,scale=alpha_species[rabbit_species_index, experiment_index])" # type: ignore
+    sim.config.model_parameters.beta.prior="lognorm(s=1,scale=0.1)" # type: ignore
+
+    sim.config.error_model.rabbits = "norm(loc=0, scale=1, obs=(obs-rabbits)/jnp.sqrt(rabbits+1e-6))"
+    sim.config.error_model.wolves = "norm(loc=0, scale=1, obs=(obs-wolves)/jnp.sqrt(wolves+1e-6))"
+
+    sim.solver = JaxSolver
+    sim.config.inference_numpyro.kernel = "svi"
+    sim.config.inference_numpyro.svi_iterations = 2_000
+    sim.config.inference_numpyro.svi_learning_rate = 0.005
+    sim.config.inference_numpyro.gaussian_base_distribution = True
+    sim.config.jaxsolver.max_steps = 1e5
+    sim.config.jaxsolver.throw_exception = False
+    sim.config.inference_numpyro.init_strategy = "init_to_uniform"
+    sim.dispatch_constructor()
+    sim.set_inferer("numpyro")
+
+    # TODO: Check convergence. This is not yet running, but do this tomorrow rested :)
+    sim.inferer.run()
+
+    np.testing.assert_almost_equal(
+        sim.inferer.idata.posterior.beta, 
+        sim.config.model_parameters.beta.value
+    )
+    np.testing.assert_almost_equal(
+        sim.inferer.idata.posterior.alpha_species, 
+        sim.config.model_parameters.alpha_species.value
+    )
 
 
 def test_commandline_api_infer():
