@@ -1,3 +1,6 @@
 [submodule "case_studies/tktd_rna_pulse"]
 	path = case_studies/tktd_rna_pulse
 	url = git@github.com:flo-schu/tktd_rna_pulse
+[submodule "case_studies/hierarchical_molecular_tktd"]
+	path = case_studies/hierarchical_molecular_tktd
+	url = git@github.com:flo-schu/hierarchical_molecular_tktd.git
