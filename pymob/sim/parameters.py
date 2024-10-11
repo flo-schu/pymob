@@ -6,6 +6,7 @@ from typing_extensions import Annotated
 
 import scipy
 import numpy as np
+import xarray as xr
 from pydantic import BaseModel, ConfigDict, model_serializer, field_validator, model_validator
 from pydantic.functional_validators import BeforeValidator
 from numpydantic import NDArray, Shape
@@ -283,6 +284,33 @@ class Param(BaseModel):
             )
 
         return self
+    
+    def to_xarray(self, coordinates):
+        """Converts the parameter to an xarray based on the dimensional 
+        structure and adds additional info (prior, starting values, ...) 
+        as metadata.
+        """
+
+        coords = {d:list(coordinates[d]) for d in self.dims}
+        shape = tuple([len(c) for _, c in coords.items()])
+        value = np.broadcast_to(np.array(self.value), shape)
+        arr = xr.DataArray(value, dims=self.dims, coords=coords)
+
+        for key, value in self.model_dump().items():
+            if value is None: 
+                continue
+
+            if key == "prior":
+                arr.attrs["prior"] = self.prior.model_dump_json().strip('"') #type:ignore
+            
+            elif key in ["value", "dims"]:
+                continue
+            
+            else:
+                arr.attrs[key] = value
+
+        return arr
+
 
 scipy_to_scipy = {
     # Continuous Distributions
