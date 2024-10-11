@@ -7,6 +7,8 @@ scipy_to_numpyro = {
     # Continuous Distributions
     "norm": (numpyro.distributions.Normal, {"loc": "loc", "scale": "scale"}),
     "normal": (numpyro.distributions.Normal, {"loc": "loc", "scale": "scale"}),
+    "halfnorm": (numpyro.distributions.HalfNormal, {"scale": "scale"}),
+    "halfnormal": (numpyro.distributions.HalfNormal, {"scale": "scale"}),
     "expon": (numpyro.distributions.Exponential, {"scale": "rate"}),  # rate = 1/scale
     "exponential": (numpyro.distributions.Exponential, {"scale": "rate"}),  # rate = 1/scale
     "uniform": (numpyro.distributions.Uniform, {"loc": "low", "scale": "high"}),  # high = loc + scale
