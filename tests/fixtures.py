@@ -71,6 +71,25 @@ def init_bufferguts_casestudy(scenario="testing"):
     else:
         pytest.skip()
 
+def init_bufferguts_leo_casestudy(scenario="testing"):
+    """This is an external case study used for local testing. The test study
+    will eventually added also to the remote as an example, but until this happens
+    the test is skipped on the remote.
+    """
+    config = Config()
+    config.case_study.name = "bufferguts"
+    config.case_study.scenario = scenario
+    config.case_study.package = "../pollinERA/case_studies"
+    config.case_study.simulation = "BuffergutsSimulation"
+    config.import_casestudy_modules(reset_path=True)
+
+    if "sim" in config._modules:       
+        Simulation = config.import_simulation_from_case_study()
+        sim = Simulation(config)
+        return sim
+    else:
+        pytest.skip()
+
 def init_guts_casestudy_constant_exposure(scenario="testing_guts_constant_exposure"):
     """This is an external case study used for local testing. The test study
     will eventually added also to the remote as an example, but until this happens
