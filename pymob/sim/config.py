@@ -1,15 +1,10 @@
 import os
 import re
 import sys
-import ast
 from ast import literal_eval as make_tuple
-from dataclasses import dataclass
-from glob import glob
 import configparser
 import warnings
 import importlib
-import logging
-import json
 import multiprocessing as mp
 from typing import List, Optional, Union, Dict, Literal, Callable, Tuple, TypedDict, Any
 from typing_extensions import Annotated
@@ -17,7 +12,6 @@ from types import ModuleType
 import tempfile
 
 import numpy as np
-import numpy.typing as npt
 import xarray as xr
 from numpy.typing import ArrayLike
 
@@ -608,16 +602,20 @@ class Modelparameters(BaseModel):
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
     @property
+    def all(self) -> Dict[str,OptionParam]:
+        return self.__pydantic_extra__
+    
+    @all.setter
+    def all(self, value):
+        self.__pydantic_extra__ = value
+
+    @property
     def free(self) -> Dict[str,OptionParam]:
-        return {k:v for k, v in self.__pydantic_extra__.items() if v.free}
+        return {k:v for k, v in self.all.items() if v.free}
 
     @property
     def fixed(self) -> Dict[str,OptionParam]:
-        return {k:v for k, v in self.__pydantic_extra__.items() if not v.free}
-
-    @property
-    def all(self) -> Dict[str,OptionParam]:
-        return self.__pydantic_extra__
+        return {k:v for k, v in self.all.items() if not v.free}
 
     @property
     def n_free(self) -> int:
@@ -644,7 +642,7 @@ class Modelparameters(BaseModel):
             category=DeprecationWarning
         )
         dims = []
-        for k, v in self.__pydantic_extra__.items():
+        for k, v in self.all.items():
             for d in v.dims:
                 if d not in dims:
                     dims.append(d)
@@ -659,8 +657,26 @@ class Modelparameters(BaseModel):
             )
             return
         
-        deleted_par = self.__pydantic_extra__.pop(key)
+        deleted_par = self.all.pop(key)
         print(f"Deleted '{key}' Param({deleted_par}).")
+
+    def reorder_parameters(self, keys: List[str]):
+        """Reorders model parameters. This may be necessary for hierarchical 
+        models, because priors take draws from hyperpriors to parameterize their
+        distributions. Hence, they must be available earlier.
+
+        Parameters
+        ----------
+
+        keys : List[str]
+            A list of model parameters to sort the model_parameter dictionary 
+            after. If the keys list is smaller than the list of model parameters,
+            unlisted parameters will be appended to the keys list in order.
+        """
+        if len(keys) < len(self.all):
+            keys = keys + [k for k in self.all.keys() if k not in keys]
+            
+        self.all = {k:self.all[k] for k in keys} 
 
 class Errormodel(BaseModel):
     __pydantic_extra__: Dict[str,OptionRV]
