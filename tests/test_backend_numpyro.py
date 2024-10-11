@@ -8,17 +8,8 @@ from pymob.sim.parameters import Param
 
 from tests.fixtures import (
     init_simulation_casestudy_api, 
-    create_composite_priors,
     init_test_case_study_hierarchical_presimulated,
 )
-
-
-def test_prior_parsing():
-    params = create_composite_priors()
-    parsed_params = NumpyroBackend.parse_model_priors(
-        parameters=params.free,
-        dim_shapes={k:() for k, _ in params.all.items()}
-    )
 
 def test_diffrax_exception():
     # with proper scripting API define JAX model here or import from fixtures

@@ -155,14 +155,28 @@ def setup_solver(sim: SimulationBase, solver: type):
 def create_composite_priors():
     prior_mu = RandomVariable(distribution="normal", parameters={"loc": Expression("5"), "scale": Expression("2.0")})
     prior_k = RandomVariable(distribution="normal", parameters={"loc": Expression("mu"), "scale": Expression("1.0")})
-    prior_k = RandomVariable(distribution="normal", parameters={"loc": Expression("mu + Array([5,5])"), "scale": Expression("1.0")})
+    prior_k = RandomVariable(distribution="normal", parameters={"loc": Expression("mu + [5,5]"), "scale": Expression("1.0")})
 
     mu = Param(prior=prior_mu, hyper=True, dims=("experiment",))
-    k = Param(prior=prior_k)
+    k = Param(prior=prior_k, dims=("experiment",))
 
     theta = Modelparameters() # type: ignore
     theta.mu = mu
     theta.k = k
+
+    return theta
+
+
+def create_composite_priors_wrong_order():
+    prior_mu = RandomVariable(distribution="normal", parameters={"loc": Expression("5"), "scale": Expression("2.0")})
+    prior_k = RandomVariable(distribution="normal", parameters={"loc": Expression("mu"), "scale": Expression("1.0")})
+
+    k = Param(prior=prior_k)
+    mu = Param(prior=prior_mu, hyper=True, dims=("experiment",))
+
+    theta = Modelparameters() # type: ignore
+    theta.k = k
+    theta.mu = mu
 
     return theta
 

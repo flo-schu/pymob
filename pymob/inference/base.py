@@ -163,7 +163,8 @@ class InferenceBackend(ABC):
         # parse model components
         self.prior = self.parse_model_priors(
             parameters=self.config.model_parameters.free,
-            dim_shapes=self.simulation.parameter_shapes
+            dim_shapes=self.simulation.parameter_shapes,
+            indices=self.indices
         )
 
         self.evaluator = self.parse_deterministic_model()
@@ -209,15 +210,40 @@ class InferenceBackend(ABC):
     def parse_model_priors(
         cls, 
         parameters: Dict[str,Param], 
-        dim_shapes: Dict[str,Tuple[int, ...]]
+        dim_shapes: Dict[str,Tuple[int, ...]],
+        indices: Dict[str, Any] = {}
     ):
         priors = {}
+        hyper_ = []
         for key, par in parameters.items():
             if par.prior is None:
                 raise AttributeError(
                     f"No prior was defined for parameter '{key}'. E.g.: "+
                     f"`sim.config.model_parameters.{key}.prior = 'lognorm(loc=1, scale=2)'`"
                 )
+            
+            for k, v in par.prior.parameters.items():
+                for ua in v.undefined_args:
+                    if ua in indices:
+                        continue
+
+                    elif ua in cls._distribution._import_map:
+                        continue
+
+                    elif ua in priors:
+                        continue
+
+                    else:
+                        raise KeyError(
+                            f"Parameter '{key}' defines a prior '{par.prior.model_ser()}' that will try "+
+                            f"to access the variable '{ua}' before it is defined "+
+                            "in 'sim.indices', 'Distribution._import_map' or previously "+
+                            "defined priors. Please double check the prior definition for errors, "+
+                            f"specify the needed parameter, or check the parameter order. "+
+                            "If needed, use "+
+                            f"config.model_parameters.reorder([..., '{ua}', '{key}', ...]) "+
+                            "to arrange the parameters in the correct order."
+                        )
 
             dist = cls._distribution(
                 name=key, 

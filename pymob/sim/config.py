@@ -660,7 +660,7 @@ class Modelparameters(BaseModel):
         deleted_par = self.all.pop(key)
         print(f"Deleted '{key}' Param({deleted_par}).")
 
-    def reorder_parameters(self, keys: List[str]):
+    def reorder(self, keys: List[str]):
         """Reorders model parameters. This may be necessary for hierarchical 
         models, because priors take draws from hyperpriors to parameterize their
         distributions. Hence, they must be available earlier.
