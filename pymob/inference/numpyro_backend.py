@@ -589,15 +589,17 @@ class NumpyroBackend(InferenceBackend):
 
 
     @property
-    def posterior_data_structure(self):
+    def posterior_data_structure(self) -> Dict[str, List[str]]:
         data_structure = self.simulation.data_structure.copy()
         data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
+        parameter_dims = {k: list(v) for k, v in self.simulation.parameter_dims.items() if len(v) > 0}
         data_structure.update(data_structure_loglik)
+        data_structure.update(parameter_dims)
         return data_structure
     
     @property
-    def posterior_coordinates(self):
-        posterior_coords = self.simulation.coordinates.copy()
+    def posterior_coordinates(self) -> Dict[str, List[str|int]]:
+        posterior_coords = {k: list(v) for k, v in self.simulation.dimension_coords.items()}
         posterior_coords.update({
             "draw": list(range(self.draws)), 
             "chain": list(range(self.chains))
@@ -981,7 +983,7 @@ class NumpyroBackend(InferenceBackend):
                 key=key, 
                 a=posterior.draw.values, 
                 replace=False, 
-                shape=(n_draws, )
+                shape=(n_draws, ) # type: ignore
             )
             posterior = posterior.isel(draw=selection)
 
@@ -999,7 +1001,7 @@ class NumpyroBackend(InferenceBackend):
                     ds = evaluator.results
 
                     ds = ds.assign_coords({"chain": chain, "draw": draw})
-                    ds = ds.expand_dims(("chain", "draw"))
+                    ds = ds.expand_dims(("chain", "draw")) # type:ignore
                     preds.append(ds)
                     pbar.update(1)
 

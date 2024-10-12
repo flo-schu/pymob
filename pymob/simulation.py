@@ -1385,7 +1385,7 @@ class SimulationBase:
         return data_structure
 
     @property
-    def dimension_coords(self) -> Dict[str, Tuple[str, ...]]:
+    def dimension_coords(self) -> Dict[str, Tuple[str|int, ...]]:
         """Goes through dimensions of data structure and adds coordinates,
         then goes through dimensions of parameters and searches in coordinates
         and indices to 
