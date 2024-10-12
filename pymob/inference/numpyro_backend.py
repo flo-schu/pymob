@@ -9,7 +9,6 @@ from typing import (
 
 from tqdm import tqdm
 import numpy as np
-import numpy.typing as npt
 import xarray as xr
 import arviz as az
 from matplotlib import pyplot as plt
@@ -25,9 +24,8 @@ from pymob.inference.analysis import (
 from pymob.inference.numpyro_dist_map import scipy_to_numpyro, transformed_dist_map
 
 import numpyro
-from numpyro import distributions as dist
 from numpyro.infer import Predictive
-from numpyro.distributions import Normal, transforms, TransformedDistribution
+from numpyro.distributions import Normal, transforms
 from numpyro.distributions.distribution import DistributionMeta
 from numpyro import infer
 
