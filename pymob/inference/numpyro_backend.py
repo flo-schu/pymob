@@ -447,8 +447,8 @@ class NumpyroBackend(InferenceBackend):
             ) 
         except graphviz.backend.ExecutableNotFound:
             warnings.warn(
-                "Model is not rendered, because the graphviz executable is "
-                "not found. Try search for 'graphviz executables not found'"
+                "Model is not rendered, because the graphviz executable is "+
+                "not found. Try search for 'graphviz executables not found' "+
                 "and the used OS. This should be an easy fix :-)"
             )
 
@@ -476,10 +476,10 @@ class NumpyroBackend(InferenceBackend):
         elif self.kernel.lower() == "svi" or self.kernel.lower() == "map":
             if not self.gaussian_base_distribution:
                 raise RuntimeError(
-                    "SVI is only supported if parameter distributions can be "
-                    "re-parameterized as gaussians. Please set "
-                    "inference.numpyro.gaussian_base_distribution = 1 "
-                    "and if needed use distributions from the loc-scale family "
+                    "SVI is only supported if parameter distributions can be "+
+                    "re-parameterized as gaussians. Please set "+
+                    "inference.numpyro.gaussian_base_distribution = 1 "+
+                    "and if needed use distributions from the loc-scale family "+
                     "to specify the model parameters."
                 )
             
@@ -508,7 +508,7 @@ class NumpyroBackend(InferenceBackend):
 
         else:
             raise NotImplementedError(
-                f"Kernel {self.kernel} is not implemented. "
+                f"Kernel {self.kernel} is not implemented. "+
                 "Use one of nuts, sa, svi, map"
             )
         
@@ -563,7 +563,7 @@ class NumpyroBackend(InferenceBackend):
             guide = numpyro.infer.autoguide.AutoDelta(model, init_loc_fn=init_fn)
         else:
             raise NotImplementedError(
-                f"SVI kernel {kernel} is not implemented. "
+                f"SVI kernel {kernel} is not implemented. "+
                 "Use one of 'map', 'svi'"
             )
 
@@ -582,7 +582,7 @@ class NumpyroBackend(InferenceBackend):
     @property
     def posterior(self):
         warnings.warn(
-            "Discouraged use of inferer.posterior API"
+            "Discouraged use of inferer.posterior API"+
             "use inferer.idata.posterior instead."
         )
         return self.idata.posterior  # type: ignore
@@ -699,8 +699,8 @@ class NumpyroBackend(InferenceBackend):
                 if not all(list(sites_in_theta.values())):
                     missing_sites = [name for name, in_theta in sites_in_theta.items() if not in_theta]
                     warnings.warn(
-                        f"Sites: {missing_sites} were not specified in theta. "
-                        "Log-likelihood will not be fully defined by theta."
+                        f"Sites: {missing_sites} were not specified in theta. "+
+                        "Log-likelihood will not be fully defined by theta. "+
                         "Results should be independent of the given seed"
                     )
 
@@ -770,13 +770,13 @@ class NumpyroBackend(InferenceBackend):
         
         if len(nanlogliks_dat + nanlogliks_pri) > 0:
             warnings.warn(
-                f"Log-likelihoods {nanlogliks_dat + nanlogliks_pri} contained "
-                "NaN or inf values. The gradient based "
-                "samplers will not be able to sample from this model. Make sure "
-                "that all functions are numerically well behaved. "
-                "Inspect the model with `jax.debug.print('{}',x)` "
-                "https://jax.readthedocs.io/en/latest/notebooks/external_callbacks.html#exploring-debug-callback"
-                "Or look at the functions step by step to find the position where "
+                f"Log-likelihoods {nanlogliks_dat + nanlogliks_pri} contained "+
+                "NaN or inf values. The gradient based "+
+                "samplers will not be able to sample from this model. Make sure "+
+                "that all functions are numerically well behaved. "+
+                "Inspect the model with `jax.debug.print('{}',x)` "+
+                "https://jax.readthedocs.io/en/latest/notebooks/external_callbacks.html#exploring-debug-callback "+
+                "Or look at the functions step by step to find the position where "+
                 "jnp.grad(func)(x) evaluates to NaN"
             )
         return llsum, llpri, lldat
@@ -800,12 +800,12 @@ class NumpyroBackend(InferenceBackend):
         nangrads = [k for k, g in grads.items() if np.isnan(g) or np.isinf(g)]
         if len(nangrads) > 0:
             warnings.warn(
-                f"Gradients {nangrads} contained NaN or infinity values. The gradient based "
-                "samplers will not be able to sample from this model. Make sure "
-                "that all functions are numerically well behaved. "
-                "Inspect the model with `jax.debug.print('{}',x)` "
-                "https://jax.readthedocs.io/en/latest/notebooks/external_callbacks.html#exploring-debug-callback"
-                "Or look at the functions step by step to find the position where "
+                f"Gradients {nangrads} contained NaN or infinity values. The gradient based "+
+                "samplers will not be able to sample from this model. Make sure "+
+                "that all functions are numerically well behaved. "+
+                "Inspect the model with `jax.debug.print('{}',x)` "+
+                "https://jax.readthedocs.io/en/latest/notebooks/external_callbacks.html#exploring-debug-callback "+
+                "Or look at the functions step by step to find the position where "+
                 "jnp.grad(func)(x) evaluates to NaN"
             )
 
@@ -864,9 +864,9 @@ class NumpyroBackend(InferenceBackend):
 
         if len(prior_keys) != len(priors):
             warnings.warn(
-                f"Priors {[k for k in prior_keys if k not in prior_predictions]} "
-                "were not found in the predictions. Make sure that the prior "
-                "names match the names in user_defined_probability_model = "
+                f"Priors {[k for k in prior_keys if k not in prior_predictions]} "+
+                "were not found in the predictions. Make sure that the prior "+
+                "names match the names in user_defined_probability_model = "+
                 f"{self.config.inference_numpyro.user_defined_probability_model}.",
                 category=UserWarning
             )
@@ -1120,8 +1120,8 @@ class NumpyroBackend(InferenceBackend):
                 plot_func(self.simulation)
             except AttributeError:
                 warnings.warn(
-                    f"Plot function {plot} was not found in the plot.py module "
-                    "Make sure the name has been spelled correctly or try to "
+                    f"Plot function {plot} was not found in the plot.py module "+
+                    "Make sure the name has been spelled correctly or try to "+
                     "set the function directly to 'sim.config.inference.plot'.",
                     category=UserWarning
                 )
@@ -1153,7 +1153,7 @@ class NumpyroBackend(InferenceBackend):
         else:
             raise KeyError(
                 f"{prediction_data_variable} was not found in the predictions "+
-                f"consider specifying the data variable for the predictions "+
+                "consider specifying the data variable for the predictions "+
                 "explicitly with the option `prediction_data_variable`."
             )
         try:
@@ -1213,7 +1213,7 @@ class NumpyroBackend(InferenceBackend):
                 )
             else:
                 raise NotImplementedError(
-                    f"Mode '{mode}' not implemented. "
+                    f"Mode '{mode}' not implemented. "+
                     "Choose 'mean+hdi' or 'draws'."
                 )
 
