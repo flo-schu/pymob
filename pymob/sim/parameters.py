@@ -107,7 +107,11 @@ class RandomVariable(BaseModel):
     def model_ser(self) -> str:
         distribution = self.distribution
         parameters = dict_to_string(self.parameters, jstr=",")
-        
+        if self.obs is None:
+            pass
+        else:
+            obs = str(self.obs).replace(" ","")
+            parameters = parameters + f",obs={obs}"
         return f"{distribution}({parameters})"
 
     @field_validator("distribution", mode="after")

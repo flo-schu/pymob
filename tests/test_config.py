@@ -238,10 +238,56 @@ def test_model_parameters():
 def test_error_model():
     config = Config()
 
-    a = "lognorm(loc=1,scale=2)"
-    config.error_model.a = a
-
+    io = "norm(loc=1,scale=2)"
     
+    # test config file input
+    test = RandomVariable(
+        distribution="norm",
+        parameters=dict(loc=Expression("1"),scale=Expression("2")),  # type:ignore
+    )
+
+    # test config file input
+    config.error_model.test = io
+    assert config.error_model.test == test  # type: ignore
+    
+    # test scripting input
+    config.error_model.test = test
+
+    # test dict input
+    config.error_model.test = test.model_dump(exclude_none=True)
+    assert config.error_model.test == test # type: ignore
+
+    # test serialization
+    serialized = config.error_model.model_dump(mode="json", exclude_none=True)
+    assert serialized == {"test": io}
+
+def test_error_model_with_obs():
+    config = Config()
+
+    io = "lognorm(scale=[1.0,1.0,1.0],s=1.0,obs=b/jnp.sqrt(2))"
+    test = RandomVariable(
+        distribution="lognorm",
+        parameters=dict(scale=Expression("[1.0,1.0,1.0]"),s=Expression("1.0")),  # type:ignore
+        obs=Expression("b/jnp.sqrt(2)")
+    )
+
+    # test config file input
+    config.error_model.test = io
+    assert config.error_model.test == test  # type: ignore
+    
+    # test scripting input
+    config.error_model.test = test
+
+    # test dict input
+    config.error_model.test = test.model_dump(exclude_none=True)
+    assert config.error_model.test == test # type: ignore
+
+    # test serialization
+    serialized = config.error_model.model_dump(mode="json")
+    assert serialized == {"test": io}
+
+
+
 def test_data_variables():
     config = Config()
     config.case_study.name = "test_case_study"

@@ -1,3 +1,4 @@
+from typing import Literal
 import numpy as np
 import xarray as xr
 import pytest
@@ -158,7 +159,7 @@ def create_composite_priors():
     prior_k = RandomVariable(distribution="normal", parameters={"loc": Expression("mu + [5,5]"), "scale": Expression("1.0")})
 
     mu = Param(prior=prior_mu, hyper=True, dims=("experiment",))
-    k = Param(prior=prior_k, dims=("experiment",))
+    k = Param(value=np.array([5,23.1]), prior=prior_k, dims=("experiment",))
 
     theta = Modelparameters() # type: ignore
     theta.mu = mu
@@ -194,8 +195,13 @@ def init_test_case_study_hierarchical() -> SimulationBase:
 
     return sim
 
-def init_test_case_study_hierarchical_presimulated() -> SimulationBase:
-    config = Config("case_studies/test_case_study/scenarios/test_hierarchical_presimulated/settings.cfg")
+def init_test_case_study_hierarchical_presimulated(
+    scenario: Literal[
+        "test_hierarchical_presimulated",
+        "lotka_volterra_hierarchical_presimulated_v1",
+    ] = "test_hierarchical_presimulated"
+) -> SimulationBase:
+    config = Config(f"case_studies/test_case_study/scenarios/{scenario}/settings.cfg")
     config.case_study.package = "case_studies"
     config.import_casestudy_modules(reset_path=True)
     Simulation = config.import_simulation_from_case_study()
