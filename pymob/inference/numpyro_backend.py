@@ -592,26 +592,6 @@ class NumpyroBackend(InferenceBackend):
         )
         return self.idata.posterior  # type: ignore
 
-
-    @property
-    def posterior_data_structure(self) -> Dict[str, List[str]]:
-        data_structure = self.simulation.data_structure.copy()
-        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
-        parameter_dims = {k: list(v) for k, v in self.simulation.parameter_dims.items() if len(v) > 0}
-        data_structure.update(data_structure_loglik)
-        data_structure.update(parameter_dims)
-        return data_structure
-    
-    @property
-    def posterior_coordinates(self) -> Dict[str, List[str|int]]:
-        posterior_coords = {k: list(v) for k, v in self.simulation.dimension_coords.items()}
-        posterior_coords.update({
-            "draw": list(range(self.draws)), 
-            "chain": list(range(self.chains))
-        })
-        return posterior_coords
-    
-
     def create_log_likelihood(self, seed=1):
         key = jax.random.PRNGKey(seed)
         obs, masks = self.observation_parser()
@@ -940,9 +920,6 @@ class NumpyroBackend(InferenceBackend):
         posterior_coords["draw"] = list(range(n))
         data_structure = self.posterior_data_structure
 
-        # TODO add prior data structure. Address this when a proper coordinate
-        # dimensionality backend is implemented (config module)
-        
         # TODO add option to only return parameters (posterior) without
         # predictions [SHOULD BE EXPOSED ON STORING THE POSTERIOR]. 
         # Do keep calculating the predictions. They can be used

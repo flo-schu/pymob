@@ -194,17 +194,33 @@ class InferenceBackend(ABC):
     def EPS(self):
         return self.config.inference.eps
 
-    # def get_dim_shape(self, dims: Tuple[str, ...]) -> Tuple[int, ...]:
-    #     dim_shape = []
-    #     for dim in dims:
-    #         self.simulation.parameter_shapes
-    #         coords = set(self.simulation.observations[dim].values.tolist())
-    #         n_coords = len(coords)
-    #         dim_shape.append(n_coords)
+    @property
+    def posterior_data_structure(self) -> Dict[str, List[str]]:
+        data_structure = self.simulation.data_structure.copy()
+        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
+        parameter_dims = {k: list(v) for k, v in self.simulation.parameter_dims.items() if len(v) > 0}
+        data_structure.update(data_structure_loglik)
+        data_structure.update(parameter_dims)
+        return data_structure
+    
+    @property
+    def posterior_coordinates(self) -> Dict[str, List[str|int]]:
+        if not hasattr(self, "chains"):
+            chains = 1
+        else:
+            chains = self.chain
 
-    #     if len(dim_shape) == 0:
-    #         dim_shape = (1,)
-    #     return tuple(dim_shape)
+        if not hasattr(self, "draws"):
+            draws = 1
+        else:
+            draws = self.draws
+
+        posterior_coords = {k: list(v) for k, v in self.simulation.dimension_coords.items()}
+        posterior_coords.update({
+            "draw": list(range(draws)), 
+            "chain": list(range(chains))
+        })
+        return posterior_coords
 
     @classmethod
     def parse_model_priors(
