@@ -42,6 +42,12 @@ def create_dataset_from_dict(Y: dict, data_structure, coordinates, var_dim_mappe
         coords = {d: coordinates[d] for d in dims}
         dim_order = var_dim_mapper.get(k) # use get which returns None if there is no mapping
 
+        # TODO: it would be an idea to leave the batch dimension in the return 
+        #       from the solver and process it here. 1st advantage is that the
+        #       name of the batch_dimension could reported in the error message
+        #       second advantage is that the output from JAXSolver (which may)
+        #       be passed to numpyro, has a batch dimension, which makes it 
+        #       useful for numpyro plate notation (and more consistent)
         v_permuted_dims = v.transpose(dim_order)
         try:
             da = xr.DataArray(v_permuted_dims, coords=coords, dims=dims)
