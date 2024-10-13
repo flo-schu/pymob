@@ -128,13 +128,18 @@ class NumpyroBackend(InferenceBackend):
 
         # parse the probability model
         if self.user_defined_probability_model is not None:
-            self.inference_model = getattr(
+            inference_model = getattr(
                 self.simulation._prob, 
                 self.user_defined_probability_model
             )
+            self.inference_model = partial(
+                inference_model,
+                indices = self.indices
+            )
 
         # combine the model
-        self.inference_model = self.parse_probabilistic_model()
+        else:
+            self.inference_model = self.parse_probabilistic_model()
 
     @property
     def user_defined_probability_model(self):
