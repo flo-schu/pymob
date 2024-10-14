@@ -1392,7 +1392,16 @@ class SimulationBase:
         """
         dim_coords = {}
         for dim in self.config.data_structure.dimensions:
-            coord = self.coordinates[dim]
+            try:
+                coord = self.coordinates[dim]   
+            except KeyError:
+                raise KeyError(
+                    f"'{dim}' was specified in config.data_structure but is not "+
+                    f"available in sim.coordinates['{dim}']. Provide observations "+
+                    "that have coordinates specified for this dimension, or, "+
+                    "if the dimension is unneeded, remove it from the definition "+
+                    "of the data variable."
+                )
             dim_coords.update({dim: tuple(coord)})
 
         for dim in self.config.model_parameters.dimensions:
