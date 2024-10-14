@@ -6,7 +6,7 @@ from pymob.inference.scipy_backend import ScipyBackend
 from pymob.sim.parameters import Param
 from pymob.solvers.diffrax import JaxSolver
 
-from fixtures import init_test_case_study_hierarchical
+from tests.fixtures import init_test_case_study_hierarchical
 
 def test_parameter_parsing_different_priors_on_species():
     sim = init_test_case_study_hierarchical()
@@ -141,4 +141,3 @@ def test_parameter_parsing_different_priors_on_year():
 
 if __name__ == "__main__":
     pass
-    test_parameter_parsing_different_priors_on_species()
