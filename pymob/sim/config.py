@@ -388,12 +388,22 @@ class Casestudy(BaseModel):
         
     @property
     def scenario_path(self):
-        return os.path.join(
-            os.path.relpath(self.package), 
-            os.path.relpath(self.name),
-            "scenarios", 
-            self.scenario
-        )
+        package_path = os.path.basename(os.path.abspath(self.package))
+        if package_path == self.name:
+            # if the package path is identical to the case study path, then 
+            # the scenario is directly located in the package.
+            return os.path.join(
+                os.path.relpath(self.package), 
+                "scenarios", 
+                self.scenario
+            )
+        else:
+            return os.path.join(
+                os.path.relpath(self.package), 
+                os.path.relpath(self.name),
+                "scenarios", 
+                self.scenario
+            )
     
     @field_validator("root", mode="after")
     def set_root(cls, new_value, info, **kwargs):
@@ -957,7 +967,7 @@ class Config(BaseModel):
             Simulation = getattr(self._modules["sim"], self.case_study.simulation)
         except:
             raise ImportError(
-                f"Simulation class {self.case_study.simulation} "
+                f"Simulation class '{self.case_study.simulation}' "
                 "could not be found. Make sure the simulaton option is spelled "
                 "correctly or specify an class that exists in sim.py"
                 "If you are using pymob to work on different case-studies in "
@@ -966,3 +976,4 @@ class Config(BaseModel):
             )
         
         return Simulation
+        
