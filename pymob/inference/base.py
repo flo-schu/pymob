@@ -9,7 +9,8 @@ from typing import (
     Callable,
     Iterable,
     Optional,
-    Any
+    Any,
+    List,
 )
 from abc import ABC, abstractmethod
 
@@ -208,7 +209,7 @@ class InferenceBackend(ABC):
         if not hasattr(self, "chains"):
             chains = 1
         else:
-            chains = self.chain
+            chains = self.chains
 
         if not hasattr(self, "draws"):
             draws = 1
