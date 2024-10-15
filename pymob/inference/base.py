@@ -14,6 +14,7 @@ from typing import (
 from abc import ABC, abstractmethod
 
 from matplotlib import pyplot as plt
+import matplotlib as mpl
 import arviz as az
 import itertools as it
 import pandas as pd
@@ -312,11 +313,13 @@ class InferenceBackend(ABC):
         gradient_func: Optional[Callable] = None,
         bounds: Tuple[List[float],List[float]] = ([-10, 10], [-10,10]),
         n_grid_points: int = 100,
-        n_vector_points: int = 20,
+        n_vector_points: int = 50,
         ax: Optional[plt.Axes] = None,
     ):
         """Plots the likelihood for each coordinate pair of two model parameters
         Parameters are taken from the standardized scale and transformed 
+
+        For some reason the dx and dy gradients are mixed up after 
 
         Parameters
         ----------
@@ -357,13 +360,20 @@ class InferenceBackend(ABC):
         grid = {p: v for p, v in zip(parameters, np.array(list(it.product(x, y))).T)}
         loglik = log_likelihood_func(grid)
 
-        Z = loglik.reshape((n_grid_points, n_grid_points))
+        # gradients must be transposed to work with meshgrid
+        Z = loglik.reshape((n_grid_points, n_grid_points)).T
         X, Y = np.meshgrid(x, y)
 
         if ax is None:
-            fig, ax = plt.subplots(1, 1)
+            fig, ax = plt.subplots(1, 1, figsize=(8,6))
 
-        contours = ax.contourf(X, Y, Z)
+        cmap = mpl.colormaps["viridis"]
+        norm = mpl.colors.Normalize(
+            vmin=loglik.min(), 
+            vmax=loglik.max()
+        )
+
+        contours = ax.contourf(X, Y, Z, cmap=cmap, norm=norm, levels=50)
 
         if gradient_func is not None:
             xv = np.linspace(*bounds_x, n_vector_points)
@@ -373,10 +383,19 @@ class InferenceBackend(ABC):
             gridv = {p: v for p, v in zip(parameters, np.array(list(it.product(xv, yv))).T)}
 
             grads = gradient_func(gridv)
-            U, V = grads[par_x], grads[par_y]
-            ax.quiver(Xv, Yv, U, V)
 
-        plt.colorbar(contours, label="log-likelihood")
+            u, v = grads[par_x], grads[par_y]
+            U = u.reshape((n_vector_points, n_vector_points)).T
+            V = v.reshape((n_vector_points, n_vector_points)).T
+
+            # WHY??????????
+            vector_field = ax.quiver(Xv, Yv, U, V, angles="xy", width=0.001)
+
+        ax.figure.colorbar(
+            mpl.cm.ScalarMappable(norm=norm, cmap=cmap), 
+            ax=ax,
+            label="log-likelihood"
+        )
         ax.set_xlabel("beta (normalized)")
         ax.set_ylabel("alpha (normalized)")
 

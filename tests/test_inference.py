@@ -54,6 +54,76 @@ def test_posterior():
     np.testing.assert_array_equal(idata.posterior.coords["experiment"], sim.dimension_coords["experiment"])
 
 
+def test_model_check():
+    sim = init_test_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim = init_simulation_casestudy_api()
+    sim.config.inference_numpyro.gaussian_base_distribution = True
+    sim.config.jaxsolver.throw_exception = False
+    sim.config.jaxsolver.max_steps = 1000
+
+    sim.solver = JaxSolver
+    sim.dispatch_constructor()
+    sim.set_inferer(backend="numpyro")
+
+    sim.inferer.check_gradients()
+    sim.inferer.check_log_likelihood()
+
+
+def test_vector_field():
+    sim = init_test_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim = init_simulation_casestudy_api()
+    sim.config.inference_numpyro.gaussian_base_distribution = True
+    sim.config.jaxsolver.throw_exception = False
+    sim.config.jaxsolver.max_steps = 10000
+
+    sim.solver = JaxSolver
+    sim.dispatch_constructor()
+    sim.set_inferer(backend="numpyro")
+
+    sim.config.model_parameters.beta.min = -10
+    sim.config.model_parameters.beta.max = 10
+    sim.config.model_parameters.alpha.min = -10
+    sim.config.model_parameters.alpha.max = 10
+
+    import jax
+
+    # Define a scalar function of two variables
+    def f(theta):
+        x = theta["alpha"]
+        y = theta["beta"]
+        return -((x+2)**2 + (y-2)**2)
+
+    # Compute the gradient function
+    gradient_f = jax.grad(f)
+
+    ax = sim.inferer.plot_likelihood_landscape(
+        parameters=("alpha", "beta"),
+        log_likelihood_func=jax.vmap(f),
+        gradient_func=jax.vmap(gradient_f),
+    )
+    ax.plot(-2,2,ls="", marker="o", color="black")
+
+    # Evaluate the gradient at a specific point
+
+
+
+    log_likelihood, grad_log_likelihood = sim.inferer.create_log_likelihood(
+        seed=1, return_type="custom", check=False, 
+        custom_return_fn=lambda lj, lp, ld: -lj,
+        vectorize=True,
+        gradients=True
+    )
+
+
+    ax = sim.inferer.plot_likelihood_landscape(
+        parameters=("beta", "alpha"),
+        log_likelihood_func=log_likelihood,
+        gradient_func=grad_log_likelihood,
+    )
+
+    ax.figure.savefig(f"{sim.output_path}/loglikelihood_gradients.png")
+
+
 if __name__ == "__main__":
     import sys
     import os
