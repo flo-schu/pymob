@@ -16,7 +16,7 @@ import sympy
 
 from pymob.simulation import SimulationBase
 from pymob.sim.parameters import Expression, NumericArray
-from pymob.inference.base import InferenceBackend, Distribution
+from pymob.inference.base import Errorfunction, InferenceBackend, Distribution
 from pymob.inference.analysis import (
     cluster_chains, rename_extra_dims, plot_posterior_samples,
     add_cluster_coordinates
@@ -592,7 +592,74 @@ class NumpyroBackend(InferenceBackend):
         )
         return self.idata.posterior  # type: ignore
 
-    def create_log_likelihood(self, seed=1):
+    def create_log_likelihood(
+        self, 
+        seed=1,
+        return_type:Literal["joint-log-likelihood", "full", "summed-by-site", "summed-by-prior-data", "custom"]="joint-log-likelihood",
+        check=True,
+        custom_return_fn: Optional[Callable] = None,
+        vectorize=False,
+        gradients=False,
+    ) -> Tuple[Errorfunction,ErrorModelFunction]:
+        """Log density relies heavily on the substitute utility
+        
+        The log density is synonymous for log-likelihood (it is the log 
+        probability density of the model). 
+
+        The general method is actually quite simple. Values of all SAMPLE
+        sites are replaced according to the key: value pairs in `theta`.
+
+        Then the model is calculated and the trace is obtained. Everything
+        else is then just post-processing of the sites. Here the log_prob
+        function of the sites in the trace are used and the values of the
+        sites are inserted. 
+
+        Note that the log-density can randomly fluctuate, if not all
+        sites are replaced.
+
+        Note that the data-loglik can be used to calculate a maximum-likelihood
+        estimate. Because it is independent of the prior
+
+        The method is equivalent using the log_likelihood method, but returns
+        only the likelihood of the data given the model parameters.
+        
+        ```python
+        def log_likelihood(theta: dict):
+            theta = {f"{key}_normal_base": val for key, val in theta.items()}
+            loglik = numpyro.infer.util.log_likelihood(
+                model=seeded_model,
+                posterior_samples=theta, 
+                batch_ndims=0,
+                solver=sim.inferer.evaluator,
+                obs=data,
+                masks=masks,
+            )
+
+            return loglik
+
+        jax.vmap(log_likelihood)(theta)
+        ```
+
+        Parameters
+        ----------
+
+
+        return_type : str
+            The information which should be returned. With increasing level
+            of computation:
+            
+            joint-log-likelihood: returns a single value, the entire log
+                likelihood of the model, given the values in theta
+            full: joint-log, loglik-prior of each site and value, 
+                loglik-data of each site and value 
+            summed-by-site: joint-loglik, loglik-prior of sites, 
+                loglik-data of sites
+            summed-by-prior-data:
+                joint-loglik, prior-loglik, data-loglik
+            custom:
+                uses the full log
+
+        """
         key = jax.random.PRNGKey(seed)
         obs, masks = self.observation_parser()
 
@@ -611,28 +678,11 @@ class NumpyroBackend(InferenceBackend):
         seeded_model = numpyro.handlers.seed(model, key)
    
         def log_density(
-            theta, 
-            return_type:Literal["joint-log-likelihood", "full", "summed-by-site", "summed-by-prior-data"]="joint-log-likelihood",
-            check=True
+            theta: Dict[str, float|List[NumericArray]], 
         ):
-            """Log density relies heavily on the substitute utility
-            
-            The log density is synonymous for log-likelihood (it is the log 
-            probability density of the model). 
-
-            The general method is actually quite simple. Values of all SAMPLE
-            sites are replaced according to the key: value pairs in `theta`.
-
-            Then the model is calculated and the trace is obtained. Everything
-            else is then just post-processing of the sites. Here the log_prob
-            function of the sites in the trace are used and the values of the
-            sites are inserted. 
-
-            Note that the log-density can randomly fluctuate, if not all
-            sites are replaced.
-
-            Note that the data-loglik can be used to calculate a maximum-likelihood
-            estimate. Because it is independent of the prior
+            """
+            Calculate the log-probability of different sites of the probabilistic
+            model
 
             Parameters
             ----------
@@ -641,24 +691,12 @@ class NumpyroBackend(InferenceBackend):
                 Dictionary of priors (sites) which should be deterministically 
                 fixed (substituted).
 
-            return_type : str
-                The information which should be returned. With increasing level
-                of computation:
-                
-                joint-log-likelihood: returns a single value, the entire log
-                    likelihood of the model, given the values in theta
-                full: joint-log, loglik-prior of each site and value, 
-                    loglik-data of each site and value 
-                summed-by-site: joint-loglik, loglik-prior of sites, 
-                    loglik-data of sites
-                summed-by-prior-data:
-                    joint-loglik, prior-loglik, data-loglik
-
             """
             
-            # TODO: For speeding this up, get inspired by
-            # https://num.pyro.ai/en/stable/_modules/numpyro/infer/util.html#log_likelihood
-
+            if self.gaussian_base_distribution:
+                theta = {f"{key}_normal_base": val for key, val in theta.items()}
+            else:
+                pass
         
             joint_log_density, trace = numpyro.infer.util.log_density( # type: ignore
                 model=seeded_model,
@@ -709,6 +747,10 @@ class NumpyroBackend(InferenceBackend):
             if return_type == "full":
                 return joint_log_density, prior_loglik, data_loglik
 
+
+            if return_type == "custom":
+                return custom_return_fn(joint_log_density, prior_loglik, data_loglik)
+
             prior_loglik_sum = {
                 key: np.sum(value) for key, value in prior_loglik.items()
             }
@@ -728,25 +770,48 @@ class NumpyroBackend(InferenceBackend):
             
             raise NotImplementedError(f"return_type flag: {return_type} is not implemented")
 
+        if gradients:
+            if not (return_type == "joint-log-likelihood" or return_type == "custom"):
+                raise ValueError(
+                    "Gradients need a single return value to be computed. "+
+                    f"Either choose `return_type={'joint-log-likelihood'}` or "+
+                    f"`return_type={'custom'}` and specify an approxpriate "+
+                    "`custom_return_fn`."
+                )
+            else:
+                grad_log_density = jax.grad(log_density)
 
-        return log_density
+        else:
+            grad_log_density = lambda x: None
+
+        if vectorize:
+            return jax.vmap(log_density), jax.vmap(grad_log_density)
+
+        else:
+            return log_density, grad_log_density
 
     def check_log_likelihood(
         self, 
         theta: Optional[Dict[str, float|NumericArray]]=None,
+        vectorize=False
     ):
-        log_density = self.create_log_likelihood(seed=self.config.simulation.seed)
+        log_density, _ = self.create_log_likelihood(
+            seed=self.config.simulation.seed,
+            return_type="full",
+            check=True,
+            vectorize=vectorize
+        )
         
         if theta is not None:
             pass
         elif self.config.inference_numpyro.gaussian_base_distribution:
-            theta = {f"{k}_norm": 0.0 for k, _ in self.config.model_parameters.free.items()}
+            theta = {k: 0.0 for k, _ in self.config.model_parameters.free.items()}
         else:
             # TODO: replace by prior sample, or prior mean, ...
             theta = self.config.model_parameters.value_dict
             
         
-        llsum, llpri, lldat = log_density(theta=theta, return_type="full", check=True)
+        llsum, llpri, lldat = log_density(theta=theta)
         if not np.isnan(llsum) and not np.isnan(llsum):
             return llsum, llpri, lldat
         
@@ -769,19 +834,29 @@ class NumpyroBackend(InferenceBackend):
     def check_gradients(
         self, 
         theta: Optional[Dict[str, float|NumericArray]]=None,
+        vectorize=False
     ):
-        log_density = self.create_log_likelihood(seed=self.config.simulation.seed)
-        grad_func = partial(log_density, return_type="joint-log-likelihood", check=False)
+
+        _, grad_log_density = self.create_log_likelihood(
+            seed=self.config.simulation.seed,
+            return_type="joint-log-likelihood",
+            check=False,
+            gradients=True,
+            vectorize=vectorize
+        )
 
         if theta is not None:
             pass
         elif self.config.inference_numpyro.gaussian_base_distribution:
-            theta = {f"{k}_norm": 0.0 for k, _ in self.config.model_parameters.free.items()}
+            # this works, because in the grad function the parameters are
+            # renamed with f'{k}_normal_base' if the gaussian base distribution
+            # is used.
+            theta = {k: 0.0 for k, _ in self.config.model_parameters.free.items()}
         else:
             # TODO: replace by prior sample, or prior mean, ...
             theta = self.config.model_parameters.value_dict
             
-        grads = jax.grad(grad_func)(theta)
+        grads = grad_log_density(theta)
         nangrads = [k for k, g in grads.items() if np.isnan(g) or np.isinf(g)]
         if len(nangrads) > 0:
             warnings.warn(
