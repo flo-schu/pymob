@@ -1,25 +1,33 @@
-import re
+import numpy as np
 import ast
 from typing import (
     Dict,
     Tuple,
-    Literal,
-    Union,
     Mapping,
     Callable,
     Iterable,
     Optional,
     Any,
     List,
+    Protocol
 )
 from abc import ABC, abstractmethod
 
+from matplotlib import pyplot as plt
 import arviz as az
+import itertools as it
+import pandas as pd
 
 from pymob.simulation import SimulationBase
 from pymob.sim.parameters import Param, RandomVariable, Expression
-from pymob.sim.config import Modelparameters
 from pymob.utils.config import lookup_from
+
+class Errorfunction(Protocol):
+    def __call__(
+        self, 
+        theta: Dict[str, List[float]], 
+    ) -> Any:
+        ...
 
 class Distribution:
     """The distribution is a pre-initialized distibution with human friendly 
@@ -151,6 +159,8 @@ class InferenceBackend(ABC):
     _distribution = Distribution
     idata: az.InferenceData
     prior: Dict[str,Distribution]
+    log_likelihood: Errorfunction
+    gradient_log_likelihood: Errorfunction
 
     def __init__(
         self, 
@@ -287,3 +297,87 @@ class InferenceBackend(ABC):
                
             error_model.update({data_var: error_dist})
         return error_model
+
+    @abstractmethod
+    def create_log_likelihood(self) -> Tuple[Errorfunction,Errorfunction]:
+        """This method creates a log likelihood function and potentially
+        function to compute the gradients.
+        """
+        pass
+
+    def plot_likelihood_landscape(
+        self, 
+        parameters: Tuple[str, str],
+        log_likelihood_func: Callable,
+        gradient_func: Optional[Callable] = None,
+        bounds: Tuple[List[float],List[float]] = ([-10, 10], [-10,10]),
+        n_grid_points: int = 100,
+        n_vector_points: int = 20,
+        ax: Optional[plt.Axes] = None,
+    ):
+        """Plots the likelihood for each coordinate pair of two model parameters
+        Parameters are taken from the standardized scale and transformed 
+
+        Parameters
+        ----------
+
+        parameters : Tuple[str,str]
+            The parameters to be plotted against each other
+
+        log_likelihood_func : Callable
+            Must be a vectorized function that can dictionary with two keys that
+            contain array values as input parameters and returns a 1-D array of 
+            log-likelihood values.
+
+        gradient_func : Callable
+            If, in addition to the likelihood values, also gradients should
+            be computed, a function to compute the gradients must be provided 
+
+        bounds : Tuple[Tuple[float,float],Tuple[float,float]]
+            Fallback bounds for the parameter grid to calculate the likelihood
+            function. This is only used if bounds are not provided by the parameters
+
+        n_grid_points : int
+            The number of grid points per side, to calculate the likelihood
+            function for. Scales n^2
+        """
+        par_x, par_y = parameters
+        bounds_x, bounds_y = bounds
+        px = self.config.model_parameters.all[par_x]
+        py = self.config.model_parameters.all[par_y]
+
+        bounds_x[0] = px.min if px.min is not None else bounds_x[0]
+        bounds_x[1] = px.max if px.max is not None else bounds_x[1]
+        bounds_y[0] = py.min if py.min is not None else bounds_y[0]
+        bounds_y[1] = py.max if py.max is not None else bounds_y[1]
+
+        x = np.linspace(*bounds_x, n_grid_points)
+        y = np.linspace(*bounds_y, n_grid_points)
+
+        grid = {p: v for p, v in zip(parameters, np.array(list(it.product(x, y))).T)}
+        loglik = log_likelihood_func(grid)
+
+        Z = loglik.reshape((n_grid_points, n_grid_points))
+        X, Y = np.meshgrid(x, y)
+
+        if ax is None:
+            fig, ax = plt.subplots(1, 1)
+
+        contours = ax.contourf(X, Y, Z)
+
+        if gradient_func is not None:
+            xv = np.linspace(*bounds_x, n_vector_points)
+            yv = np.linspace(*bounds_y, n_vector_points)
+            Xv, Yv = np.meshgrid(xv, yv)
+
+            gridv = {p: v for p, v in zip(parameters, np.array(list(it.product(xv, yv))).T)}
+
+            grads = gradient_func(gridv)
+            U, V = grads[par_x], grads[par_y]
+            ax.quiver(Xv, Yv, U, V)
+
+        plt.colorbar(contours, label="log-likelihood")
+        ax.set_xlabel("beta (normalized)")
+        ax.set_ylabel("alpha (normalized)")
+
+        return ax
