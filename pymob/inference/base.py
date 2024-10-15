@@ -319,7 +319,8 @@ class InferenceBackend(ABC):
         """Plots the likelihood for each coordinate pair of two model parameters
         Parameters are taken from the standardized scale and transformed 
 
-        For some reason the dx and dy gradients are mixed up after 
+        For some reason the likelihood and gradients need to be transposed after
+        calculating to work with meshgrid. The coordinates can be 
 
         Parameters
         ----------
@@ -360,7 +361,7 @@ class InferenceBackend(ABC):
         grid = {p: v for p, v in zip(parameters, np.array(list(it.product(x, y))).T)}
         loglik = log_likelihood_func(grid)
 
-        # gradients must be transposed to work with meshgrid
+        # loglikelihood must be transposed to work with meshgrid
         Z = loglik.reshape((n_grid_points, n_grid_points)).T
         X, Y = np.meshgrid(x, y)
 
@@ -368,12 +369,7 @@ class InferenceBackend(ABC):
             fig, ax = plt.subplots(1, 1, figsize=(8,6))
 
         cmap = mpl.colormaps["viridis"]
-        norm = mpl.colors.Normalize(
-            vmin=loglik.min(), 
-            vmax=loglik.max()
-        )
-
-        contours = ax.contourf(X, Y, Z, cmap=cmap, norm=norm, levels=50)
+        contours = ax.contourf(X, Y, Z, cmap=cmap, levels=50)
 
         if gradient_func is not None:
             xv = np.linspace(*bounds_x, n_vector_points)
@@ -385,14 +381,15 @@ class InferenceBackend(ABC):
             grads = gradient_func(gridv)
 
             u, v = grads[par_x], grads[par_y]
+
+            # gradients must be transposed to work with meshgrid
             U = u.reshape((n_vector_points, n_vector_points)).T
             V = v.reshape((n_vector_points, n_vector_points)).T
 
-            # WHY??????????
             vector_field = ax.quiver(Xv, Yv, U, V, angles="xy", width=0.001)
 
         ax.figure.colorbar(
-            mpl.cm.ScalarMappable(norm=norm, cmap=cmap), 
+            contours,
             ax=ax,
             label="log-likelihood"
         )

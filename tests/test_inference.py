@@ -2,6 +2,7 @@ import pytest
 from matplotlib import pyplot as plt
 from pymob.solvers import JaxSolver
 import numpy as np
+import jax
 
 from tests.fixtures import (
     init_simulation_casestudy_api,
@@ -74,7 +75,7 @@ def test_vector_field():
     sim = init_simulation_casestudy_api()
     sim.config.inference_numpyro.gaussian_base_distribution = True
     sim.config.jaxsolver.throw_exception = False
-    sim.config.jaxsolver.max_steps = 10000
+    sim.config.jaxsolver.max_steps = 10_000
 
     sim.solver = JaxSolver
     sim.dispatch_constructor()
@@ -84,8 +85,6 @@ def test_vector_field():
     sim.config.model_parameters.beta.max = 10
     sim.config.model_parameters.alpha.min = -10
     sim.config.model_parameters.alpha.max = 10
-
-    import jax
 
     # Define a scalar function of two variables
     def f(theta):
@@ -102,14 +101,11 @@ def test_vector_field():
         gradient_func=jax.vmap(gradient_f),
     )
     ax.plot(-2,2,ls="", marker="o", color="black")
-
-    # Evaluate the gradient at a specific point
-
-
+    ax.figure.savefig(f"{sim.output_path}/test_loglikelihood_gradients.png")
 
     log_likelihood, grad_log_likelihood = sim.inferer.create_log_likelihood(
         seed=1, return_type="custom", check=False, 
-        custom_return_fn=lambda lj, lp, ld: -lj,
+        custom_return_fn=lambda lj, lp, ld: lj,
         vectorize=True,
         gradients=True
     )
