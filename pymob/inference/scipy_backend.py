@@ -6,7 +6,7 @@ from numpy.random import Generator, PCG64
 from scipy.stats._distn_infrastructure import rv_continuous, rv_discrete
 
 from pymob.sim.parameters import scipy_to_scipy
-from pymob.inference.base import Distribution, InferenceBackend
+from pymob.inference.base import Distribution, Errorfunction, InferenceBackend
 from pymob.simulation import SimulationBase
 from pymob.utils.config import lookup
 
@@ -49,3 +49,7 @@ class ScipyBackend(InferenceBackend):
             prior_samples.update({name:sample})
 
         return prior_samples
+    
+    def create_log_likelihood(self) -> Tuple[Errorfunction,Errorfunction]:
+        # TODO: define
+        return 
