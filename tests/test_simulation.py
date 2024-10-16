@@ -4,7 +4,7 @@ import numpy as np
 from click.testing import CliRunner
 
 from pymob.simulation import SimulationBase
-from pymob.sim.config import FloatParam, DataVariable
+from pymob.sim.config import Param, DataVariable
 
 from tests.fixtures import init_simulation_casestudy_api, linear_model
 
@@ -33,8 +33,8 @@ def test_minimal_simulation():
     sim.model = linreg
     sim.solver = solve_analytic_1d
 
-    sim.config.model_parameters.a = FloatParam(value=10, free=False)
-    sim.config.model_parameters.b = FloatParam(value=3, free=True , prior="normal(loc=0,scale=10)")
+    sim.config.model_parameters.a = Param(value=10, free=False)
+    sim.config.model_parameters.b = Param(value=3, free=True , prior="normal(loc=0,scale=10)") # type:ignore
     sim.model_parameters["parameters"] = sim.config.model_parameters.value_dict
 
     sim.dispatch_constructor()
@@ -45,7 +45,7 @@ def test_minimal_simulation():
     np.testing.assert_allclose(evaluator.results.y.values, y * 3 + 10)
 
     # this tests automatic updating of the parameterize method with partial
-    sim.config.model_parameters.a = FloatParam(value=0, free=False)
+    sim.config.model_parameters.a = Param(value=0, free=False)
     sim.model_parameters["parameters"] = sim.config.model_parameters.value_dict
     evaluator = sim.dispatch(theta={"b":3})
     evaluator()
@@ -53,7 +53,7 @@ def test_minimal_simulation():
 
     np.testing.assert_allclose(evaluator.results.y.values, y * 3)
 
-    sim.config.model_parameters.sigma_y = FloatParam(free=True , prior="lognorm(scale=1,s=1)")
+    sim.config.model_parameters.sigma_y = Param(free=True , prior="lognorm(scale=1,s=1)") # type:ignore
     sim.config.error_model.y = "normal(loc=y,scale=sigma_y)"
 
     sim.set_inferer("numpyro")

@@ -113,9 +113,9 @@ def lotka_volterra(t, y, alpha, beta, gamma, delta):
     beta : float
         Rate at which predators decrease prey population.
     gamma : float
-        Predator reproduction rate.
-    delta : float
         Predator death rate.
+    delta : float
+        Predator reproduction rate.
 
     Returns:
     -------

@@ -1,15 +1,12 @@
 import os
 import re
 import sys
-from dataclasses import dataclass
-from glob import glob
+from ast import literal_eval as make_tuple
 import configparser
 import warnings
 import importlib
-import logging
-import json
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Literal, Callable, Tuple, TypedDict
+from typing import List, Optional, Union, Dict, Literal, Callable, Tuple, TypedDict, Any
 from typing_extensions import Annotated
 from types import ModuleType
 import tempfile
@@ -20,34 +17,34 @@ from numpy.typing import ArrayLike
 
 from pydantic import (
     BaseModel, Field, computed_field, field_validator, model_validator, 
-    ConfigDict, TypeAdapter, ValidationError
+    ConfigDict, TypeAdapter, ValidationError, validator
 )
 from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 
 from pymob.utils.store_file import scenario_file, converters
-
+from pymob.sim.parameters import Param, NumericArray, OptionRV
 # this loads at the import of the module
 default_path = sys.path.copy()
 
-class FloatParam(BaseModel):
-    name: Optional[str] = None
-    value: float = 0.0
-    min: Optional[float] = None
-    max: Optional[float] = None
-    step: Optional[float] = None
-    prior: Optional[str] = None
-    free: bool = True
+# class FloatParam(BaseModel):
+#     name: Optional[str] = None
+#     value: float = 0.0
+#     min: Optional[float] = None
+#     max: Optional[float] = None
+#     step: Optional[float] = None
+#     prior: Optional[str] = None
+#     free: bool = True
 
 
-class ArrayParam(BaseModel):
-    name: Optional[str] = None
-    value: List[float] = [0.0]
-    min: Optional[List[float]] = None
-    max: Optional[List[float]] = None
-    step: Optional[List[float]] = None
-    prior: Optional[str] = None
-    free: bool = True
+# class ArrayParam(BaseModel):
+#     name: Optional[str] = None
+#     value: List[float] = [0.0]
+#     min: Optional[List[float]] = None
+#     max: Optional[List[float]] = None
+#     step: Optional[List[float]] = None
+#     prior: Optional[str] = None
+#     free: bool = True
 
 class ModelParameterDict(TypedDict):
     parameters: Dict[str, float|str|int]
@@ -87,6 +84,10 @@ class DataVariable(BaseModel):
     None
 
     """
+    model_config = ConfigDict(
+        validate_assignment=True,
+        extra="forbid"
+    )
     dimensions: List[str]
     min: float = np.nan
     max: float = np.nan
@@ -154,6 +155,10 @@ def string_to_list(option: Union[List, str]) -> List:
         return [i.strip() for i in option.split(" ")]
 
 
+def string_to_tuple(option: Union[List, str]) -> Tuple:
+    return tuple(string_to_list(option))
+
+
 def string_to_dict(
         option: Union[Dict[str,str|float|int|List[float|int|str]], str]
     ) -> Dict[str,str|float|int|List[float|int|str]]:
@@ -170,24 +175,35 @@ def string_to_dict(
             parsed = False
             if not parsed:
                 try:
-                    parsed_value = TypeAdapter(List[float]).validate_json(v)
+                    parsed_value = TypeAdapter(float).validate_json(v)
                     parsed = True
                 except ValidationError:
                     pass
 
             if not parsed:
                 try:
-                    parsed_value = TypeAdapter(float).validate_json(v)
+                    # v_ = np.array(ast.literal_eval(v))
+                    # _cfg = ConfigDict(arbitrary_types_allowed=True)
+                    parsed_value = TypeAdapter(NumericArray).validate_json(v)
                     parsed = True
-                except ValidationError:
+                except ValueError:
                     pass
 
-            if not parsed and  v[0]=="[" and v[-1]=="]" in v:
+            if not parsed and v[0] == "(" and v[-1] == ")":
+                try:
+                    parsed_value = make_tuple(v)
+                    parsed = True
+                except ValueError:
+                    pass
+
+            # TODO: This expression seems to be wrong, but it causes no errors
+            if not parsed and  v[0]=="[" and v[-1]=="]":
                 try:
                     v_ = v.strip("[]").split(",")
                     # remove double quotes
                     v_ = [re.sub(r'^"|"$', '', s) for s in v_]
                     v_ = [re.sub(r"^'|'$", '', s) for s in v_]
+                    v_ = [v_i for v_i in v_ if v_i != ""]
                     parsed_value = TypeAdapter(List[str]).validate_python(v_)
                     parsed = True
                 except ValidationError:
@@ -201,17 +217,13 @@ def string_to_dict(
         return retdict
 
 
-def string_to_param(option:str|FloatParam|ArrayParam) -> FloatParam|ArrayParam:
-    if isinstance(option, FloatParam|ArrayParam):
+def string_to_param(option:str|Param) -> Param:
+    if isinstance(option, Param):
         return option
     else:
         param_dict = string_to_dict(option)
-        if isinstance(param_dict.get("value"), float):
-            return FloatParam.model_validate(param_dict, strict=False)
+        return Param.model_validate(param_dict, strict=False)
         
-        else:
-            return ArrayParam.model_validate(param_dict, strict=False)
-    
 
 def string_to_datavar(option:str|DataVariable) -> DataVariable:
     if isinstance(option, DataVariable):
@@ -220,18 +232,25 @@ def string_to_datavar(option:str|DataVariable) -> DataVariable:
         param_dict = string_to_dict(option)
         return DataVariable.model_validate(param_dict, strict=False)
         
-    
 
 def dict_to_string(dct: Dict):
-    return " ".join([f"{k}={v}".replace(" ", "") for k, v in dct.items()]).replace("'", "")
+    string_items = []
+    for k, v in dct.items():
+        if isinstance(v, np.ndarray):
+            v = v.tolist()
+
+        expr = f"{k}={v}".replace(" ", "")
+        string_items.append(expr)
+
+    return " ".join(string_items)
 
 
 def list_to_string(lst: List):
     return " ".join([str(l) for l in lst])
 
 
-def param_to_string(prm: ArrayParam|FloatParam):
-    return dict_to_string(prm.model_dump(exclude_none=True))
+def param_to_string(prm: Param):
+    return dict_to_string(prm.model_dump(exclude_none=True, mode="json"))
 
 def datavar_to_string(prm: DataVariable):
     return dict_to_string(prm.model_dump(exclude_none=True))
@@ -272,6 +291,11 @@ OptionListStr = Annotated[
     serialize_list_to_string
 ]
 
+OptionTupleStr = Annotated[
+    Tuple[str, ...], 
+    BeforeValidator(string_to_tuple), 
+    serialize_list_to_string
+]
 
 OptionDictStr = Annotated[
     Dict[str,str|float|int|List[float|int]], 
@@ -286,17 +310,17 @@ OptionDataVariable = Annotated[
 ]
 
 OptionParam = Annotated[
-    FloatParam|ArrayParam, 
+    Param, 
     BeforeValidator(string_to_param), 
     serialize_param_to_string
 ]
 
 
-OptionListFloat = Annotated[
-    List[float], 
-    BeforeValidator(string_to_list), 
-    serialize_list_to_string
-]
+# OptionListFloat = Annotated[
+#     List[float], 
+#     BeforeValidator(string_to_list), 
+#     serialize_list_to_string
+# ]
 
         
 class Casestudy(BaseModel):
@@ -364,12 +388,22 @@ class Casestudy(BaseModel):
         
     @property
     def scenario_path(self):
-        return os.path.join(
-            os.path.relpath(self.package), 
-            os.path.relpath(self.name),
-            "scenarios", 
-            self.scenario
-        )
+        package_path = os.path.basename(os.path.abspath(self.package))
+        if package_path == self.name:
+            # if the package path is identical to the case study path, then 
+            # the scenario is directly located in the package.
+            return os.path.join(
+                os.path.relpath(self.package), 
+                "scenarios", 
+                self.scenario
+            )
+        else:
+            return os.path.join(
+                os.path.relpath(self.package), 
+                os.path.relpath(self.name),
+                "scenarios", 
+                self.scenario
+            )
     
     @field_validator("root", mode="after")
     def set_root(cls, new_value, info, **kwargs):
@@ -415,7 +449,7 @@ class Simulation(BaseModel):
     input_files: OptionListStr = []
     # data_variables: OptionListStr = []
     n_ode_states: int = -1
-    batch_dimension: Optional[str] = None
+    batch_dimension: str = "batch_id"
     modeltype: Literal["stochastic", "deterministic"] = "deterministic"
     solver_post_processing: Optional[str] = Field(default=None, validate_default=True)
     seed: Annotated[int, to_str] = 1
@@ -526,11 +560,29 @@ class Datastructure(BaseModel):
     def observed_data_variables_max(self):
         return [v.max for v in self.__pydantic_extra__.values() if v.observed]
 
+class Solverbase(BaseModel):
+    model_config = ConfigDict(
+        validate_assignment=True, 
+        extra="forbid"
+    )
+    x_dim: str = "time"
+    exclude_kwargs_model: OptionTupleStr = ("t", "time", "x_in", "y", "x", "Y", "X")
+    exclude_kwargs_postprocessing: OptionTupleStr = ("t", "time", "interpolation", "results")
 
+class Jaxsolver(Solverbase):
+    diffrax_solver: str = "Dopri5"
+    rtol: float = 1e-6
+    atol: float = 1e-7
+    pcoeff: float = 0.0
+    icoeff: float = 1.0
+    dcoeff: float = 0.0
+    max_steps: int = int(1e5)
+    throw_exception: bool = True
 
 class Inference(BaseModel):
     model_config = {"validate_assignment" : True}
 
+    eps: float = 1e-8
     objective_function: str = "total_average"
     n_objectives: Annotated[int, to_str] = 1
     objective_names: OptionListStr = []
@@ -560,29 +612,52 @@ class Modelparameters(BaseModel):
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
     @property
+    def all(self) -> Dict[str,OptionParam]:
+        return self.__pydantic_extra__
+    
+    @all.setter
+    def all(self, value):
+        self.__pydantic_extra__ = value
+
+    @property
     def free(self) -> Dict[str,OptionParam]:
-        return {k:v for k, v in self.__pydantic_extra__.items() if v.free}
+        return {k:v for k, v in self.all.items() if v.free}
 
     @property
     def fixed(self) -> Dict[str,OptionParam]:
-        return {k:v for k, v in self.__pydantic_extra__.items() if not v.free}
-
-    @property
-    def all(self) -> Dict[str,OptionParam]:
-        return self.__pydantic_extra__
+        return {k:v for k, v in self.all.items() if not v.free}
 
     @property
     def n_free(self) -> int:
         return len(self.free)
     
     @property
-    def free_value_dict(self) -> Dict[str,float|List[float]]:
+    def free_value_dict(self) -> Dict[str,float|NumericArray]:
         return {k:v.value for k, v in self.free.items()}
     
     @property
-    def value_dict(self) -> Dict[str,float|List[float]]:
+    def fixed_value_dict(self) -> Dict[str,float|NumericArray]:
+        return {k:v.value for k, v in self.fixed.items()}
+    
+    @property
+    def value_dict(self) -> Dict[str,float|NumericArray]:
         return {k:v.value for k, v in self.all.items()}
     
+    @property
+    def dimensions(self) -> List[str]:
+        # TODO: Remove when dimensions is not accessed any longer
+        warnings.warn(
+            "Legacy method, will be deprecated soon. This works only if all "
+            "Data variables have the same dimension",
+            category=DeprecationWarning
+        )
+        dims = []
+        for k, v in self.all.items():
+            for d in v.dims:
+                if d not in dims:
+                    dims.append(d)
+        return dims
+
     def remove(self, key) -> None:
         """Removes a Parameter"""
         if key not in self.all:
@@ -592,15 +667,33 @@ class Modelparameters(BaseModel):
             )
             return
         
-        deleted_par = self.__pydantic_extra__.pop(key)
+        deleted_par = self.all.pop(key)
         print(f"Deleted '{key}' Param({deleted_par}).")
 
+    def reorder(self, keys: List[str]):
+        """Reorders model parameters. This may be necessary for hierarchical 
+        models, because priors take draws from hyperpriors to parameterize their
+        distributions. Hence, they must be available earlier.
+
+        Parameters
+        ----------
+
+        keys : List[str]
+            A list of model parameters to sort the model_parameter dictionary 
+            after. If the keys list is smaller than the list of model parameters,
+            unlisted parameters will be appended to the keys list in order.
+        """
+        if len(keys) < len(self.all):
+            keys = keys + [k for k in self.all.keys() if k not in keys]
+            
+        self.all = {k:self.all[k] for k in keys} 
+
 class Errormodel(BaseModel):
-    __pydantic_extra__: Dict[str,str]
+    __pydantic_extra__: Dict[str,OptionRV]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
     
     @property
-    def all(self) -> Dict[str,str]:
+    def all(self) -> Dict[str,OptionRV]:
         return self.__pydantic_extra__
 
 class Pyabc(BaseModel):
@@ -689,7 +782,7 @@ class Config(BaseModel):
                 converters=converters,
                 interpolation=interp
             )        
-            _config.optionxform = str
+            _config.optionxform = str # type: ignore
             _cfg_file_paths = _config.read(config)
             try:
                 _cfg_fp = _cfg_file_paths[0]
@@ -704,7 +797,7 @@ class Config(BaseModel):
                 converters=converters,
                 interpolation=interp
             )
-            _config.optionxform = str
+            _config.optionxform = str # type: ignore
 
         # pass arguments to config
 
@@ -718,6 +811,8 @@ class Config(BaseModel):
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
     simulation: Simulation = Field(default=Simulation())
     data_structure: Datastructure = Field(default=Datastructure(), alias="data-structure") # type:ignore
+    solverbase: Solverbase = Field(default=Solverbase())
+    jaxsolver: Jaxsolver = Field(default=Jaxsolver(), alias="jax-solver")
     inference: Inference = Field(default=Inference())
     model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters") #type: ignore
     error_model: Errormodel = Field(default=Errormodel(), alias="error-model") # type: ignore
@@ -839,8 +934,8 @@ class Config(BaseModel):
             self.case_study.package
         )
         if package not in sys.path:
-            sys.path.append(package)
-            print(f"Appended '{package}' to PATH")
+            sys.path.insert(0, package)
+            print(f"Inserted '{package}' in PATH at index=0")
     
         case_study = os.path.join(
             self.case_study.root, 
@@ -848,8 +943,8 @@ class Config(BaseModel):
             self.case_study.name
         )
         if case_study not in sys.path:
-            sys.path.append(case_study)
-            print(f"Appended '{case_study}' to PATH")
+            sys.path.insert(0, case_study)
+            print(f"Inserted '{case_study}' in PATH at index=0")
 
         for module in self.case_study.modules:
             # remove modules of a different case study that might have been
@@ -872,7 +967,7 @@ class Config(BaseModel):
             Simulation = getattr(self._modules["sim"], self.case_study.simulation)
         except:
             raise ImportError(
-                f"Simulation class {self.case_study.simulation} "
+                f"Simulation class '{self.case_study.simulation}' "
                 "could not be found. Make sure the simulaton option is spelled "
                 "correctly or specify an class that exists in sim.py"
                 "If you are using pymob to work on different case-studies in "
@@ -881,3 +976,4 @@ class Config(BaseModel):
             )
         
         return Simulation
+        

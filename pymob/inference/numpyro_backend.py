@@ -2,7 +2,10 @@ from functools import partial, lru_cache
 import glob
 import re
 import warnings
-from typing import Tuple, Dict, Union, Optional, Callable, Literal, List
+from typing import (
+    Tuple, Dict, Union, Optional, Callable, Literal, List, Any,
+    Protocol
+)
 
 from tqdm import tqdm
 import numpy as np
@@ -12,16 +15,20 @@ from matplotlib import pyplot as plt
 import sympy
 
 from pymob.simulation import SimulationBase
+from pymob.sim.parameters import Expression, NumericArray
+from pymob.inference.base import Errorfunction, InferenceBackend, Distribution
 from pymob.inference.analysis import (
     cluster_chains, rename_extra_dims, plot_posterior_samples,
     add_cluster_coordinates
 )
+from pymob.inference.numpyro_dist_map import scipy_to_numpyro, transformed_dist_map
 
 import numpyro
-from numpyro import distributions as dist
 from numpyro.infer import Predictive
-from numpyro.distributions import Normal, transforms, TransformedDistribution
+from numpyro.distributions import Normal, transforms
+from numpyro.distributions.distribution import DistributionMeta
 from numpyro import infer
+
 import jax
 import jax.numpy as jnp
 import sympy2jax
@@ -30,22 +37,6 @@ sympy2jax_extra_funcs = {
     sympy.Array: jnp.array,
     sympy.Tuple: tuple,
 }
-
-def LogNormalTrans(loc, scale):
-    return TransformedDistribution(
-        base_distribution=Normal(0,1), 
-        transforms=[
-            transforms.AffineTransform(loc=jnp.log(loc), scale=scale), 
-            exp()
-        ])
-
-def HalfNormalTrans(scale):
-    return TransformedDistribution(
-        base_distribution=Normal(0,1), 
-        transforms=[
-            transforms.AffineTransform(loc=0, scale=scale), 
-            transforms.AbsTransform()
-        ])
 
 
 def transform(transforms, x):
@@ -69,29 +60,53 @@ def catch_patterns(expression_str):
 
     return expression_str
 
-def generate_transform(expression_str):
-    # check for parentheses in expression
-    
-    expression_str = catch_patterns(expression_str)
-
-    # Parse the expression without knowing the symbol names in advance
-    parsed_expression = sympy.sympify(expression_str, evaluate=False)
-    free_symbols = tuple(parsed_expression.free_symbols)
-
-    # Transform expression to jax expression
-    func = sympy2jax.SymbolicModule(
-        parsed_expression, 
-        extra_funcs=sympy2jax_extra_funcs, 
-        make_array=True
-    )
-
-    return {"transform": func, "args": [str(s) for s in free_symbols]}
+# distribution_map =  {
+#     "lognorm": (LogNormalTrans, {"scale": "loc", "s": "scale"}),
+#     "binom": (dist.Binomial, {"n":"total_count", "p":"probs"}),
+#     "normal": dist.Normal,
+#     "halfnorm": HalfNormalTrans,
+#     "poisson": (dist.Poisson, {"mu": "rate"}),
+# }
 
 exp = transforms.ExpTransform
 sigmoid = transforms.SigmoidTransform
 C = transforms.ComposeTransform
 
-class NumpyroBackend:
+class ErrorModelFunction(Protocol):
+    def __call__(
+        self, 
+        theta: Dict, 
+        simulation_results: Dict, 
+        indices: Dict,
+        observations: Dict, 
+        masks: Dict
+    ) -> Any:
+        ...
+
+class NumpyroDistribution(Distribution):
+    distribution_map: Dict[str,Tuple[DistributionMeta, Dict[str,str]]] = scipy_to_numpyro
+    parameter_converter = staticmethod(lambda x: jnp.array(x))
+
+    def _get_distribution(self, distribution: str) -> Tuple[DistributionMeta, Dict[str, str]]:
+        # TODO: This is not satisfying. I think the transformed distributions
+        # should only be used when this is explicitly specified.
+        # I really wonder, why this makes such a large change in numpyro
+        numpyro_dist, parameter_mapping = self.distribution_map[distribution]
+        if numpyro_dist in transformed_dist_map:
+            transformed_dist = transformed_dist_map[numpyro_dist]
+            return transformed_dist, parameter_mapping
+        else:
+            # could not find the transformed distribution using normal
+            return numpyro_dist, parameter_mapping
+
+    @property
+    def dist_name(self):
+        return self.distribution.__name__
+
+class NumpyroBackend(InferenceBackend):
+    _distribution = NumpyroDistribution
+    prior: Dict[str, DistributionMeta]
+
     def __init__(
         self, 
         simulation: SimulationBase
@@ -103,20 +118,7 @@ class NumpyroBackend:
         simulation : SimulationBase
             An initialized simulation.
         """
-        self.EPS = 1e-8
-        self.distribution_map = {
-            "lognorm": (LogNormalTrans, {"scale": "loc", "s": "scale"}),
-            "binom": (dist.Binomial, {"n":"total_count", "p":"probs"}),
-            "normal": dist.Normal,
-            "halfnorm": HalfNormalTrans,
-            "poisson": (dist.Poisson, {"mu": "rate"}),
-        }
-        
-        self.simulation = simulation
-        self.config = simulation.config
-        self.evaluator = self.parse_deterministic_model()
-        self.prior = self.parse_model_priors()
-
+        super().__init__(simulation=simulation)
         # parse preprocessing
         if self.user_defined_preprocessing is not None:
             self.preprocessing = getattr(
@@ -126,24 +128,18 @@ class NumpyroBackend:
 
         # parse the probability model
         if self.user_defined_probability_model is not None:
-            self.inference_model = getattr(
+            inference_model = getattr(
                 self.simulation._prob, 
                 self.user_defined_probability_model
             )
+            self.inference_model = partial(
+                inference_model,
+                indices = self.indices
+            )
+
+        # combine the model
         else:
-            self.error_model = self.parse_error_model()
-            if self.gaussian_base_distribution:
-                self.inference_model = self.parse_probabilistic_model_with_gaussian_base()
-            else:
-                self.inference_model = self.parse_probabilistic_model()
-
-
-        self.idata: az.InferenceData
-
-    @property
-    def extra_vars(self):
-        return self.config.inference.extra_vars
-    
+            self.inference_model = self.parse_probabilistic_model()
 
     @property
     def user_defined_probability_model(self):
@@ -157,11 +153,6 @@ class NumpyroBackend:
     def gaussian_base_distribution(self):
         return self.config.inference_numpyro.gaussian_base_distribution
     
-    @property
-    def n_predictions(self):
-        return self.config.inference.n_predictions
-    
-
     @property
     def chains(self):
         return self.config.inference_numpyro.chains
@@ -199,6 +190,24 @@ class NumpyroBackend:
         strategy = self.config.inference_numpyro.init_strategy
         return getattr(infer, strategy)
 
+    @staticmethod
+    def generate_transform(expression: Expression):
+        # check for parentheses in expression
+        
+        # Parse the expression without knowing the symbol names in advance
+        parsed_expression = sympy.sympify(str(expression), evaluate=False)
+        free_symbols = tuple(parsed_expression.free_symbols)
+
+        # Transform expression to jax expression
+        func = sympy2jax.SymbolicModule(
+            parsed_expression, 
+            extra_funcs=sympy2jax_extra_funcs, 
+            make_array=True
+        )
+
+        return {"transform": func, "args": [str(s) for s in free_symbols]}
+
+
     def parse_deterministic_model(self) -> Callable:
         """Parses an evaluation function from the Simulation object, which 
         takes a single argument theta and defaults to passing no seed to the
@@ -233,6 +242,13 @@ class NumpyroBackend:
             # .transpose(*self.simulation.dimensions)
         data_vars = self.config.data_structure.observed_data_variables + self.extra_vars
 
+        if len(data_vars) == 0:
+            raise KeyError(
+                "No observed data_variables were found. Make sure you have marked"+
+                "All relevant data variables as observed before running inference"+
+                "`sim.config.data_variables.MY_DATA_VAR.observed = True`"
+            )
+
         masks = {}
         observations = {}
         for d in data_vars:
@@ -243,232 +259,63 @@ class NumpyroBackend:
         
         return observations, masks
     
-    @staticmethod
-    def parse_parameter(parname: str, prior: str, distribution_map: Dict[str,Tuple]) -> Tuple[str,dist.Distribution,Dict[str,Callable]]:
-
-        pattern = r'\[(.*?)\]'
-        # Function to replace commas with spaces within the match
-        def replace_commas(match):
-            return '[' + match.group(1).replace(',', ' ') + ']'
-
-        distribution, cluttered_arguments = prior.split("(", 1)
-        argument_string = cluttered_arguments.split(")", 1)[0]
-        argument_string = re.sub(pattern, replace_commas, argument_string)
-        param_strings = argument_string.split(",")
-
-        distribution_mapping = distribution_map[distribution]
-
-        if not isinstance(distribution_mapping, tuple):
-            distribution = distribution_mapping
-            distribution_mapping = (distribution, {})
-        
-        assert len(distribution_mapping) == 2, (
-            "distribution and parameter mapping must be "
-            "a tuple of length 2."
-        )
-
-        distribution, parameter_mapping = distribution_mapping
-        mapped_params = {}
-        for parstr in param_strings:
-            key, val = parstr.split("=")
-            
-            mapped_key = parameter_mapping.get(key, key)
-
-            # if is_number(val):
-            #     parsed_val = float(val)
-            # else:
-            parsed_val = generate_transform(expression_str=val)
-
-            # parsed_val = float(val) if is_number(val) else val
-            mapped_params.update({mapped_key:parsed_val})
-
-        return parname, distribution, mapped_params
-
-    def parse_model_priors(self):
-        priors = {}
-        for key, par in self.config.model_parameters.free.items():
-            if par.prior is None:
-                raise AttributeError(
-                    f"No prior was defined for {par}. E.g.: "
-                    "sim.config.model_parameters.{par} = lognorm(loc=1, scale=2)"
-                )
-            name, distribution, params = self.parse_parameter(
-                parname=key, 
-                prior=par.prior, 
-                distribution_map=self.distribution_map
-            )
-            # parameterized_dist = distribution(**params)
-            priors.update({
-                name: {
-                    "fn":distribution, 
-                    "parameters": params
-                }
-            })
-        return priors
-
-    def parse_error_model(self):
-        error_model = {}
-        for data_var, error_distribution in self.config.error_model.all.items():
-            name, distribution, parameters = self.parse_parameter(
-                parname=data_var,
-                prior=error_distribution,
-                distribution_map=self.distribution_map
-            )
-
-                
-            error_model.update({
-                data_var: {
-                    "fn": distribution, 
-                    "parameters": parameters,
-                    "error_dist": error_distribution
-                }
-            })
-        return error_model
-
     def parse_probabilistic_model(self):
         EPS = self.EPS
         prior = self.prior.copy()
+        # TODO: This should be passed to the model, becuase if the batch
+        #       dimension is subsetted, the index size is not anymore the same
+        #       and correspondingly, be parsed during parse_obs or so
+        indices = self.indices
         error_model = self.error_model.copy()
         extra = {"EPS": EPS}
+        gaussian_base = self.gaussian_base_distribution
 
-        def lookup(val, deterministic, prior_samples, observations):
-            if val in deterministic:
-                return deterministic[val]
-            
-            elif val in prior_samples:
-                return prior_samples[val]
-            
-            elif val in observations:
-                return observations[val]
-            
-            elif val in extra:
-                return extra[val]
-
-            else:
-                return val
-
-        def model(solver, obs, masks):
-            # construct priors with numpyro.sample and sample during inference
+        def sample_prior(prior: Dict, obs: Dict, indices: Dict):
             theta = {}
-            for prior_name, prior_kwargs in prior.items():
-                
-                # apply transforms to priors. This will be handy when I use nested
-                # parameters
-                prior_distribution_parameters = {}
-                for pri_par, pri_val in prior_kwargs["parameters"].items():
-                    prior_trans_func = pri_val["transform"]
-                    prior_trans_func_kwargs = {k: lookup(k, {}, theta, obs) for k in pri_val["args"]}
-                    prior_distribution_parameters.update({
-                        pri_par: prior_trans_func(**prior_trans_func_kwargs)
-                    })
+            context = [theta, indices, obs, extra]
+            for prior_name, prior_dist in prior.items():
+                dist = prior_dist.construct(context=context)
+
+                # TODO: distribution expansion is not so trivial unfortunately
+                dist = dist.expand(batch_shape=prior_dist.shape)
 
                 theta_i = numpyro.sample(
                     name=prior_name,
-                    fn=prior_kwargs["fn"](**prior_distribution_parameters)
+                    fn=dist,
                 )
-
                 theta.update({prior_name: theta_i})
-            
-            # calculate deterministic simulation with parameter samples
-            sim_results = solver(theta=theta)
 
-            # store data_variables as deterministic model output
-            for deterministic_name, deterministic_value in sim_results.items():
-                _ = numpyro.deterministic(
-                    name=deterministic_name, 
-                    value=deterministic_value
-                )
-
-            for error_model_name, error_model_kwargs in error_model.items():
-                error_distribution = error_model_kwargs["fn"]
-                error_distribution_kwargs = {}
-                for errdist_par, errdist_val in error_model_kwargs["parameters"].items():
-                    errdist_trans_func = errdist_val["transform"]
-                    errdist_trans_func_kwargs = {
-                        k: lookup(k, sim_results, theta, obs) for k in errdist_val["args"]
-                    }
-                    error_distribution_kwargs.update({
-                        errdist_par: errdist_trans_func(**errdist_trans_func_kwargs)
-                    })
-
-                _ = numpyro.sample(
-                    name=error_model_name + "_obs",
-                    fn=error_distribution(**error_distribution_kwargs).mask(masks[error_model_name]),
-                    obs=obs[error_model_name]
-                )
-
-
-            # TODO: How to add EPS
-            # DONE: add biomial n --> I think this is already done
-            # numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks["cext"]), obs=obs["cext"] + EPS)
-            # numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks["cint"]), obs=obs["cint"] + EPS)
-            # numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks["nrf2"]), obs=obs["nrf2"] + EPS)
-            # numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=obs["nzfe"]).mask(masks["lethality"]), obs=obs["lethality"])
-        return model
-
-    def parse_probabilistic_model_with_gaussian_base(self):
-        EPS = self.EPS
-        prior = self.prior.copy()
-        error_model = self.error_model.copy()
-        extra = {"EPS": EPS}
-
-
-        def lookup(val, deterministic, prior_samples, observations):
-            if val in deterministic:
-                return deterministic[val]
-            
-            elif val in prior_samples:
-                return prior_samples[val]
-            
-            elif val in observations:
-                return observations[val]
-            
-            elif val in extra:
-                return extra[val]
-
-            else:
-                return val
-
-        def model(solver, obs, masks):
+            return {}, theta
+        
+        def sample_prior_gaussian_base(prior: Dict, obs: Dict, indices=indices):
             theta = {}
             theta_base = {}
-            for prior_name, prior_kwargs in prior.items():
+            context = [theta, indices, obs, extra]
+            for prior_name, prior_dist in prior.items():
+                dist = prior_dist.construct(context=context)
 
-                # apply transforms to priors. This will be handy when I use nested
-                # parameters
-                prior_distribution_parameters = {}
-                for pri_par, pri_val in prior_kwargs["parameters"].items():
-                    prior_trans_func = pri_val["transform"]
-                    # TODO could be replaced by utils.config.lookup and lookup args
-                    prior_trans_func_kwargs = {k: lookup(k, {}, theta, obs) for k in pri_val["args"]}
-                    prior_distribution_parameters.update({
-                        pri_par: prior_trans_func(**prior_trans_func_kwargs)
-                    })
-
-                # parameterize the prior distribution and extract transforms
-                dist = prior_kwargs["fn"](**prior_distribution_parameters)
-                
                 try:
                     transforms = getattr(dist, "transforms")
                 except:
                     raise RuntimeError(
-                        "The specified distribution had no transforms. If setting "
-                        "the option 'inference.numpyro.gaussian_base_distribution = 1', "
-                        "you are only allowed to use parameter distribution, which can "
-                        "be specified as transformed normal distributions. "
-                        "Currently only 'lognorm' and 'halfnorm' are implemented. "
-                        "You can use the numypro.distributions.TransformedDistribution "
-                        "API to specify additional distributions with transforms."
-                        "And pass them to the inferer by updating the distribution map: "
+                        f"The specified distribution {prior_dist} had no transforms. If setting "+
+                        "the option 'inference.numpyro.gaussian_base_distribution = 1', "+
+                        "you are only allowed to use parameter distribution, which can "+
+                        "be specified as transformed normal distributions. "+
+                        f"Currently {transformed_dist_map.keys()} are specified"+
+                        "You can use the numypro.distributions.TransformedDistribution "+
+                        "API to specify additional distributions with transforms."+
+                        "And pass them to the inferer by updating the distribution map: "+
                         "sim.inferer.distribution_map.update({'newdist': your_new_distribution})"
                     )
 
                 # sample from a random normal distribution
+                # CHECK: Expanding before 
                 theta_base_i = numpyro.sample(
                     name=f"{prior_name}_normal_base",
-                    fn=Normal(loc=0, scale=1),
-                    sample_shape=dist.shape()                    
+                    fn=Normal(loc=0, scale=1).expand(batch_shape=prior_dist.shape),
                 )
+
 
                 # apply the transforms 
                 theta_i = numpyro.deterministic(
@@ -479,6 +326,66 @@ class NumpyroBackend:
                 theta_base.update({prior_name: theta_base_i})
                 theta.update({prior_name: theta_i})
 
+            return theta_base, theta
+
+        def likelihood(theta, simulation_results, indices, observations, masks):
+            """Uses lookup and error model from the local function context"""
+            context = [simulation_results, theta, indices, observations, extra]
+            for error_model_name, error_model_dist in error_model.items():
+                dist = error_model_dist.construct(context=context)
+
+                # this assumes that the transform function is only ever 
+                # characterized by algebraic transforms of the observations 
+                # and the determinsitic model of that variable 
+                # This should cover the vast majority of cases.
+                if error_model_dist.obs_transform_func is None:
+                    # TODO: consider if this should go into the 2nd ifelse condition
+                    #       because then, I could actually rename _obs and _res 
+                    #       and downstream use this information for creating inverse
+                    #       function
+                    _ = numpyro.sample(
+                        name=error_model_name + "_obs",
+                        fn=dist.mask(masks[error_model_name]),
+                        obs=observations[error_model_name]
+                    )
+                else:
+                    residuals = numpyro.deterministic(
+                        name=error_model_name + "_res",
+                        value=error_model_dist.obs_transform_func(
+                            obs=observations[error_model_name], 
+                            **{error_model_name: simulation_results[error_model_name]}, 
+                        )
+                    )
+
+                    _ = numpyro.sample(
+                        name=error_model_name + "_obs",
+                        fn=dist.mask(masks[error_model_name]),
+                        obs=residuals
+                    )
+
+
+        def model(
+            solver, obs, masks, 
+            only_prior: bool = False, 
+            user_error_model: Optional[ErrorModelFunction] = None
+        ):
+            # construct priors with numpyro.sample and sample during inference
+            if gaussian_base:
+                theta_gaussian, theta = sample_prior_gaussian_base(
+                    prior=prior, 
+                    obs=obs, 
+                    indices=indices,
+                )
+            else:
+                _, theta = sample_prior(
+                    prior=prior, 
+                    obs=obs, 
+                    indices=indices,
+                )
+            
+            if only_prior:
+                return
+            
             # calculate deterministic simulation with parameter samples
             sim_results = solver(theta=theta)
 
@@ -489,33 +396,24 @@ class NumpyroBackend:
                     value=deterministic_value
                 )
 
-            for error_model_name, error_model_kwargs in error_model.items():
-                error_distribution = error_model_kwargs["fn"]
-                error_distribution_kwargs = {}
-                for errdist_par, errdist_val in error_model_kwargs["parameters"].items():
-                    errdist_trans_func = errdist_val["transform"]
-                    errdist_trans_func_kwargs = {
-                        k: lookup(k, sim_results, theta, obs) for k in errdist_val["args"]
-                    }
-                    error_distribution_kwargs.update({
-                        errdist_par: errdist_trans_func(**errdist_trans_func_kwargs)
-                    })
-
-                _ = numpyro.sample(
-                    name=error_model_name + "_obs",
-                    fn=error_distribution(**error_distribution_kwargs).mask(masks[error_model_name]),
-                    obs=obs[error_model_name]
+            if user_error_model is None:
+                _ = likelihood(
+                    theta=theta,
+                    simulation_results=sim_results,
+                    indices=indices,
+                    observations=obs,
+                    masks=masks,
+                )
+            else:
+                _ = user_error_model(
+                    theta=theta,
+                    simulation_results=sim_results,
+                    indices=indices,
+                    observations=obs,
+                    masks=masks
                 )
 
-
-            # TODO: How to add EPS
-            # DONE: add biomial n --> I think this is already done
-            # numpyro.sample("cext_obs", LogNormalTrans(loc=cext + EPS, scale=sigma_cext).mask(masks["cext"]), obs=obs["cext"] + EPS)
-            # numpyro.sample("cint_obs", LogNormalTrans(loc=cint + EPS, scale=sigma_cint).mask(masks["cint"]), obs=obs["cint"] + EPS)
-            # numpyro.sample("nrf2_obs", LogNormalTrans(loc=nrf2 + EPS, scale=sigma_nrf2).mask(masks["nrf2"]), obs=obs["nrf2"] + EPS)
-            # numpyro.sample("lethality_obs", dist.Binomial(probs=leth, total_count=obs["nzfe"]).mask(masks["lethality"]), obs=obs["lethality"])
         return model
-
 
     @staticmethod
     def preprocessing(**kwargs):
@@ -554,8 +452,8 @@ class NumpyroBackend:
             ) 
         except graphviz.backend.ExecutableNotFound:
             warnings.warn(
-                "Model is not rendered, because the graphviz executable is "
-                "not found. Try search for 'graphviz executables not found'"
+                "Model is not rendered, because the graphviz executable is "+
+                "not found. Try search for 'graphviz executables not found' "+
                 "and the used OS. This should be an easy fix :-)"
             )
 
@@ -583,10 +481,10 @@ class NumpyroBackend:
         elif self.kernel.lower() == "svi" or self.kernel.lower() == "map":
             if not self.gaussian_base_distribution:
                 raise RuntimeError(
-                    "SVI is only supported if parameter distributions can be "
-                    "re-parameterized as gaussians. Please set "
-                    "inference.numpyro.gaussian_base_distribution = 1 "
-                    "and if needed use distributions from the loc-scale family "
+                    "SVI is only supported if parameter distributions can be "+
+                    "re-parameterized as gaussians. Please set "+
+                    "inference.numpyro.gaussian_base_distribution = 1 "+
+                    "and if needed use distributions from the loc-scale family "+
                     "to specify the model parameters."
                 )
             
@@ -615,7 +513,7 @@ class NumpyroBackend:
 
         else:
             raise NotImplementedError(
-                f"Kernel {self.kernel} is not implemented. "
+                f"Kernel {self.kernel} is not implemented. "+
                 "Use one of nuts, sa, svi, map"
             )
         
@@ -670,7 +568,7 @@ class NumpyroBackend:
             guide = numpyro.infer.autoguide.AutoDelta(model, init_loc_fn=init_fn)
         else:
             raise NotImplementedError(
-                f"SVI kernel {kernel} is not implemented. "
+                f"SVI kernel {kernel} is not implemented. "+
                 "Use one of 'map', 'svi'"
             )
 
@@ -689,30 +587,79 @@ class NumpyroBackend:
     @property
     def posterior(self):
         warnings.warn(
-            "Discouraged use of inferer.posterior API"
+            "Discouraged use of inferer.posterior API"+
             "use inferer.idata.posterior instead."
         )
         return self.idata.posterior  # type: ignore
 
+    def create_log_likelihood(
+        self, 
+        seed=1,
+        return_type:Literal["joint-log-likelihood", "full", "summed-by-site", "summed-by-prior-data", "custom"]="joint-log-likelihood",
+        check=True,
+        custom_return_fn: Optional[Callable] = None,
+        vectorize=False,
+        gradients=False,
+    ) -> Tuple[Errorfunction,ErrorModelFunction]:
+        """Log density relies heavily on the substitute utility
+        
+        The log density is synonymous for log-likelihood (it is the log 
+        probability density of the model). 
 
-    @property
-    def posterior_data_structure(self):
-        data_structure = self.simulation.data_structure.copy()
-        data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
-        data_structure.update(data_structure_loglik)
-        return data_structure
-    
-    @property
-    def posterior_coordinates(self):
-        posterior_coords = self.simulation.coordinates.copy()
-        posterior_coords.update({
-            "draw": list(range(self.draws)), 
-            "chain": list(range(self.chains))
-        })
-        return posterior_coords
-    
+        The general method is actually quite simple. Values of all SAMPLE
+        sites are replaced according to the key: value pairs in `theta`.
 
-    def create_log_likelihood(self, seed=1):
+        Then the model is calculated and the trace is obtained. Everything
+        else is then just post-processing of the sites. Here the log_prob
+        function of the sites in the trace are used and the values of the
+        sites are inserted. 
+
+        Note that the log-density can randomly fluctuate, if not all
+        sites are replaced.
+
+        Note that the data-loglik can be used to calculate a maximum-likelihood
+        estimate. Because it is independent of the prior
+
+        The method is equivalent using the log_likelihood method, but returns
+        only the likelihood of the data given the model parameters.
+        
+        ```python
+        def log_likelihood(theta: dict):
+            theta = {f"{key}_normal_base": val for key, val in theta.items()}
+            loglik = numpyro.infer.util.log_likelihood(
+                model=seeded_model,
+                posterior_samples=theta, 
+                batch_ndims=0,
+                solver=sim.inferer.evaluator,
+                obs=data,
+                masks=masks,
+            )
+
+            return loglik
+
+        jax.vmap(log_likelihood)(theta)
+        ```
+
+        Parameters
+        ----------
+
+
+        return_type : str
+            The information which should be returned. With increasing level
+            of computation:
+            
+            joint-log-likelihood: returns a single value, the entire log
+                likelihood of the model, given the values in theta
+            full: joint-log, loglik-prior of each site and value, 
+                loglik-data of each site and value 
+            summed-by-site: joint-loglik, loglik-prior of sites, 
+                loglik-data of sites
+            summed-by-prior-data:
+                joint-loglik, prior-loglik, data-loglik
+            custom:
+                uses the full log
+
+        """
         key = jax.random.PRNGKey(seed)
         obs, masks = self.observation_parser()
 
@@ -731,28 +678,11 @@ class NumpyroBackend:
         seeded_model = numpyro.handlers.seed(model, key)
    
         def log_density(
-            theta, 
-            return_type:Literal["joint-log-likelihood", "full", "summed-by-site", "summed-by-prior-data"]="joint-log-likelihood",
-            check=True
+            theta: Dict[str, float|List[NumericArray]], 
         ):
-            """Log density relies heavily on the substitute utility
-            
-            The log density is synonymous for log-likelihood (it is the log 
-            probability density of the model). 
-
-            The general method is actually quite simple. Values of all SAMPLE
-            sites are replaced according to the key: value pairs in `theta`.
-
-            Then the model is calculated and the trace is obtained. Everything
-            else is then just post-processing of the sites. Here the log_prob
-            function of the sites in the trace are used and the values of the
-            sites are inserted. 
-
-            Note that the log-density can randomly fluctuate, if not all
-            sites are replaced.
-
-            Note that the data-loglik can be used to calculate a maximum-likelihood
-            estimate. Because it is independent of the prior
+            """
+            Calculate the log-probability of different sites of the probabilistic
+            model
 
             Parameters
             ----------
@@ -761,24 +691,12 @@ class NumpyroBackend:
                 Dictionary of priors (sites) which should be deterministically 
                 fixed (substituted).
 
-            return_type : str
-                The information which should be returned. With increasing level
-                of computation:
-                
-                joint-log-likelihood: returns a single value, the entire log
-                    likelihood of the model, given the values in theta
-                full: joint-log, loglik-prior of each site and value, 
-                    loglik-data of each site and value 
-                summed-by-site: joint-loglik, loglik-prior of sites, 
-                    loglik-data of sites
-                summed-by-prior-data:
-                    joint-loglik, prior-loglik, data-loglik
-
             """
             
-            # TODO: For speeding this up, get inspired by
-            # https://num.pyro.ai/en/stable/_modules/numpyro/infer/util.html#log_likelihood
-
+            if self.gaussian_base_distribution:
+                theta = {f"{key}_normal_base": val for key, val in theta.items()}
+            else:
+                pass
         
             joint_log_density, trace = numpyro.infer.util.log_density( # type: ignore
                 model=seeded_model,
@@ -804,8 +722,8 @@ class NumpyroBackend:
                 if not all(list(sites_in_theta.values())):
                     missing_sites = [name for name, in_theta in sites_in_theta.items() if not in_theta]
                     warnings.warn(
-                        f"Sites: {missing_sites} were not specified in theta. "
-                        "Log-likelihood will not be fully defined by theta."
+                        f"Sites: {missing_sites} were not specified in theta. "+
+                        "Log-likelihood will not be fully defined by theta. "+
                         "Results should be independent of the given seed"
                     )
 
@@ -829,6 +747,10 @@ class NumpyroBackend:
             if return_type == "full":
                 return joint_log_density, prior_loglik, data_loglik
 
+
+            if return_type == "custom":
+                return custom_return_fn(joint_log_density, prior_loglik, data_loglik)
+
             prior_loglik_sum = {
                 key: np.sum(value) for key, value in prior_loglik.items()
             }
@@ -848,25 +770,48 @@ class NumpyroBackend:
             
             raise NotImplementedError(f"return_type flag: {return_type} is not implemented")
 
+        if gradients:
+            if not (return_type == "joint-log-likelihood" or return_type == "custom"):
+                raise ValueError(
+                    "Gradients need a single return value to be computed. "+
+                    f"Either choose `return_type={'joint-log-likelihood'}` or "+
+                    f"`return_type={'custom'}` and specify an approxpriate "+
+                    "`custom_return_fn`."
+                )
+            else:
+                grad_log_density = jax.grad(log_density)
 
-        return log_density
+        else:
+            grad_log_density = lambda x: None
+
+        if vectorize:
+            return jax.vmap(log_density), jax.vmap(grad_log_density)
+
+        else:
+            return log_density, grad_log_density
 
     def check_log_likelihood(
         self, 
-        theta: Optional[Dict[str, float|List[float]]]=None,
+        theta: Optional[Dict[str, float|NumericArray]]=None,
+        vectorize=False
     ):
-        log_density = self.create_log_likelihood(seed=self.config.simulation.seed)
+        log_density, _ = self.create_log_likelihood(
+            seed=self.config.simulation.seed,
+            return_type="full",
+            check=True,
+            vectorize=vectorize
+        )
         
         if theta is not None:
             pass
         elif self.config.inference_numpyro.gaussian_base_distribution:
-            theta = {f"{k}_norm": 0.0 for k, _ in self.config.model_parameters.free.items()}
+            theta = {k: 0.0 for k, _ in self.config.model_parameters.free.items()}
         else:
             # TODO: replace by prior sample, or prior mean, ...
             theta = self.config.model_parameters.value_dict
             
         
-        llsum, llpri, lldat = log_density(theta=theta, return_type="full", check=True)
+        llsum, llpri, lldat = log_density(theta=theta)
         if not np.isnan(llsum) and not np.isnan(llsum):
             return llsum, llpri, lldat
         
@@ -875,42 +820,52 @@ class NumpyroBackend:
         
         if len(nanlogliks_dat + nanlogliks_pri) > 0:
             warnings.warn(
-                f"Log-likelihoods {nanlogliks_dat + nanlogliks_pri} contained "
-                "NaN or inf values. The gradient based "
-                "samplers will not be able to sample from this model. Make sure "
-                "that all functions are numerically well behaved. "
-                "Inspect the model with `jax.debug.print('{}',x)` "
-                "https://jax.readthedocs.io/en/latest/notebooks/external_callbacks.html#exploring-debug-callback"
-                "Or look at the functions step by step to find the position where "
+                f"Log-likelihoods {nanlogliks_dat + nanlogliks_pri} contained "+
+                "NaN or inf values. The gradient based "+
+                "samplers will not be able to sample from this model. Make sure "+
+                "that all functions are numerically well behaved. "+
+                "Inspect the model with `jax.debug.print('{}',x)` "+
+                "https://jax.readthedocs.io/en/latest/notebooks/external_callbacks.html#exploring-debug-callback "+
+                "Or look at the functions step by step to find the position where "+
                 "jnp.grad(func)(x) evaluates to NaN"
             )
         return llsum, llpri, lldat
 
     def check_gradients(
         self, 
-        theta: Optional[Dict[str, float|List[float]]]=None,
+        theta: Optional[Dict[str, float|NumericArray]]=None,
+        vectorize=False
     ):
-        log_density = self.create_log_likelihood(seed=self.config.simulation.seed)
-        grad_func = partial(log_density, return_type="joint-log-likelihood", check=False)
+
+        _, grad_log_density = self.create_log_likelihood(
+            seed=self.config.simulation.seed,
+            return_type="joint-log-likelihood",
+            check=False,
+            gradients=True,
+            vectorize=vectorize
+        )
 
         if theta is not None:
             pass
         elif self.config.inference_numpyro.gaussian_base_distribution:
-            theta = {f"{k}_norm": 0.0 for k, _ in self.config.model_parameters.free.items()}
+            # this works, because in the grad function the parameters are
+            # renamed with f'{k}_normal_base' if the gaussian base distribution
+            # is used.
+            theta = {k: 0.0 for k, _ in self.config.model_parameters.free.items()}
         else:
             # TODO: replace by prior sample, or prior mean, ...
             theta = self.config.model_parameters.value_dict
             
-        grads = jax.grad(grad_func)(theta)
+        grads = grad_log_density(theta)
         nangrads = [k for k, g in grads.items() if np.isnan(g) or np.isinf(g)]
         if len(nangrads) > 0:
             warnings.warn(
-                f"Gradients {nangrads} contained NaN or infinity values. The gradient based "
-                "samplers will not be able to sample from this model. Make sure "
-                "that all functions are numerically well behaved. "
-                "Inspect the model with `jax.debug.print('{}',x)` "
-                "https://jax.readthedocs.io/en/latest/notebooks/external_callbacks.html#exploring-debug-callback"
-                "Or look at the functions step by step to find the position where "
+                f"Gradients {nangrads} contained NaN or infinity values. The gradient based "+
+                "samplers will not be able to sample from this model. Make sure "+
+                "that all functions are numerically well behaved. "+
+                "Inspect the model with `jax.debug.print('{}',x)` "+
+                "https://jax.readthedocs.io/en/latest/notebooks/external_callbacks.html#exploring-debug-callback "+
+                "Or look at the functions step by step to find the position where "+
                 "jnp.grad(func)(x) evaluates to NaN"
             )
 
@@ -922,11 +877,22 @@ class NumpyroBackend:
         key = jax.random.PRNGKey(seed)
         obs, masks = self.observation_parser()
 
+        # there is a very small remark in the numpyro API that explains that
+        # if data input for observed variables is None, the data are sampled
+        # from the distributions instead of returning the input data
+        # https://num.pyro.ai/en/stable/getting_started.html#a-simple-example-8-schools
+        # obs_ = {
+        #     k: None if k in self.config.data_structure.observed_data_variables
+        #     else data 
+        #     for k, data in obs.items() 
+        # }
+
         model_kwargs = self.preprocessing(
             obs=obs, 
             masks=masks,
         )
         
+
         # prepare model
         model = partial(
             self.inference_model, 
@@ -958,9 +924,9 @@ class NumpyroBackend:
 
         if len(prior_keys) != len(priors):
             warnings.warn(
-                f"Priors {[k for k in prior_keys if k not in prior_predictions]} "
-                "were not found in the predictions. Make sure that the prior "
-                "names match the names in user_defined_probability_model = "
+                f"Priors {[k for k in prior_keys if k not in prior_predictions]} "+
+                "were not found in the predictions. Make sure that the prior "+
+                "names match the names in user_defined_probability_model = "+
                 f"{self.config.inference_numpyro.user_defined_probability_model}.",
                 category=UserWarning
             )
@@ -981,32 +947,43 @@ class NumpyroBackend:
     def svi_posterior(self, svi_result, model, guide, key, n=1000, only_parameters=False):
         key, *subkeys = jax.random.split(key, 4)
         keys = iter(subkeys)
-
         obs, masks = self.observation_parser()
+
+        # there is a very small remark in the numpyro API that explains that
+        # if data input for observed variables is None, the data are sampled
+        # from the distributions instead of returning the input data
+        # https://num.pyro.ai/en/stable/getting_started.html#a-simple-example-8-schools
+        # obs_ = {
+        #     k: None if k in self.config.data_structure.observed_data_variables
+        #     else data 
+        #     for k, data in obs.items() 
+        # }
+
+        # prepare model without obs, so obs are sampled from the posterior
+        model_ = partial(
+            model, 
+            solver=self.evaluator, 
+            **self.preprocessing(obs=obs, masks=masks,)
+        )    
 
         params = svi_result.params
 
-        # predictive = Predictive(
-        #     model, guide=guide, params=params, 
-        #     num_samples=n, batch_ndims=2
-        # )
-        # samples = predictive(next(keys))    
-
+        # this gets the parameters of the normal_base_distributions
         predictive = Predictive(
             guide, params=params, 
             num_samples=n, batch_ndims=2
         )
         posterior_samples = predictive(next(keys))
 
+        # this gets all the parameters and predictions
         predictive = Predictive(
-            model, posterior_samples, params=params, 
+            model_, posterior_samples, params=params, 
             num_samples=n, batch_ndims=2
         )
         posterior_predictions = predictive(next(keys))
 
-
         loglik = numpyro.infer.log_likelihood(
-            model=model, 
+            model=model_, 
             posterior_samples=posterior_samples, 
             batch_ndims=2, 
         )
@@ -1018,9 +995,6 @@ class NumpyroBackend:
         posterior_coords["draw"] = list(range(n))
         data_structure = self.posterior_data_structure
 
-        # TODO add prior data structure. Address this when a proper coordinate
-        # dimensionality backend is implemented (config module)
-        
         # TODO add option to only return parameters (posterior) without
         # predictions [SHOULD BE EXPOSED ON STORING THE POSTERIOR]. 
         # Do keep calculating the predictions. They can be used
@@ -1029,7 +1003,7 @@ class NumpyroBackend:
         idata = az.from_dict(
             observed_data=obs,
             posterior={k: v for k, v in posterior_predictions.items() if k in priors},
-            posterior_predictive={k: v for k, v in posterior_predictions.items() if k in preds},
+            posterior_predictive={k: v for k, v in posterior_predictions.items() if k in preds+preds_obs},
             log_likelihood=loglik,
             dims=data_structure,
             coords=posterior_coords,
@@ -1066,7 +1040,7 @@ class NumpyroBackend:
                 key=key, 
                 a=posterior.draw.values, 
                 replace=False, 
-                shape=(n_draws, )
+                shape=(n_draws, ) # type: ignore
             )
             posterior = posterior.isel(draw=selection)
 
@@ -1084,7 +1058,7 @@ class NumpyroBackend:
                     ds = evaluator.results
 
                     ds = ds.assign_coords({"chain": chain, "draw": draw})
-                    ds = ds.expand_dims(("chain", "draw"))
+                    ds = ds.expand_dims(("chain", "draw")) # type:ignore
                     preds.append(ds)
                     pbar.update(1)
 
@@ -1129,6 +1103,8 @@ class NumpyroBackend:
     def plot_prior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={}, 
             n=None, seed=None, plot_preds_without_obs=False,
+            prediction_data_variable: Optional[str] = None,
+            **plot_kwargs
         ):
         if n is None:
             n = self.n_predictions
@@ -1150,14 +1126,17 @@ class NumpyroBackend:
             x_dim=x_dim,
             ax=ax,
             subset=subset,
-            mode="draws"
+            prediction_data_variable=prediction_data_variable,
+            **plot_kwargs,
         )
 
         return ax
 
     def plot_posterior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={},
-            n=None, seed=None, plot_preds_without_obs=False
+            n=None, seed=None, plot_preds_without_obs=False,
+            prediction_data_variable: Optional[str] = None,
+            **plot_kwargs
         ):
         # TODO: This method should be trashed. It is not really useful
         if n is None:
@@ -1180,6 +1159,8 @@ class NumpyroBackend:
             x_dim=x_dim,
             ax=ax,
             subset=subset,
+            prediction_data_variable=prediction_data_variable,
+            **plot_kwargs
         )
 
         return ax
@@ -1196,8 +1177,8 @@ class NumpyroBackend:
                 plot_func(self.simulation)
             except AttributeError:
                 warnings.warn(
-                    f"Plot function {plot} was not found in the plot.py module "
-                    "Make sure the name has been spelled correctly or try to "
+                    f"Plot function {plot} was not found in the plot.py module "+
+                    "Make sure the name has been spelled correctly or try to "+
                     "set the function directly to 'sim.config.inference.plot'.",
                     category=UserWarning
                 )
@@ -1208,19 +1189,30 @@ class NumpyroBackend:
             self, 
             observations,
             predictions,
-            data_variable: str, 
+            data_variable: str,
             x_dim: str, 
             ax=None, 
             plot_preds_without_obs=False,
             subset={},
             mode: Literal["mean+hdi", "draws"]="mean+hdi",
             plot_options: Dict={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
+            prediction_data_variable: Optional[str] = None,
         ):
         # filter subset coordinates present in data_variable
         subset = {k: v for k, v in subset.items() if k in observations.coords}
         
+        if prediction_data_variable is None:
+            prediction_data_variable = data_variable + "_obs"
+
         # select subset
-        preds = predictions.sel(subset)[data_variable]
+        if prediction_data_variable in predictions:
+            preds = predictions.sel(subset)[prediction_data_variable]
+        else:
+            raise KeyError(
+                f"{prediction_data_variable} was not found in the predictions "+
+                "consider specifying the data variable for the predictions "+
+                "explicitly with the option `prediction_data_variable`."
+            )
         try:
             obs = observations.sel(subset)[data_variable]
         except KeyError:
@@ -1242,7 +1234,7 @@ class NumpyroBackend:
         preds = preds.stack(i=stack_dims)
         N = len(obs.coords["i"])
             
-        hdi = az.hdi(preds, .95)[f"{data_variable}"]
+        hdi = az.hdi(preds, .95)[f"{prediction_data_variable}"]
 
         if ax is None:
             ax = plt.subplot(111)
@@ -1278,7 +1270,7 @@ class NumpyroBackend:
                 )
             else:
                 raise NotImplementedError(
-                    f"Mode '{mode}' not implemented. "
+                    f"Mode '{mode}' not implemented. "+
                     "Choose 'mean+hdi' or 'draws'."
                 )
 

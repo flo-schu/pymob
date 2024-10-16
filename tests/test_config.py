@@ -1,10 +1,13 @@
 import pytest
 import tempfile
 from pymob.simulation import SimulationBase, Config
-from pymob.sim.config import ArrayParam, FloatParam, DataVariable, Datastructure
+from pymob.sim.config import DataVariable, Datastructure
+from pymob.sim.parameters import Param, RandomVariable, Expression
 from pymob.utils.store_file import import_package
 from pymob.solvers.scipy import solve_ivp_1d
+from sympy import Function
 import xarray as xr
+import numpy as np
 import os
 
 scenario = "case_studies/test_case_study/scenarios/test_scenario_scripting_api"
@@ -124,10 +127,10 @@ def test_standalone_casestudy():
 def test_parameter_parsing():
     config = Config()
 
-    io = "value=1.0 min=0.0 max=3.0 free=True"
+    io = "value=1.0 dims=[] min=0.0 max=3.0 hyper=False free=True"
 
     # test scripting input
-    test = FloatParam(value=1.0, min=0.0, max=3.0)
+    test = Param(value=1.0, min=0.0, max=3.0)
     config.model_parameters.test = test
 
     # test dict input
@@ -146,10 +149,10 @@ def test_parameter_parsing():
 def test_parameter_array():
     config = Config()
 
-    io = "value=[1.0,2.0,3.0] free=True"
+    io = "value=[1.0,2.0,3.0] dims=['test_dim'] hyper=False free=True"
 
     # test scripting input
-    test = ArrayParam(value=[1.0,2.0,3.0])
+    test = Param(value=np.array([1.0,2.0,3.0]))
     config.model_parameters.test = test
 
     # test dict input
@@ -164,11 +167,39 @@ def test_parameter_array():
     serialized = config.model_parameters.model_dump(mode="json")
     assert serialized == {"test": io}
 
+def test_prior():
+    config = Config()
+
+    io = "lognorm(scale=[1.0,1.0,a],s=1.5)"
+
+    test_prior = RandomVariable(
+        distribution="lognorm", 
+        parameters={"scale": Expression("[1.0,1.0,a]"), "s": Expression("1.5")},
+    )
+
+    # test scripting input
+    test_param = Param(value=np.array([1.0,2.0,3.0]))
+    test_param.prior = test_prior
+
+    # test dict input
+    test_param.prior = test_prior.model_dump(exclude_none=True)
+    assert test_param.prior == test_prior # type: ignore
+
+    # test config file input
+    test_param.prior = io
+    assert test_param.prior == test_prior  # type: ignore
+    
+    # test serialization
+    config.model_parameters.test = test_param
+    serialized = test_prior.model_dump(mode="json")
+    config.model_parameters.model_dump(mode="json")
+    assert serialized == io
+
 def test_parameter_array_with_prior():
     config = Config()
 
-    io = "value=[1.0,2.0,3.0] prior=lognorm(scale=[1.0,1.0,1.0],s=1) free=True"
-    test = ArrayParam(value=[1.0,2.0,3.0], prior="lognorm(scale=[1.0,1.0,1.0],s=1)")
+    io = "value=[1.0,2.0,3.0] dims=[] prior=lognorm(scale=[1.0,1.0,1.0],s=1.0) hyper=False free=True"
+    test = Param(value=[1.0,2.0,3.0], prior="lognorm(scale=[1.0,1.0,1.0],s=1.0)") # type:ignore
 
     # test config file input
     config.model_parameters.test = io
@@ -190,8 +221,8 @@ def test_parameter_array_with_prior():
 def test_model_parameters():
     config = Config()
 
-    a = FloatParam(value=1)
-    b = FloatParam(value=5, free=False)
+    a = Param(value=1)
+    b = Param(value=5, free=False)
 
     config.model_parameters.a = a
     config.model_parameters.b = b
@@ -207,10 +238,56 @@ def test_model_parameters():
 def test_error_model():
     config = Config()
 
-    a = "lognorm(loc=1,scale=2)"
-    config.error_model.a = a
-
+    io = "norm(loc=1,scale=2)"
     
+    # test config file input
+    test = RandomVariable(
+        distribution="norm",
+        parameters=dict(loc=Expression("1"),scale=Expression("2")),  # type:ignore
+    )
+
+    # test config file input
+    config.error_model.test = io
+    assert config.error_model.test == test  # type: ignore
+    
+    # test scripting input
+    config.error_model.test = test
+
+    # test dict input
+    config.error_model.test = test.model_dump(exclude_none=True)
+    assert config.error_model.test == test # type: ignore
+
+    # test serialization
+    serialized = config.error_model.model_dump(mode="json", exclude_none=True)
+    assert serialized == {"test": io}
+
+def test_error_model_with_obs():
+    config = Config()
+
+    io = "lognorm(scale=[1.0,1.0,1.0],s=1.0,obs=b/jnp.sqrt(2))"
+    test = RandomVariable(
+        distribution="lognorm",
+        parameters=dict(scale=Expression("[1.0,1.0,1.0]"),s=Expression("1.0")),  # type:ignore
+        obs=Expression("b/jnp.sqrt(2)")
+    )
+
+    # test config file input
+    config.error_model.test = io
+    assert config.error_model.test == test  # type: ignore
+    
+    # test scripting input
+    config.error_model.test = test
+
+    # test dict input
+    config.error_model.test = test.model_dump(exclude_none=True)
+    assert config.error_model.test == test # type: ignore
+
+    # test serialization
+    serialized = config.error_model.model_dump(mode="json")
+    assert serialized == {"test": io}
+
+
+
 def test_data_variables():
     config = Config()
     config.case_study.name = "test_case_study"
