@@ -857,7 +857,7 @@ class NumpyroBackend(InferenceBackend):
             theta = self.config.model_parameters.value_dict
             
         grads = grad_log_density(theta)
-        nangrads = [k for k, g in grads.items() if np.isnan(g) or np.isinf(g)]
+        nangrads = [k for k, g in grads.items() if np.any(np.isnan(g)) or np.any(np.isinf(g))]
         if len(nangrads) > 0:
             warnings.warn(
                 f"Gradients {nangrads} contained NaN or infinity values. The gradient based "+
@@ -1090,7 +1090,6 @@ class NumpyroBackend(InferenceBackend):
             )
             fig = plt.gcf()
             fig.savefig(f"{self.simulation.output_path}/trace.png")
-            plt.close()
             axes = az.plot_pair(
                 self.idata, 
                 divergences=True, 
@@ -1098,7 +1097,6 @@ class NumpyroBackend(InferenceBackend):
             )
             fig = plt.gcf()
             fig.savefig(f"{self.simulation.output_path}/pairs_posterior.png")
-            plt.close()
 
     def plot_prior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={}, 

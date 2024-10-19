@@ -393,7 +393,7 @@ class InferenceBackend(ABC):
             ax=ax,
             label="log-likelihood"
         )
-        ax.set_xlabel("beta (normalized)")
-        ax.set_ylabel("alpha (normalized)")
+        ax.set_xlabel(f"{par_x} (normalized)")
+        ax.set_ylabel(f"{par_y} (normalized)")
 
         return ax
