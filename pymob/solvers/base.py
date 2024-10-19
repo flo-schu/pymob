@@ -682,16 +682,25 @@ def rect_interpolation(
             ys_ = np.concatenate([y, np.array(y[-1], ndmin=1)])
         elif y.ndim == 2:
             ys_ = np.row_stack([y, np.array(y[-1], ndmin=2)]) 
+        elif y.ndim == 3:
+            ys_ = [
+                np.row_stack([y_i, np.array(y_i[-1], ndmin=2)])
+                for y_i in y
+            ]
         else:
             raise NotImplementedError(
                 "Dimensions of interpolation > 2 or 0 are not implemented"
             )
 
         xs, ys = rectilinear_interpolation(ts=ts_, ys=ys_) # type:ignore
-            
+        if y.ndim <= 2:
+            xs = xs
+        else:
+            xs = xs[0] # type:ignore
 
         coords = {x_dim: xs}
         coords.update({d: v.coords[d].values for d in v.dims if d != x_dim})
+        coords = {d:coords[d] for d in v.dims}
 
         y_reindexed = xr.DataArray(
             ys, 
