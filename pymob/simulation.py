@@ -659,16 +659,38 @@ class SimulationBase:
                 
 
             func, args = lambdify_expression(expr)
+            if len(args) > 0 and reference_data is None:
+                raise AssertionError(
+                    f"Pymob is trying to look up the values of {args} in the "+
+                    "reference data, but `reference_data=None`. Provide "+
+                    "reference data if necessary and check if the right input "+
+                    f"key is used (currently: `input='{input}'`)."
+                )
             kwargs = lookup_args(args, reference_data)
             value = func(**kwargs)
             
             # parse dims and coords
             if reference_data is None:
-                input_dims = {
-                    k: len(self.coordinates[k]) for k 
-                    in self.config.data_structure.all[key].dimensions
-                    if k not in drop_dims
-                }
+                try:
+                    input_dims = {
+                        k: len(self.coordinates[k]) for k 
+                        in self.config.data_structure.all[key].dimensions
+                        if k not in drop_dims
+                    }
+                except KeyError as err:
+                    missing_dim, = err.args
+                    if missing_dim not in self.coordinates:
+                        raise KeyError(
+                            f"Pymob cannot find the key '{missing_dim}' in "+
+                            f"the coordinates: `sim.coordinates = {self.coordinates}`"
+                        )
+                    else:
+                        raise KeyError(
+                            f"Pymob cannot find the key '{missing_dim}' in "+
+                            f"the simulation data structure: "+
+                            f"{self.config.data_structure.all.keys()}`. "
+                            "Make sure all needed data variables are defined."
+                        )
                 input_coords = {k:self.coordinates[k] for k in input_dims}
 
             else:
@@ -688,12 +710,20 @@ class SimulationBase:
 
             if isinstance(value, xr.DataArray):
                 value = value.values
+                if value.ndim != len(input_coords):
+                    raise KeyError(
+                        f"Dimensions of the input array ({value.ndim}) and " +
+                        "the specified dimensions on the data variable "+
+                        f"'{key}(dimensions={self.config.data_structure.all[key].dimensions})' " +
+                        "did not match. Is a dimension missing from "+
+                        "the data variable? You can update it by using"+
+                        f" `sim.config.data_structure.{key}.dimensions = [...]"
+                    )
             else:
                 if len(new_dims) == 0:
                     value = float(value)
                 else:
                     value = np.broadcast_to(value, tuple(new_dims.values()))
-
 
 
             value = xr.DataArray(value, coords=input_coords)
