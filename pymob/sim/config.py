@@ -951,6 +951,8 @@ class Config(BaseModel):
             # loaded in the same session.
             if module in sys.modules:
                 _ = sys.modules.pop(module)
+
+        for module in self.case_study.modules:
             try:
                 m = importlib.import_module(module, package=case_study)
                 self._modules.update({module: m})
