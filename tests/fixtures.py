@@ -12,12 +12,12 @@ rng = np.random.default_rng(1)
 
 def init_simulation_casestudy_api(scenario="test_scenario"):
     config = prepare_casestudy(
-        case_study=("test_case_study", scenario),
+        case_study=("lotka_volterra_case_study", scenario),
         config_file="settings.cfg",
         pkg_dir="case_studies"
     )
     
-    from case_studies.test_case_study.sim import Simulation
+    from case_studies.lotka_volterra_case_study.sim import Simulation
     sim = Simulation(config=config)
     sim.config.import_casestudy_modules(reset_path=True)
     sim.setup()
@@ -181,9 +181,9 @@ def create_composite_priors_wrong_order():
 
     return theta
 
-def init_test_case_study_hierarchical() -> SimulationBase:
+def init_lotka_volterra_case_study_hierarchical() -> SimulationBase:
     config = Config()
-    config.case_study.name = "test_case_study"
+    config.case_study.name = "lotka_volterra_case_study"
     config.case_study.scenario = "test_hierarchical"
     config.case_study.simulation = "HierarchicalSimulation"
     config.import_casestudy_modules(reset_path=True)
@@ -195,13 +195,13 @@ def init_test_case_study_hierarchical() -> SimulationBase:
 
     return sim
 
-def init_test_case_study_hierarchical_presimulated(
+def init_lotka_volterra_case_study_hierarchical_presimulated(
     scenario: Literal[
         "test_hierarchical_presimulated",
         "lotka_volterra_hierarchical_presimulated_v1",
     ] = "test_hierarchical_presimulated"
 ) -> SimulationBase:
-    config = Config(f"case_studies/test_case_study/scenarios/{scenario}/settings.cfg")
+    config = Config(f"case_studies/lotka_volterra_case_study/scenarios/{scenario}/settings.cfg")
     config.case_study.package = "case_studies"
     config.import_casestudy_modules(reset_path=True)
     Simulation = config.import_simulation_from_case_study()

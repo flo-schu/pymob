@@ -6,10 +6,10 @@ from pymob.inference.scipy_backend import ScipyBackend
 from pymob.sim.parameters import Param
 from pymob.solvers.diffrax import JaxSolver
 
-from tests.fixtures import init_test_case_study_hierarchical
+from tests.fixtures import init_lotka_volterra_case_study_hierarchical
 
 def test_parameter_parsing_different_priors_on_species():
-    sim = init_test_case_study_hierarchical()
+    sim = init_lotka_volterra_case_study_hierarchical()
     
     sim.config.model_parameters.alpha_species = Param(
         value=0.5, free=True, hyper=True,
@@ -100,7 +100,7 @@ def test_parameter_parsing_different_priors_on_species():
 
 
 def test_parameter_parsing_different_priors_on_year():
-    sim = init_test_case_study_hierarchical()
+    sim = init_lotka_volterra_case_study_hierarchical()
     
     sim.config.model_parameters.alpha_species = Param(
         value=0.5, free=True, hyper=True, dims=('rabbit_species','experiment'),

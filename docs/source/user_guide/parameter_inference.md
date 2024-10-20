@@ -54,7 +54,7 @@ We set up the case study like this:
 from pymob import Config
 
 config = Config()
-config.case_study.name = "test_case_study"
+config.case_study.name = "lotka_volterra_case_study"
 config.case_study.scenario = "test_hierarchical"
 config.case_study.simulation = "HierarchicalSimulation"
 config.import_casestudy_modules(reset_path=True)

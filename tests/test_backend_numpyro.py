@@ -8,7 +8,7 @@ from pymob.sim.parameters import Param
 
 from tests.fixtures import (
     init_simulation_casestudy_api, 
-    init_test_case_study_hierarchical_presimulated,
+    init_lotka_volterra_case_study_hierarchical_presimulated,
 )
 
 def test_diffrax_exception():
@@ -230,7 +230,7 @@ def test_convergence_sa_kernel():
 
 
 def test_hierarchical_lotka_volterra():
-    sim = init_test_case_study_hierarchical_presimulated()
+    sim = init_lotka_volterra_case_study_hierarchical_presimulated()
 
     sim.config.model_parameters.alpha_species_hyper = Param(
         prior="halfnorm(scale=5)", dims=('rabbit_species',) , # type: ignore
@@ -294,7 +294,7 @@ def test_hierarchical_lotka_volterra():
 
 def test_hierarchical_lotka_volterra_user_defined_prob_model():
     pytest.skip()    
-    sim = init_test_case_study_hierarchical_presimulated()
+    sim = init_lotka_volterra_case_study_hierarchical_presimulated()
     sim.config.inference_numpyro.user_defined_probability_model = "hierarchical_lotka_volterra"
 
     sim.solver = JaxSolver
@@ -329,7 +329,7 @@ def test_commandline_api_infer():
     from pymob.infer import main
     runner = CliRunner()
     
-    args = "--case_study=test_case_study "\
+    args = "--case_study=lotka_volterra_case_study "\
         "--scenario=test_scenario "\
         "--inference_backend=numpyro"
     result = runner.invoke(main, args.split(" "))

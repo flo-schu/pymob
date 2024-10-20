@@ -4,3 +4,6 @@
 [submodule "case_studies/hierarchical_molecular_tktd"]
 	path = case_studies/hierarchical_molecular_tktd
 	url = git@github.com:flo-schu/hierarchical_molecular_tktd.git
+[submodule "case_studies/lotka_volterra_case_study"]
+	path = case_studies/lotka_volterra_case_study
+	url = git@github.com:flo-schu/lotka_volterra_case_study

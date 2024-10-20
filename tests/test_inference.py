@@ -6,7 +6,7 @@ import jax
 
 from tests.fixtures import (
     init_simulation_casestudy_api,
-    init_test_case_study_hierarchical_presimulated
+    init_lotka_volterra_case_study_hierarchical_presimulated
 )
 
 
@@ -34,7 +34,7 @@ def test_inference_evaluation():
 
 
 def test_posterior():
-    sim = init_test_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim = init_lotka_volterra_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
 
     sim.config.inference_numpyro.chains = 1
     sim.config.inference_numpyro.draws = 5
@@ -56,7 +56,7 @@ def test_posterior():
 
 
 def test_model_check():
-    sim = init_test_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim = init_lotka_volterra_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
     sim = init_simulation_casestudy_api()
     sim.config.inference_numpyro.gaussian_base_distribution = True
     sim.config.jaxsolver.throw_exception = False
@@ -71,7 +71,7 @@ def test_model_check():
 
 
 def test_vector_field():
-    sim = init_test_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim = init_lotka_volterra_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
     sim = init_simulation_casestudy_api()
     sim.config.inference_numpyro.gaussian_base_distribution = True
     sim.config.jaxsolver.throw_exception = False
