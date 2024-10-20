@@ -9,7 +9,8 @@ from typing import (
     Optional,
     Any,
     List,
-    Protocol
+    Protocol,
+    Literal
 )
 from abc import ABC, abstractmethod
 import warnings
@@ -162,6 +163,8 @@ class InferenceBackend(ABC):
     prior: Dict[str,Distribution]
     log_likelihood: Errorfunction
     gradient_log_likelihood: Errorfunction
+    chains = 1
+    draws = 1
 
     def __init__(
         self, 
@@ -217,15 +220,8 @@ class InferenceBackend(ABC):
     
     @property
     def posterior_coordinates(self) -> Dict[str, List[str|int]]:
-        if not hasattr(self, "chains"):
-            chains = 1
-        else:
-            chains = self.chains
-
-        if not hasattr(self, "draws"):
-            draws = 1
-        else:
-            draws = self.draws
+        chains = self.chains
+        draws = self.draws
 
         posterior_coords = {k: list(v) for k, v in self.simulation.dimension_coords.items()}
         posterior_coords.update({
@@ -368,7 +364,7 @@ class InferenceBackend(ABC):
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(8,6))
 
-        cmap = mpl.colormaps["viridis"]
+        cmap = mpl.colormaps["viridis"]  # type: ignore
         contours = ax.contourf(X, Y, Z, cmap=cmap, levels=50)
 
         if gradient_func is not None:
@@ -398,6 +394,13 @@ class InferenceBackend(ABC):
 
         return ax
     
+    @abstractmethod
+    def prior_predictions(self):
+        pass
+
+    @abstractmethod
+    def posterior_predictions(self):
+        pass
 
     def plot_prior_predictions(
             self, data_variable: str, x_dim: str, ax=None, subset={}, 
@@ -584,3 +587,19 @@ class InferenceBackend(ABC):
         ax.set_xlabel(x_dim)
 
         return ax
+
+    def plot_diagnostics(self):
+        if hasattr(self.idata, "posterior"):
+            axes = az.plot_trace(
+                self.idata,
+                var_names=self.simulation.model_parameter_names
+            )
+            fig = plt.gcf()
+            fig.savefig(f"{self.simulation.output_path}/trace.png")
+            axes = az.plot_pair(
+                self.idata, 
+                divergences=True, 
+                var_names=self.simulation.model_parameter_names
+            )
+            fig = plt.gcf()
+            fig.savefig(f"{self.simulation.output_path}/pairs_posterior.png")

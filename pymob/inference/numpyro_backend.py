@@ -1082,23 +1082,6 @@ class NumpyroBackend(InferenceBackend):
 
 
 
-    def plot_diagnostics(self):
-        if hasattr(self.idata, "posterior"):
-            axes = az.plot_trace(
-                self.idata,
-                var_names=self.simulation.model_parameter_names
-            )
-            fig = plt.gcf()
-            fig.savefig(f"{self.simulation.output_path}/trace.png")
-            axes = az.plot_pair(
-                self.idata, 
-                divergences=True, 
-                var_names=self.simulation.model_parameter_names
-            )
-            fig = plt.gcf()
-            fig.savefig(f"{self.simulation.output_path}/pairs_posterior.png")
-
-
     # This is a separate script!    
     def combine_chains(self, chain_location="chains", drop_extra_vars=[], cluster_deviation="std"):
         """Combine chains if chains were computed in a fully parallelized manner
