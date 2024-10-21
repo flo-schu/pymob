@@ -91,6 +91,7 @@ class RandomVariable(BaseModel):
     distribution: str
     parameters: Dict[str, Expression]
     obs: Optional[Expression] = None
+    obs_inv: Optional[Expression] = None
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, RandomVariable):
@@ -172,12 +173,14 @@ def string_to_prior_dict(prior_str: str):
         kwargs[key] = value
     
     obs = kwargs.pop("obs", None)
+    obs_inv = kwargs.pop("obs_inv", None)
 
     # Step 3: Return the symbolic expression and the argument dictionary
     return {
         "distribution": func_name, 
         "parameters": kwargs, 
-        "obs": obs
+        "obs": obs,
+        "obs_inv": obs_inv
     }
 
 def to_rv(option: Union[str,RandomVariable,Dict]) -> RandomVariable:

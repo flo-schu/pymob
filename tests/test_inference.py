@@ -32,27 +32,119 @@ def test_inference_evaluation():
         plt.close()
 
 
-
-def test_posterior():
+def test_prior_predictions():
     sim = init_lotka_volterra_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim.solver = JaxSolver
 
-    sim.config.inference_numpyro.chains = 1
+    sim.config.inference.n_predictions = 30
+    sim.config.inference_numpyro.chains = 2
     sim.config.inference_numpyro.draws = 5
     sim.config.inference_numpyro.nuts_max_tree_depth = 1
-    sim.config.inference_numpyro.warmup = 0
     sim.config.inference_numpyro.gaussian_base_distribution = True
-    sim.config.inference_numpyro.svi_iterations = 50
-    sim.config.inference_numpyro.kernel = "svi"
 
-    sim.solver = JaxSolver
     sim.dispatch_constructor()
     sim.set_inferer(backend="numpyro")
+
+    idata = sim.inferer.prior_predictions(n=5)
+
+    np.testing.assert_equal(
+        list(idata.prior.data_vars.keys()),
+        ["alpha", "alpha_sigma", "alpha_species", "alpha_species_hyper", "beta"]
+    )
+    
+    np.testing.assert_equal(
+        list(idata.prior_predictive.data_vars.keys()),
+        ["rabbits", "wolves"]
+    )
+
+    np.testing.assert_equal(
+        list(idata.prior_trajectories.data_vars.keys()),
+        ["rabbits", "wolves"]
+    )
+
+    np.testing.assert_equal(
+        list(idata.prior_residuals.data_vars.keys()),
+        ["rabbits", "wolves"]
+    )
+
+def test_posterior_predictions_nuts():
+    sim = init_lotka_volterra_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim.solver = JaxSolver
+
+    sim.config.inference.n_predictions = 30
+    sim.config.inference_numpyro.chains = 2
+    sim.config.inference_numpyro.draws = 5
+    sim.config.inference_numpyro.warmup = 0
+    sim.config.inference_numpyro.nuts_max_tree_depth = 1
+    sim.config.inference_numpyro.gaussian_base_distribution = True
+
+    sim.dispatch_constructor()
+    sim.set_inferer(backend="numpyro")
+
+    sim.config.inference_numpyro.kernel = "nuts"
     sim.inferer.run()
     idata = sim.inferer.idata
 
-    np.testing.assert_array_equal(idata.posterior.coords["id"], sim.observations["id"])
-    np.testing.assert_array_equal(idata.posterior.coords["rabbit_species"], sim.dimension_coords["rabbit_species"])
-    np.testing.assert_array_equal(idata.posterior.coords["experiment"], sim.dimension_coords["experiment"])
+    np.testing.assert_equal(
+        list(idata.posterior.data_vars.keys()),
+        ["alpha_species_hyper", "alpha_sigma", "alpha_species", "alpha", "beta"]
+    )
+    
+    np.testing.assert_equal(
+        list(idata.posterior_predictive.data_vars.keys()),
+        ["rabbits", "wolves"]
+    )
+
+    np.testing.assert_equal(
+        list(idata.posterior_trajectories.data_vars.keys()),
+        ["rabbits", "wolves"]
+    )
+
+    np.testing.assert_equal(
+        list(idata.posterior_residuals.data_vars.keys()),
+        ["rabbits", "wolves"]
+    )
+
+    np.testing.assert_array_equal(idata.prior.coords["id"], sim.observations["id"])
+    np.testing.assert_array_equal(idata.prior.coords["rabbit_species"], sim.dimension_coords["rabbit_species"])
+    np.testing.assert_array_equal(idata.prior.coords["experiment"], sim.dimension_coords["experiment"])
+
+
+
+def test_posterior_predictions_svi():
+    sim = init_lotka_volterra_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim.solver = JaxSolver
+
+    sim.config.inference_numpyro.svi_iterations = 10
+    sim.config.inference_numpyro.draws = 5
+    sim.config.inference_numpyro.gaussian_base_distribution = True
+
+    sim.dispatch_constructor()
+    sim.set_inferer(backend="numpyro")
+
+    sim.config.inference_numpyro.kernel = "svi"
+    sim.inferer.run()
+    idata = sim.inferer.idata
+
+    np.testing.assert_equal(
+        list(idata.posterior.data_vars.keys()),
+        ["alpha", "alpha_sigma", "alpha_species", "alpha_species_hyper", "beta"]
+    )
+    
+    np.testing.assert_equal(
+        list(idata.posterior_predictive.data_vars.keys()),
+        ["rabbits", "wolves"]
+    )
+
+    np.testing.assert_equal(
+        list(idata.posterior_trajectories.data_vars.keys()),
+        ["rabbits", "wolves"]
+    )
+
+    np.testing.assert_equal(
+        list(idata.posterior_residuals.data_vars.keys()),
+        ["rabbits", "wolves"]
+    )
 
 
 def test_model_check():

@@ -55,6 +55,7 @@ class Distribution:
         self._dist_str = random_variable.distribution
         self._parameter_expression = random_variable.parameters
         self._obs_transform: Optional[Expression] = random_variable.obs
+        self._obs_transform_inv: Optional[Expression] = random_variable.obs_inv
         self.dims = dims
         self.shape = shape if len(shape) > 0 else ()
 
@@ -63,7 +64,8 @@ class Distribution:
         self.parameters: Dict[str, Expression] = params
         self.undefined_args: set = uargs
 
-        self.create_obs_transform_func()
+        self.obs_transform_func = self.create_transform_func(self._obs_transform, "obs_transform")
+        self.obs_transform_func_inv = self.create_transform_func(self._obs_transform_inv, "obs_transform_inv")
 
     def __str__(self) -> str:
         dist = self.dist_name
@@ -78,13 +80,12 @@ class Distribution:
     def dist_name(self) -> str:
         return self._dist_str
     
-    def create_obs_transform_func(self):
-        if self._obs_transform is None:
-            self._obs_transform_module = None
-            self.obs_transform_func = None
+    def create_transform_func(self, transform, func_name):
+        if transform is None:
+            return None
         
         else:
-            expr = self._obs_transform
+            expr = transform
             
             imports = [a for a in expr.undefined_args if a in self._import_map]
             args = [a for a in expr.undefined_args if a not in self._import_map]
@@ -94,7 +95,7 @@ class Distribution:
             
             # Build a function definition from the expression
             func_def = ast.FunctionDef(
-                name=f"obs_transform_{self.name}",
+                name=f"{func_name}_{self.name}",
                 args=ast.arguments(
                     posonlyargs=[], args=args, vararg=None, kwonlyargs=[], 
                     kw_defaults=[], defaults=[]
@@ -114,10 +115,9 @@ class Distribution:
             code = compile(module, filename="<ast>", mode="exec")
             func_env = {}
             exec(code, func_env)    
-            func = func_env[f"obs_transform_{self.name}"]
+            func = func_env[f"{func_name}_{self.name}"]
             
-            self._obs_transform_module = module
-            self.obs_transform_func = func
+            return func
 
     
     def construct(self, context: Iterable[Mapping], extra_kwargs: Dict = {}):
@@ -213,8 +213,10 @@ class InferenceBackend(ABC):
     def posterior_data_structure(self) -> Dict[str, List[str]]:
         data_structure = self.simulation.data_structure.copy()
         data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
+        data_structure_residuals = {f"{dv}_res": dims for dv, dims in data_structure.items()}
         parameter_dims = {k: list(v) for k, v in self.simulation.parameter_dims.items() if len(v) > 0}
         data_structure.update(data_structure_loglik)
+        data_structure.update(data_structure_residuals)
         data_structure.update(parameter_dims)
         return data_structure
     

@@ -27,6 +27,7 @@ import numpyro
 from numpyro.infer import Predictive
 from numpyro.distributions import Normal, transforms
 from numpyro.distributions.distribution import DistributionMeta
+from numpyro import handlers
 from numpyro import infer
 
 import jax
@@ -155,7 +156,10 @@ class NumpyroBackend(InferenceBackend):
     
     @property
     def chains(self):
-        return self.config.inference_numpyro.chains
+        if self.config.inference_numpyro.kernel == "svi":
+            return 1
+        else:
+            return self.config.inference_numpyro.chains
     
     @property
     def draws(self):
@@ -328,7 +332,7 @@ class NumpyroBackend(InferenceBackend):
 
             return theta_base, theta
 
-        def likelihood(theta, simulation_results, indices, observations, masks):
+        def likelihood(theta, simulation_results, indices, observations, masks, make_predictions):
             """Uses lookup and error model from the local function context"""
             context = [simulation_results, theta, indices, observations, extra]
             for error_model_name, error_model_dist in error_model.items():
@@ -343,10 +347,15 @@ class NumpyroBackend(InferenceBackend):
                     #       because then, I could actually rename _obs and _res 
                     #       and downstream use this information for creating inverse
                     #       function
+                    if make_predictions:
+                        obs = None
+                    else:
+                        obs = observations[error_model_name]
+                    
                     _ = numpyro.sample(
                         name=error_model_name + "_obs",
                         fn=dist.mask(masks[error_model_name]),
-                        obs=observations[error_model_name]
+                        obs=obs
                     )
                 else:
                     residuals = numpyro.deterministic(
@@ -356,6 +365,9 @@ class NumpyroBackend(InferenceBackend):
                             **{error_model_name: simulation_results[error_model_name]}, 
                         )
                     )
+
+                    if make_predictions:
+                        residuals = None
 
                     _ = numpyro.sample(
                         name=error_model_name + "_obs",
@@ -367,7 +379,8 @@ class NumpyroBackend(InferenceBackend):
         def model(
             solver, obs, masks, 
             only_prior: bool = False, 
-            user_error_model: Optional[ErrorModelFunction] = None
+            user_error_model: Optional[ErrorModelFunction] = None,
+            make_predictions: bool = False,
         ):
             # construct priors with numpyro.sample and sample during inference
             if gaussian_base:
@@ -403,6 +416,7 @@ class NumpyroBackend(InferenceBackend):
                     indices=indices,
                     observations=obs,
                     masks=masks,
+                    make_predictions=make_predictions,
                 )
             else:
                 _ = user_error_model(
@@ -410,7 +424,8 @@ class NumpyroBackend(InferenceBackend):
                     simulation_results=sim_results,
                     indices=indices,
                     observations=obs,
-                    masks=masks
+                    masks=masks,
+                    make_predictions=make_predictions,
                 )
 
         return model
@@ -472,10 +487,8 @@ class NumpyroBackend(InferenceBackend):
             )
 
             # create arviz idata
-            self.idata = az.from_numpyro(
-                mcmc, 
-                dims=self.posterior_data_structure,
-                coords=self.posterior_coordinates,
+            self.idata = self.nuts_posterior(
+                mcmc=mcmc, model=model, key=next(keys), obs=obs
             )
 
         elif self.kernel.lower() == "svi" or self.kernel.lower() == "map":
@@ -872,26 +885,68 @@ class NumpyroBackend(InferenceBackend):
         return grads
 
 
+    def predict_observations(self, model, posterior_samples, key, n=100):
+        """
+        there is a very small remark in the numpyro API that explains that
+        if data input for observed variables is None, the data are sampled
+        from the distributions instead of returning the input data
+        https://num.pyro.ai/en/stable/getting_started.html#a-simple-example-8-schools
+        """
+        data_vars = self.config.data_structure.observed_data_variables
+        predictive = Predictive(
+            model=partial(model, make_predictions=True),
+            posterior_samples=posterior_samples, 
+            return_sites=[f"{k}_obs" for k in data_vars],
+            num_samples=n, 
+            batch_ndims=2
+        )
+        predictions = predictive(key)
+
+        observations = {}
+        for data_var in self.config.data_structure.observed_data_variables:
+            if self.error_model[data_var].obs_transform_func is not None:
+                transform_inv = self.error_model[data_var].obs_transform_func_inv
+                if transform_inv is None:
+                    warnings.warn(
+                        "Cannot make predictions of observations from normalized "+
+                        "observations (residuals). Please provide an inverse observation "+
+                        f"transform: e.g. `sim.config.error_model['{data_var}'].obs_inv = ...`."+
+                        "residuals are denoted as 'res'. See Lotka-volterra case "+
+                        "study for an example. "
+                    )
+                    # this will fetch the residuals (they are called _obs)
+                    obs = predictions[f"{data_var}_obs"]
+                else:
+                    obs = transform_inv(
+                        res=predictions[f"{data_var}_obs"],
+                        **{data_var: posterior_samples[data_var]}
+                    )
+                
+                # get the deterministic residuals res=y_obs-y_det regardless
+                res = posterior_samples[f"{data_var}_res"] 
+                observations.update({f"{data_var}_res": res})
+            else:
+                obs = predictions[f"{data_var}_obs"]
+
+            observations.update({f"{data_var}_obs": obs})
+
+        return observations
+
+    def calculate_log_likelihood(self, model, posterior_samples):
+        return numpyro.infer.log_likelihood(
+            model=model, 
+            posterior_samples=posterior_samples, 
+            batch_ndims=2, 
+        )
+
+
+
     @lru_cache
     def prior_predictions(self, n=100, seed=1):
         key = jax.random.PRNGKey(seed)
         obs, masks = self.observation_parser()
 
-        # there is a very small remark in the numpyro API that explains that
-        # if data input for observed variables is None, the data are sampled
-        # from the distributions instead of returning the input data
-        # https://num.pyro.ai/en/stable/getting_started.html#a-simple-example-8-schools
-        # obs_ = {
-        #     k: None if k in self.config.data_structure.observed_data_variables
-        #     else data 
-        #     for k, data in obs.items() 
-        # }
-
-        model_kwargs = self.preprocessing(
-            obs=obs, 
-            masks=masks,
-        )
-        
+        model_kwargs = self.preprocessing(obs=obs, masks=masks)
 
         # prepare model
         model = partial(
@@ -903,28 +958,95 @@ class NumpyroBackend(InferenceBackend):
         prior_predictive = Predictive(
             model, num_samples=n, batch_ndims=2
         )
-        prior_predictions = prior_predictive(key)
+        prior_samples = prior_predictive(key)
 
-        loglik = numpyro.infer.log_likelihood(
-            model=model, 
-            posterior_samples=prior_predictions, 
-            batch_ndims=2, 
-            obs=obs, 
-            masks=masks
+        log_likelihood = self.calculate_log_likelihood(
+            model=model, posterior_samples=prior_samples
         )
 
-        preds = self.config.data_structure.data_variables
-        preds_obs = [f"{d}_obs" for d in self.config.data_structure.data_variables]
-        prior_keys = list(self.simulation.model_parameter_dict.keys())
-        posterior_coords = self.posterior_coordinates
-        posterior_coords["draw"] = list(range(n))
-        data_structure = self.posterior_data_structure
-        
-        priors = {k: v for k, v in prior_predictions.items() if k in prior_keys}
+        obs_predictions = self.predict_observations(
+            model=model, posterior_samples=prior_samples, key=key, n=n
+        )
 
-        if len(prior_keys) != len(priors):
+        return self.to_arviz_idata(
+            prior=prior_samples,
+            prior_predictive=obs_predictions,
+            observed_data=obs,
+            log_likelihood=log_likelihood,
+            n_draws=n
+        )
+    
+
+    def to_arviz_idata(
+        self,
+        prior: Dict[str, NumericArray] = {},
+        posterior: Dict[str, NumericArray] = {},
+        log_likelihood: Dict[str, NumericArray] = {},
+        prior_predictive: Dict[str, NumericArray] = {},
+        posterior_predictive: Dict[str, NumericArray] = {},
+        observed_data: Dict[str, NumericArray] = {},
+        n_draws: Optional[int] = None,
+        **kwargs,
+    ):
+        """Create an Arviz idata object from samples.
+        TODO: Outsource to base.InferenceBackend
+        """
+        posterior_coords = self.posterior_coordinates
+        # posterior_coords["chain"] = [0]
+        if n_draws is not None:
+            posterior_coords["draw"] = list(range(n_draws))
+        data_structure = self.posterior_data_structure
+
+        data_variables = self.config.data_structure.data_variables
+        obs_data_variables = self.config.data_structure.observed_data_variables
+        prior_keys = self.simulation.model_parameter_dict.keys()
+        
+        prior_ = {k: v for k, v in prior.items() if k in prior_keys}
+        prior_trajectories_ = {
+            k: v for k, v in prior.items() if k in data_variables
+        }
+        prior_residuals_ = {
+            k.replace("_res", ""): v 
+            for k, v in prior_predictive.items() 
+            if k in [f"{d}_res" for d in data_variables]
+        }
+        prior_predictive_ = {
+            k.replace("_obs", ""): v 
+            for k, v in prior_predictive.items() 
+            if k in [f"{d}_obs" for d in data_variables]
+        }
+
+        posterior_ = {k: v for k, v in posterior.items() if k in prior_keys}
+        posterior_trajectories_ = {
+            k: v for k, v in posterior.items() if k in data_variables
+        }
+        posterior_residuals_ = {
+            k.replace("_res", ""): v 
+            for k, v in posterior_predictive.items() 
+            if k in [f"{d}_res" for d in data_variables]
+        }
+        posterior_predictive_ = {
+            k.replace("_obs", ""): v 
+            for k, v in posterior_predictive.items() 
+            if k in [f"{d}_obs" for d in data_variables]
+        }
+        
+        likelihood_ = {k: log_likelihood[f"{k}_obs"] for k in obs_data_variables}
+        observed_data_ = {k: observed_data[k] for k in obs_data_variables}
+
+        if len(prior_) > 0 or len(posterior_) > 0:
+            if len(prior_keys) != len(prior_):
+                miss_keys = [k for k in prior_keys if k not in prior]
+            
+            elif len(prior_keys) != len(posterior_):
+                miss_keys = [k for k in prior_keys if k not in posterior]
+
+        else:
+            miss_keys = []
+
+        if len(miss_keys) > 0:
             warnings.warn(
-                f"Priors {[k for k in prior_keys if k not in prior_predictions]} "+
+                f"Parameters {miss_keys} "+
                 "were not found in the predictions. Make sure that the prior "+
                 "names match the names in user_defined_probability_model = "+
                 f"{self.config.inference_numpyro.user_defined_probability_model}.",
@@ -932,40 +1054,32 @@ class NumpyroBackend(InferenceBackend):
             )
 
         idata = az.from_dict(
-            observed_data=obs,
-            prior=priors,
-            prior_predictive={k: v for k, v in prior_predictions.items() if k in preds+preds_obs},
-            log_likelihood=loglik,
+            prior=prior_,
+            prior_predictive=prior_predictive_,
+            posterior=posterior_,
+            posterior_predictive=posterior_predictive_,
+            observed_data=observed_data_,
+            log_likelihood=likelihood_,
+            **kwargs,
             dims=data_structure,
             coords=posterior_coords,
         )
 
+        idata.add_groups(group_dict={
+                "prior_trajectories": prior_trajectories_,
+                "posterior_trajectories": posterior_trajectories_,
+                "prior_residuals": prior_residuals_,
+                "posterior_residuals": posterior_residuals_
+            }, 
+            dims=data_structure,
+            coords=posterior_coords
+        )
+
         return idata
-        # self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_prior_predictions.nc")
     
 
-    def svi_posterior(self, svi_result, model, guide, key, n=1000, only_parameters=False):
-        key, *subkeys = jax.random.split(key, 4)
-        keys = iter(subkeys)
-        obs, masks = self.observation_parser()
-
-        # there is a very small remark in the numpyro API that explains that
-        # if data input for observed variables is None, the data are sampled
-        # from the distributions instead of returning the input data
-        # https://num.pyro.ai/en/stable/getting_started.html#a-simple-example-8-schools
-        # obs_ = {
-        #     k: None if k in self.config.data_structure.observed_data_variables
-        #     else data 
-        #     for k, data in obs.items() 
-        # }
-
+    def posterior_draws_from_svi(self, guide, svi_result, n, key):
         # prepare model without obs, so obs are sampled from the posterior
-        model_ = partial(
-            model, 
-            solver=self.evaluator, 
-            **self.preprocessing(obs=obs, masks=masks,)
-        )    
-
         params = svi_result.params
 
         # this gets the parameters of the normal_base_distributions
@@ -973,44 +1087,79 @@ class NumpyroBackend(InferenceBackend):
             guide, params=params, 
             num_samples=n, batch_ndims=2
         )
-        posterior_samples = predictive(next(keys))
+        posterior_samples = predictive(key)
+        return posterior_samples
+
+
+    def svi_posterior(self, svi_result, model, guide, key, n=1000):
+        key, *subkeys = jax.random.split(key, 4)
+        keys = iter(subkeys)
+        obs, masks = self.observation_parser()
+
+        # # prepare model without obs, so obs are sampled from the posterior
+        # model_ = partial(
+        #     model, 
+        #     solver=self.evaluator, 
+        #     **self.preprocessing(obs=obs, masks=masks,)
+        # )    
+
+        # params = svi_result.params
+
+        # # this gets the parameters of the normal_base_distributions
+        # predictive = Predictive(
+        #     guide, params=params, 
+        #     num_samples=n, batch_ndims=2
+        # )
+        # posterior_samples = predictive(next(keys))
+        posterior_samples = self.posterior_draws_from_svi(
+            guide=guide, svi_result=svi_result, n=n, key=next(keys)
+        )
 
         # this gets all the parameters and predictions
         predictive = Predictive(
-            model_, posterior_samples, params=params, 
+            model, posterior_samples, #params=params, 
             num_samples=n, batch_ndims=2
         )
-        posterior_predictions = predictive(next(keys))
+        posterior = predictive(next(keys))
 
-        loglik = numpyro.infer.log_likelihood(
-            model=model_, 
-            posterior_samples=posterior_samples, 
-            batch_ndims=2, 
+        log_likelihood = self.calculate_log_likelihood(
+            model=model, posterior_samples=posterior_samples, 
         )
 
-        preds = self.config.data_structure.data_variables
-        preds_obs = [f"{d}_obs" for d in self.config.data_structure.data_variables]
-        priors = list(self.simulation.model_parameter_dict.keys())
-        posterior_coords = self.posterior_coordinates
-        posterior_coords["draw"] = list(range(n))
-        data_structure = self.posterior_data_structure
-
-        # TODO add option to only return parameters (posterior) without
-        # predictions [SHOULD BE EXPOSED ON STORING THE POSTERIOR]. 
-        # Do keep calculating the predictions. They can be used
-        # for quick and dirty AND STANDARDIZED diagnoses
-
-        idata = az.from_dict(
+        obs_predictions = self.predict_observations(
+            model=model, posterior_samples=posterior, key=next(keys), n=n
+        )
+        
+        return self.to_arviz_idata(
+            posterior=posterior,
+            posterior_predictive=obs_predictions,
+            log_likelihood=log_likelihood,
             observed_data=obs,
-            posterior={k: v for k, v in posterior_predictions.items() if k in priors},
-            posterior_predictive={k: v for k, v in posterior_predictions.items() if k in preds+preds_obs},
-            log_likelihood=loglik,
-            dims=data_structure,
-            coords=posterior_coords,
+            n_draws=n
         )
 
-        return idata
-    
+
+
+    def nuts_posterior(self, mcmc, model, key, obs):
+        samples = jax.device_get(mcmc.get_samples(group_by_chain=True))
+
+        data_variables = self.config.data_structure.data_variables
+        
+        log_likelihood = self.calculate_log_likelihood(
+            model=model, posterior_samples=samples
+        )
+        
+        posterior_predictive = self.predict_observations(
+            model, posterior_samples=samples, key=key, n=None
+        )
+
+        return self.to_arviz_idata(
+            posterior={k: samples[k] for k in list(self.prior.keys()) + data_variables},
+            posterior_predictive=posterior_predictive,
+            log_likelihood=log_likelihood,
+            observed_data=obs,
+            sample_stats=mcmc.get_extra_fields(group_by_chain=True)
+        )
 
     @staticmethod
     def get_dict(group: xr.Dataset):
