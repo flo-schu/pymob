@@ -1,250 +1,305 @@
-from typing import Literal, Dict, Optional, List
+from typing import Literal, Dict, Optional, List, Callable, TypeAlias
+import warnings
 
 import xarray as xr
 import arviz as az
 import numpy as np
+import numpy.typing as npt
 
 from pymob.sim.config import Config
 from matplotlib import pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
+
+ALLOWED_IDATA_GROUPS: TypeAlias = Literal[
+    "prior_predictive", 
+    "prior_model_fits",
+    "posterior_predictive", 
+    "posterior_model_fits"
+]
+
 
 class SimulationPlot:
+    """
+    Parameters
+    ----------
+
+    observations : xr.Dataset
+        Simulation observations dataset 
+
+    idata : az.InferenceData
+        Arviz InferenceData created from prior or posterior predictions.
+
+    coordinates : Dict
+        Coordinates of the simulation
+
+    config : Config
+        Simulation configuration
+
+    rows : List[str]
+        Optional. List of variables to plot in the rows of the figure. Defaults
+        to the names of the data variables
+
+    columns : str|Dict[str,List[str|int]]
+        Optional. Group identifiers. Can be a single string (in this case 
+        should be a dimension of the data structure). Can be a dictionary that
+        has a single key (the dimension) and a list of values (a subset of)
+        the dimension coordinates.
+        
+    idata_groups : List[str]
+        Optional. The idata groups to plot for predictions. Only works for groups
+        that have the same data structure as the observations. These are
+        
+    obs_idata_map : Dict[str|str|callable]
+        Optional. Maps the data variables of the observation to the data variables
+        of the inference data. This helps in cases, where the data variable of 
+        the idata do not have the same name as the data variable of the observations.
+        It can also be a callable that extracts the data variable from the 
+        idataset.
+    """
+    figure: Figure
+    axes_map: Dict[str,Dict[str,Axes]]
     def __init__(
         self, 
-        observations,
-        coordinates,
+        observations: xr.Dataset,
+        idata: az.InferenceData,
+        coordinates: Dict,
         config: Config,
         rows: Optional[List[str]] = None,
-        columns: Optional[str] = None,
+        columns: Optional[str|Dict[str,List[str|int]]] = None,
+        obs_idata_map: Dict[str,str|Callable] = {},
+        idata_groups: Optional[ALLOWED_IDATA_GROUPS] = None,
+        pred_mode: Literal["draws", "mean+hdi"] = "mean+hdi",
+        hdi_interval: float = 0.95,
+        obs_style: Dict = {},
+        pred_mean_style: Dict = {},
+        pred_hdi_style: Dict = {},
+        pred_draws_style: Dict = {},
         sharex=True,
-        sharey="rows",
+        sharey="row",
     ):
-        self.observations: xr.Dataset = observations
+        self.observations = observations
+        self.idata = idata
         self.coordinates: Dict = coordinates
         self.config: Config = config
 
         if rows is None:
             self.rows = self.config.data_structure.data_variables
+        else:
+            self.rows = rows
 
         if columns is None:
-            self.columns = []
+            self.columns = ["all"]
+        else:
+            self.columns = columns
+
+        self.idata_groups = idata_groups
+
+        self.obs_idata_map = obs_idata_map
 
         self.sharex = sharex
         self.sharey = sharey
 
+        self.obs_style = dict(marker="o", ls="", ms=3, color="tab:blue")
+        self.obs_style.update(obs_style)
+
+        self.pred_mode = pred_mode
+        self.hdi_interval = hdi_interval
+        
+        batch_idx = self.coordinates.get(self.config.simulation.batch_dimension, None)
+        if batch_idx is None:
+            N = 1
+        else:
+            N = len(batch_idx)
+
+        self.pred_mean_style = dict(color="black", alpha=0.1)
+        self.pred_mean_style.update(pred_mean_style)
+
+        self.pred_hdi_style = dict(color="black", lw=1, alpha=max(1/N, 0.05))
+        self.pred_hdi_style.update(pred_hdi_style)
+
+        self.pred_draws_style = dict(color="black", lw=1, alpha=max(1/N, 0.05))
+        self.pred_draws_style.update(pred_draws_style)
+        
         self.create_figure()
+        self.inf_preds = []
 
 
     def create_figure(self):
         r = len(self.rows)
         c = len(self.columns)
-        self.fig, self.axes = plt.subplot(
+        self.figure, axes = plt.subplots(
             r, c,
             figsize=(5+(c-1*2), 3+(r-1)*2),
             sharex=self.sharex,
             sharey=self.sharey,
+            squeeze=False,
         )
 
+        self.axes_map = {}
+        for i, row in enumerate(self.rows):
+            self.axes_map[row] = {}
+            for j, col in enumerate(self.columns):
+                self.axes_map[row][col] = axes[i,j]
 
-    @staticmethod
+    def plot_data_variables(self):
+        for i, row in enumerate(self.rows):
+            for j, col in enumerate(self.columns):
+                ax = self.axes_map[row][col]
+                for igroup in self.idata_groups:
+                    self.plot_predictions(idata_group=igroup, data_variable=row, column=col, ax=ax)
+                self.plot_observations(data_variable=row, column=col, ax=ax)
+
+        self.figure.tight_layout()
+        
+        # warn about infinity prior_predictions
+        n_inf = len(self.inf_preds)
+        if n_inf > 0:
+            warnings.warn(
+                f"There were {n_inf} NaN or Inf values in the predictions. See "+
+                "Simulation.inf_preds for a list of values.",
+                category=UserWarning
+            )
+
+
     def plot_observations(
-            observations,
-            predictions,
-            data_variable: str,
-            x_dim: str, 
-            ax=None, 
-            plot_preds_without_obs=False,
-            subset={},
-            mode: Literal["mean+hdi", "draws"]="mean+hdi",
-            plot_options: Dict={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
-            prediction_data_variable: Optional[str] = None,
-        ):
-        # filter subset coordinates present in data_variable
-        subset = {k: v for k, v in subset.items() if k in observations.coords}
-        
-        if prediction_data_variable is None:
-            prediction_data_variable = data_variable
-
-        # select subset
-        if prediction_data_variable in predictions:
-            preds = predictions.sel(subset)[prediction_data_variable]
-        else:
-            raise KeyError(
-                f"{prediction_data_variable} was not found in the predictions "+
-                "consider specifying the data variable for the predictions "+
-                "explicitly with the option `prediction_data_variable`."
-            )
-        try:
-            obs = observations.sel(subset)[data_variable]
-        except KeyError:
-            obs = preds.copy().mean(dim=("chain", "draw"))
-            obs.values = np.full_like(obs.values, np.nan)
-        
+        self,
+        data_variable: str,
+        column: str,
+        ax: Axes,
+    ):
+        x_dim = self.config.simulation.x_dimension
+        observations = self.observations[data_variable].copy()
         # stack all dims that are not in the time dimension
-        if len(obs.dims) == 1:
+        if len(observations.dims) == 1:
             # add a dummy batch dimension
-            obs = obs.expand_dims("batch")
-            obs = obs.assign_coords(batch=[0])
-
-            preds = preds.expand_dims("batch")
-            preds = preds.assign_coords(batch=[0])
+            observations = observations.expand_dims("batch")
+            observations = observations.assign_coords(batch=[0])
 
 
-        stack_dims = [d for d in obs.dims if d not in [x_dim, "chain", "draw"]]
-        obs = obs.stack(i=stack_dims)
-        preds = preds.stack(i=stack_dims)
-        N = len(obs.coords["i"])
+        stack_dims = [d for d in observations.dims if d not in [x_dim]]
+        observations = observations.stack(i=stack_dims)
+        N = len(observations.coords["i"])
             
-        hdi = az.hdi(preds, .95)[f"{prediction_data_variable}"]
-
-        if ax is None:
-            ax = plt.subplot(111)
-        
-        y_mean = preds.mean(dim=("chain", "draw"))
-
-        for i in obs.i:
-            if obs.sel(i=i).isnull().all() and not plot_preds_without_obs:
+        for i in observations.i:
+            obs = observations.sel(i=i)
+            if obs.isnull().all():
                 # skip plotting combinations, where all values are NaN
                 continue
             
-            if mode == "mean+hdi":
-                kwargs_hdi = dict(color="black", alpha=0.1)
-                kwargs_hdi.update(plot_options.get("pred_hdi", {}))
-                ax.fill_between(
-                    preds[x_dim].values, *hdi.sel(i=i).values.T, # type: ignore
-                    **kwargs_hdi
-                )
+            self.plot_single_observation(obs, ax)
 
-                kwargs_mean = dict(color="black", lw=1, alpha=max(1/N, 0.05))
-                kwargs_mean.update(plot_options.get("pred_mean", {}))
-                ax.plot(
-                    preds[x_dim].values, y_mean.sel(i=i).values, 
-                    **kwargs_mean
-                )
-            elif mode == "draws":
-                kwargs_draws = dict(color="black", lw=0.5, alpha=max(1/N, 0.05))
-                kwargs_draws.update(plot_options.get("pred_draws", {}))
-                ys = preds.sel(i=i).stack(sample=("chain", "draw"))
-                ax.plot(
-                    preds[x_dim].values, ys.values, 
-                    **kwargs_draws
-                )
-            else:
-                raise NotImplementedError(
-                    f"Mode '{mode}' not implemented. "+
-                    "Choose 'mean+hdi' or 'draws'."
-                )
-
-            kwargs_obs = dict(marker="o", ls="", ms=3, color="tab:blue")
-            kwargs_obs.update(plot_options.get("obs", {}))
-            ax.plot(
-                obs[x_dim].values, obs.sel(i=i).values, 
-                **kwargs_obs
-            )
-        
-        ax.set_ylabel(data_variable)
         ax.set_xlabel(x_dim)
-
-        return ax
-
-
     
-    @staticmethod
     def plot_predictions(
-            observations,
-            predictions,
-            data_variable: str,
-            x_dim: str, 
-            ax=None, 
-            plot_preds_without_obs=False,
-            subset={},
-            mode: Literal["mean+hdi", "draws"]="mean+hdi",
-            plot_options: Dict={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
-            prediction_data_variable: Optional[str] = None,
-        ):
-        # filter subset coordinates present in data_variable
-        subset = {k: v for k, v in subset.items() if k in observations.coords}
-        
-        if prediction_data_variable is None:
-            prediction_data_variable = data_variable
+        self,
+        idata_group: str,
+        data_variable: str,
+        column: str,
+        ax: Axes, 
+    ):
+        x_dim = self.config.simulation.x_dimension
+        idata_dims = ["chain", "draw"]
 
-        # select subset
-        if prediction_data_variable in predictions:
-            preds = predictions.sel(subset)[prediction_data_variable]
+        idata_dataset = self.idata[idata_group]
+        
+        prediction_data_variable = self.obs_idata_map.get(
+            data_variable, data_variable
+        )
+
+        # this passes the idata group to the callable in the obs_idata_map
+        # and returns it. This is very helpful if the prediction data variable
+        # needs to be transformed prior to plotting 
+        if callable(prediction_data_variable):
+            predictions = prediction_data_variable(idata_dataset)
+            prediction_data_variable = predictions.name
         else:
-            raise KeyError(
-                f"{prediction_data_variable} was not found in the predictions "+
-                "consider specifying the data variable for the predictions "+
-                "explicitly with the option `prediction_data_variable`."
-            )
-        try:
-            obs = observations.sel(subset)[data_variable]
-        except KeyError:
-            obs = preds.copy().mean(dim=("chain", "draw"))
-            obs.values = np.full_like(obs.values, np.nan)
-        
+            predictions = idata_dataset[prediction_data_variable].copy()
+
         # stack all dims that are not in the time dimension
-        if len(obs.dims) == 1:
+        if len([d for d in predictions.dims if d not in idata_dims]) == 1:
             # add a dummy batch dimension
-            obs = obs.expand_dims("batch")
-            obs = obs.assign_coords(batch=[0])
-
-            preds = preds.expand_dims("batch")
-            preds = preds.assign_coords(batch=[0])
+            predictions = predictions.expand_dims("batch")
+            predictions = predictions.assign_coords(batch=[0])
 
 
-        stack_dims = [d for d in obs.dims if d not in [x_dim, "chain", "draw"]]
-        obs = obs.stack(i=stack_dims)
-        preds = preds.stack(i=stack_dims)
-        N = len(obs.coords["i"])
+        stack_dims = [d for d in predictions.dims if d not in [x_dim] + idata_dims]
+        predictions = predictions.stack(i=stack_dims)
+        N = len(predictions.coords["i"])
             
-        hdi = az.hdi(preds, .95)[f"{prediction_data_variable}"]
 
-        if ax is None:
-            ax = plt.subplot(111)
-        
-        y_mean = preds.mean(dim=("chain", "draw"))
 
-        for i in obs.i:
-            if obs.sel(i=i).isnull().all() and not plot_preds_without_obs:
-                # skip plotting combinations, where all values are NaN
+        for i in predictions.i:
+            # if obs.sel(i=i).isnull().all() and not plot_preds_without_obs:
+            #     # skip plotting combinations, where all values are NaN
+            #     continue
+            preds = predictions.sel(i=i)
+
+            if preds.isnull().any() or (preds == np.inf).any():
+                self.inf_preds.append(preds)
                 continue
+
+            self.plot_single_prediction(predictions=preds, ax=ax)
             
-            if mode == "mean+hdi":
-                kwargs_hdi = dict(color="black", alpha=0.1)
-                kwargs_hdi.update(plot_options.get("pred_hdi", {}))
-                ax.fill_between(
-                    preds[x_dim].values, *hdi.sel(i=i).values.T, # type: ignore
-                    **kwargs_hdi
-                )
-
-                kwargs_mean = dict(color="black", lw=1, alpha=max(1/N, 0.05))
-                kwargs_mean.update(plot_options.get("pred_mean", {}))
-                ax.plot(
-                    preds[x_dim].values, y_mean.sel(i=i).values, 
-                    **kwargs_mean
-                )
-            elif mode == "draws":
-                kwargs_draws = dict(color="black", lw=0.5, alpha=max(1/N, 0.05))
-                kwargs_draws.update(plot_options.get("pred_draws", {}))
-                ys = preds.sel(i=i).stack(sample=("chain", "draw"))
-                ax.plot(
-                    preds[x_dim].values, ys.values, 
-                    **kwargs_draws
-                )
-            else:
-                raise NotImplementedError(
-                    f"Mode '{mode}' not implemented. "+
-                    "Choose 'mean+hdi' or 'draws'."
-                )
-
-            kwargs_obs = dict(marker="o", ls="", ms=3, color="tab:blue")
-            kwargs_obs.update(plot_options.get("obs", {}))
-            ax.plot(
-                obs[x_dim].values, obs.sel(i=i).values, 
-                **kwargs_obs
-            )
         
         ax.set_ylabel(data_variable)
         ax.set_xlabel(x_dim)
 
-        return ax
+
+    def plot_single_prediction(self, predictions: xr.DataArray, ax: Axes):
+
+        modes = self.pred_mode.split("+")
+
+        for mode in modes:
+            if mode == "hdi":
+                self.plot_pred_hdi(predictions, ax)
+
+            elif mode == "mean":
+                self.plot_pred_mean(predictions, ax)
+
+            elif mode == "draws":
+                self.plot_pred_draws(predictions, ax)
+
+            else:
+                raise NotImplementedError(
+                    f"Mode '{self.pred_mode}' not implemented. "+
+                    "Choose 'mean', 'hdi', 'draws' or any combination of them, "+
+                    "e.g., 'hdi+mean' (in this case the order determines the "+
+                    "order of plots)"
+                )
+
+    def plot_single_observation(self, observations: xr.DataArray, ax: Axes):
+        x_dim = self.config.simulation.x_dimension
+        ax.plot(
+            observations[x_dim].values, observations.values, 
+            **self.obs_style
+        )
+
+    def plot_pred_hdi(self, predictions: xr.DataArray, ax: Axes):
+        x_dim = self.config.simulation.x_dimension
+        hdi = az.hdi(predictions, self.hdi_interval)[predictions.name]
+        ax.fill_between(
+            predictions[x_dim].values, *hdi.values.T, # type: ignore
+            **self.pred_hdi_style
+        )
+    
+    def plot_pred_mean(self, predictions: xr.DataArray, ax: Axes):
+        x_dim = self.config.simulation.x_dimension
+        y_mean = predictions.mean(dim=("chain", "draw"))
+        ax.plot(
+            predictions[x_dim].values, y_mean.values, 
+            **self.pred_mean_style
+        )
+
+    def plot_pred_draws(self, predictions: xr.DataArray, ax: Axes):
+        x_dim = self.config.simulation.x_dimension
+        ys = predictions.stack(sample=("chain", "draw"))
+        ax.plot(
+            predictions[x_dim].values, ys.values, 
+            **self.pred_draws_style
+        )
+    
+    def save(self, filename):
+        self.figure.savefig(
+            f"{self.config.case_study.output_path}/{filename}"
+        )

@@ -1475,3 +1475,25 @@ class SimulationBase:
             })
     
         return results
+
+    def prior_predictive_checks(self):
+        """OVERWRITE IF NEEDED.
+        Placeholder method. Minimally plots the prior predictions of a 
+        simulation.
+        """
+        from pymob.sim.plot import SimulationPlot
+
+        idata = self.inferer.prior_predictions(n=100)
+
+        simplot = SimulationPlot(
+            observations=self.observations,
+            idata=idata,
+            coordinates=self.dimension_coords,
+            config=self.config,
+            rows=["rabbits", "wolves"],
+            idata_groups=["prior_model_fits"],
+            # pred_mean_style={"color": "tab:red"}
+        )
+
+        simplot.plot_data_variables()
+        simplot.save("prior_predictive.png")
