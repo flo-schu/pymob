@@ -1,4 +1,5 @@
 import os
+import sys
 import click
 import resource
 
@@ -27,6 +28,7 @@ def main(case_study, scenario, package, output, random_seed, n_cores, inference_
     config = Config(cfg)
     config.case_study.name = case_study
     config.case_study.scenario = scenario
+    config.case_study.package = package
     config.import_casestudy_modules()
 
     if n_cores is not None: config.multiprocessing.cores = n_cores
