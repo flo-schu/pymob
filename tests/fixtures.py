@@ -181,7 +181,7 @@ def create_composite_priors_wrong_order():
 
     return theta
 
-def init_lotka_volterra_case_study_hierarchical() -> SimulationBase:
+def init_lotka_volterra_case_study_hierarchical_from_script() -> SimulationBase:
     config = Config()
     config.case_study.name = "lotka_volterra_case_study"
     config.case_study.scenario = "test_hierarchical"
@@ -190,13 +190,14 @@ def init_lotka_volterra_case_study_hierarchical() -> SimulationBase:
     Simulation = config.import_simulation_from_case_study()
     
     sim = Simulation(config)
-    sim.setup()
+    sim.initialize_from_script()
     sim.config.save(force=True)
 
     return sim
 
-def init_lotka_volterra_case_study_hierarchical_presimulated(
+def init_lotka_volterra_case_study_hierarchical_from_settings(
     scenario: Literal[
+        "test_hierarchical",
         "test_hierarchical_presimulated",
         "lotka_volterra_hierarchical_presimulated_v1",
     ] = "test_hierarchical_presimulated"
@@ -207,6 +208,6 @@ def init_lotka_volterra_case_study_hierarchical_presimulated(
     Simulation = config.import_simulation_from_case_study()
     
     sim = Simulation(config)
-    sim.load_presimulated_observations()
+    sim.setup()
 
     return sim

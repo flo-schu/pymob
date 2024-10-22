@@ -18,7 +18,7 @@ if pymoo is not None:
     from pymoo.termination.default import DefaultMultiObjectiveTermination
 
 
-class PymooBackend(InferenceBackend):
+class PymooBackend:
     def __init__(
         self, 
         simulation: SimulationBase,

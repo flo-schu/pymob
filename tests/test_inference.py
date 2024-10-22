@@ -6,7 +6,8 @@ import jax
 
 from tests.fixtures import (
     init_simulation_casestudy_api,
-    init_lotka_volterra_case_study_hierarchical_presimulated
+    init_lotka_volterra_case_study_hierarchical_from_script,
+    init_lotka_volterra_case_study_hierarchical_from_settings
 )
 
 
@@ -33,7 +34,7 @@ def test_inference_evaluation():
 
 
 def test_prior_predictions():
-    sim = init_lotka_volterra_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim = init_lotka_volterra_case_study_hierarchical_from_settings("lotka_volterra_hierarchical_presimulated_v1")
     sim.solver = JaxSolver
 
     sim.config.inference.n_predictions = 30
@@ -58,7 +59,7 @@ def test_prior_predictions():
     )
 
     np.testing.assert_equal(
-        list(idata.prior_trajectories.data_vars.keys()),
+        list(idata.prior_model_fits.data_vars.keys()),
         ["rabbits", "wolves"]
     )
 
@@ -67,8 +68,13 @@ def test_prior_predictions():
         ["rabbits", "wolves"]
     )
 
+    np.testing.assert_array_equal(idata.prior.coords["id"], sim.observations["id"])
+    np.testing.assert_array_equal(idata.prior.coords["rabbit_species"], sim.dimension_coords["rabbit_species"])
+    np.testing.assert_array_equal(idata.prior.coords["experiment"], sim.dimension_coords["experiment"])
+
+
 def test_posterior_predictions_nuts():
-    sim = init_lotka_volterra_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim = init_simulation_casestudy_api("test_scenario")
     sim.solver = JaxSolver
 
     sim.config.inference.n_predictions = 30
@@ -87,7 +93,7 @@ def test_posterior_predictions_nuts():
 
     np.testing.assert_equal(
         list(idata.posterior.data_vars.keys()),
-        ["alpha_species_hyper", "alpha_sigma", "alpha_species", "alpha", "beta"]
+        ["alpha", "beta"]
     )
     
     np.testing.assert_equal(
@@ -96,23 +102,13 @@ def test_posterior_predictions_nuts():
     )
 
     np.testing.assert_equal(
-        list(idata.posterior_trajectories.data_vars.keys()),
+        list(idata.posterior_model_fits.data_vars.keys()),
         ["rabbits", "wolves"]
     )
-
-    np.testing.assert_equal(
-        list(idata.posterior_residuals.data_vars.keys()),
-        ["rabbits", "wolves"]
-    )
-
-    np.testing.assert_array_equal(idata.prior.coords["id"], sim.observations["id"])
-    np.testing.assert_array_equal(idata.prior.coords["rabbit_species"], sim.dimension_coords["rabbit_species"])
-    np.testing.assert_array_equal(idata.prior.coords["experiment"], sim.dimension_coords["experiment"])
-
 
 
 def test_posterior_predictions_svi():
-    sim = init_lotka_volterra_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim = init_simulation_casestudy_api("test_scenario")
     sim.solver = JaxSolver
 
     sim.config.inference_numpyro.svi_iterations = 10
@@ -128,7 +124,7 @@ def test_posterior_predictions_svi():
 
     np.testing.assert_equal(
         list(idata.posterior.data_vars.keys()),
-        ["alpha", "alpha_sigma", "alpha_species", "alpha_species_hyper", "beta"]
+        ["alpha", "beta"]
     )
     
     np.testing.assert_equal(
@@ -137,18 +133,13 @@ def test_posterior_predictions_svi():
     )
 
     np.testing.assert_equal(
-        list(idata.posterior_trajectories.data_vars.keys()),
-        ["rabbits", "wolves"]
-    )
-
-    np.testing.assert_equal(
-        list(idata.posterior_residuals.data_vars.keys()),
+        list(idata.posterior_model_fits.data_vars.keys()),
         ["rabbits", "wolves"]
     )
 
 
 def test_model_check():
-    sim = init_lotka_volterra_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim = init_lotka_volterra_case_study_hierarchical_from_settings("lotka_volterra_hierarchical_presimulated_v1")
     sim = init_simulation_casestudy_api()
     sim.config.inference_numpyro.gaussian_base_distribution = True
     sim.config.jaxsolver.throw_exception = False
@@ -163,7 +154,7 @@ def test_model_check():
 
 
 def test_vector_field():
-    sim = init_lotka_volterra_case_study_hierarchical_presimulated("lotka_volterra_hierarchical_presimulated_v1")
+    sim = init_lotka_volterra_case_study_hierarchical_from_settings("lotka_volterra_hierarchical_presimulated_v1")
     sim = init_simulation_casestudy_api()
     sim.config.inference_numpyro.gaussian_base_distribution = True
     sim.config.jaxsolver.throw_exception = False

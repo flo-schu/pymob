@@ -34,6 +34,12 @@ class ScipyBackend(InferenceBackend):
     def parse_probabilistic_model(self):
         pass
 
+    def posterior_predictions(self):
+        pass
+
+    def prior_predictions(self):
+        pass
+
     def sample_distribution(self):
         prior_samples = {}
 

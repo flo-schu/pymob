@@ -258,10 +258,12 @@ class NumpyroBackend(InferenceBackend):
         data_vars = self.config.data_structure.observed_data_variables + self.extra_vars
 
         if len(data_vars) == 0:
-            raise KeyError(
-                "No observed data_variables were found. Make sure you have marked"+
+            warnings.warn(
+                "No observed data_variables were found. Is this correct? "+
+                "Make sure you have marked "+
                 "All relevant data variables as observed before running inference"+
-                "`sim.config.data_variables.MY_DATA_VAR.observed = True`"
+                "`sim.config.data_variables.MY_DATA_VAR.observed = True`",
+                category=UserWarning
             )
 
         masks = {}
@@ -919,6 +921,9 @@ class NumpyroBackend(InferenceBackend):
         # as for the the posterior samples
         predictions = predictive(key)
 
+        if self.user_defined_probability_model is not None:
+            return predictions
+
         observations = {}
         for data_var in self.config.data_structure.observed_data_variables:
             if self.error_model[data_var].obs_transform_func is not None:
@@ -1156,6 +1161,7 @@ class NumpyroBackend(InferenceBackend):
     def nuts_posterior(self, mcmc, model, key, obs):
         samples = jax.device_get(mcmc.get_samples(group_by_chain=True))
 
+        priors = list(self.prior.keys())
         data_variables = self.config.data_structure.data_variables
         
         log_likelihood = self.calculate_log_likelihood(
@@ -1167,7 +1173,7 @@ class NumpyroBackend(InferenceBackend):
         )
 
         return self.to_arviz_idata(
-            posterior={k: samples[k] for k in list(self.prior.keys()) + data_variables},
+            posterior={k: v for k, v in samples.items() if k in priors + data_variables},
             posterior_predictive=posterior_predictive,
             log_likelihood=log_likelihood,
             observed_data=obs,

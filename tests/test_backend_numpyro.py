@@ -8,7 +8,7 @@ from pymob.sim.parameters import Param
 
 from tests.fixtures import (
     init_simulation_casestudy_api, 
-    init_lotka_volterra_case_study_hierarchical_presimulated,
+    init_lotka_volterra_case_study_hierarchical_from_settings,
 )
 
 def test_diffrax_exception():
@@ -42,6 +42,9 @@ def test_diffrax_exception():
 
 def test_convergence_user_defined_probability_model():
     sim = init_simulation_casestudy_api("test_scenario")
+
+    sim.config.data_structure.wolves.observed = False
+    sim.config.data_structure.rabbits.observed = False
 
     sim.config.inference_numpyro.kernel = "nuts"
     sim.config.inference_numpyro.user_defined_probability_model = "parameter_only_model"
@@ -171,29 +174,6 @@ def test_convergence_map_kernel():
     )
 
 
-
-def test_convergence_nuts_kernel_replicated():
-    pytest.skip()
-    # CURRENTLY UNUSABLE SEE https://github.com/flo-schu/pymob/issues/6
-    sim = init_simulation_casestudy_api("test_scenario_replicated")
-
-    sim.config.set("inference.numpyro", "kernel", "nuts")
-    sim.set_inferer(backend="numpyro")
-    sim.inferer.run()
-    
-    posterior_mean = sim.inferer.idata.posterior.mean(("chain", "draw"))[sim.model_parameter_names]
-    true_parameters = sim.model_parameter_dict
-    
-    # tests if true parameters are close to recovered parameters from simulated
-    # data
-    np.testing.assert_allclose(
-        posterior_mean.to_dataarray().values,
-        np.array(list(true_parameters.values())),
-        rtol=1e-2, atol=1e-3
-    )
-
-    
-
 def test_convergence_sa_kernel():
     sim = init_simulation_casestudy_api("test_scenario")
 
@@ -229,8 +209,8 @@ def test_convergence_sa_kernel():
         )
 
 
-def test_hierarchical_lotka_volterra():
-    sim = init_lotka_volterra_case_study_hierarchical_presimulated()
+def test_convergence_hierarchical_lotka_volterra():
+    sim = init_lotka_volterra_case_study_hierarchical_from_settings()
 
     sim.config.model_parameters.alpha_species_hyper = Param(
         prior="halfnorm(scale=5)", dims=('rabbit_species',) , # type: ignore
