@@ -13,6 +13,7 @@ import xarray as xr
 import arviz as az
 from matplotlib import pyplot as plt
 import sympy
+from arviz.data.inference_data import SUPPORTED_GROUPS_ALL
 
 from pymob.simulation import SimulationBase
 from pymob.sim.parameters import Expression, NumericArray
@@ -33,6 +34,16 @@ from numpyro import infer
 import jax
 import jax.numpy as jnp
 import sympy2jax
+
+SUPPORTED_GROUPS_ALL.extend([
+    "prior_model_fits", 
+    "prior_residuals",
+    "posterior_model_fits",
+    "posterior_residuals",
+    "unconstrained_prior",
+    "unconstrained_posterior"
+])
+
 
 sympy2jax_extra_funcs = {
     sympy.Array: jnp.array,
@@ -1002,7 +1013,11 @@ class NumpyroBackend(InferenceBackend):
         prior_keys = self.simulation.model_parameter_dict.keys()
         
         prior_ = {k: v for k, v in prior.items() if k in prior_keys}
-        prior_trajectories_ = {
+        unconstrained_prior_ = {
+            k: v for k, v in prior.items() 
+            if k in [f"{k}_normal_base" for k in prior_keys]
+        }
+        prior_model_fits_ = {
             k: v for k, v in prior.items() if k in data_variables
         }
         prior_residuals_ = {
@@ -1017,7 +1032,11 @@ class NumpyroBackend(InferenceBackend):
         }
 
         posterior_ = {k: v for k, v in posterior.items() if k in prior_keys}
-        posterior_trajectories_ = {
+        unconstrained_posterior_ = {
+            k: v for k, v in posterior.items() 
+            if k in [f"{k}_normal_base" for k in prior_keys]
+        }
+        posterior_model_fits_ = {
             k: v for k, v in posterior.items() if k in data_variables
         }
         posterior_residuals_ = {
@@ -1034,13 +1053,13 @@ class NumpyroBackend(InferenceBackend):
         likelihood_ = {k: log_likelihood[f"{k}_obs"] for k in obs_data_variables}
         observed_data_ = {k: observed_data[k] for k in obs_data_variables}
 
-        if len(prior_) > 0 or len(posterior_) > 0:
-            if len(prior_keys) != len(prior_):
-                miss_keys = [k for k in prior_keys if k not in prior]
-            
-            elif len(prior_keys) != len(posterior_):
-                miss_keys = [k for k in prior_keys if k not in posterior]
+        if len(prior_) > 0 and len(prior_keys) != len(prior_):
+            miss_keys = [k for k in prior_keys if k not in prior]
+        else:
+            miss_keys = []
 
+        if len(posterior_) > 0 and len(prior_keys) != len(posterior_):
+            miss_keys = [k for k in prior_keys if k not in posterior]
         else:
             miss_keys = []
 
@@ -1066,10 +1085,12 @@ class NumpyroBackend(InferenceBackend):
         )
 
         idata.add_groups(group_dict={
-                "prior_trajectories": prior_trajectories_,
-                "posterior_trajectories": posterior_trajectories_,
+                "prior_model_fits": prior_model_fits_,
+                "posterior_model_fits": posterior_model_fits_,
                 "prior_residuals": prior_residuals_,
-                "posterior_residuals": posterior_residuals_
+                "posterior_residuals": posterior_residuals_,
+                "unconstrained_prior": unconstrained_prior_,
+                "unconstrained_posterior": unconstrained_posterior_,
             }, 
             dims=data_structure,
             coords=posterior_coords

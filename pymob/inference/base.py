@@ -215,9 +215,14 @@ class InferenceBackend(ABC):
         data_structure_loglik = {f"{dv}_obs": dims for dv, dims in data_structure.items()}
         data_structure_residuals = {f"{dv}_res": dims for dv, dims in data_structure.items()}
         parameter_dims = {k: list(v) for k, v in self.simulation.parameter_dims.items() if len(v) > 0}
+        parameter_dims_unconstrained = {
+            f"{k}_normal_base": list(v) for k, v 
+            in self.simulation.parameter_dims.items() if len(v) > 0
+        }
         data_structure.update(data_structure_loglik)
         data_structure.update(data_structure_residuals)
         data_structure.update(parameter_dims)
+        data_structure.update(parameter_dims_unconstrained)
         return data_structure
     
     @property
