@@ -965,7 +965,7 @@ class Config(BaseModel):
                     "Config 'config.case_study.modules = [...]'"
                 )
 
-    def import_simulation_from_case_study(self) -> "SimulationBase":
+    def import_simulation_from_case_study(self):
         try:
             Simulation = getattr(self._modules["sim"], self.case_study.simulation)
         except:
