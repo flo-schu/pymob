@@ -494,8 +494,8 @@ class InferenceBackend(ABC):
         else:
             plot(self.simulation)
 
+    @staticmethod
     def plot_predictions(
-            self, 
             observations,
             predictions,
             data_variable: str,
@@ -507,11 +507,16 @@ class InferenceBackend(ABC):
             plot_options: Dict={"obs": {}, "pred_mean": {}, "pred_draws": {}, "pred_hdi": {}},
             prediction_data_variable: Optional[str] = None,
         ):
+        warnings.warn(
+            "Use of 'sim.inferer.plot_predictions' is deprecated. Use the "+
+            "Plotting backend: pymob.sim.plot.SimulationPlot",
+            category=DeprecationWarning
+        )
         # filter subset coordinates present in data_variable
         subset = {k: v for k, v in subset.items() if k in observations.coords}
         
         if prediction_data_variable is None:
-            prediction_data_variable = data_variable + "_obs"
+            prediction_data_variable = data_variable
 
         # select subset
         if prediction_data_variable in predictions:
@@ -596,12 +601,16 @@ class InferenceBackend(ABC):
         return ax
 
     def plot_diagnostics(self):
+        """
+        TODO: Should be outsourced to pymob.sim.plot
+        """
         if hasattr(self.idata, "posterior"):
             axes = az.plot_trace(
                 self.idata,
                 var_names=self.simulation.model_parameter_names
             )
             fig = plt.gcf()
+            fig.tight_layout()
             fig.savefig(f"{self.simulation.output_path}/trace.png")
             axes = az.plot_pair(
                 self.idata, 
@@ -609,4 +618,5 @@ class InferenceBackend(ABC):
                 var_names=self.simulation.model_parameter_names
             )
             fig = plt.gcf()
+            fig.tight_layout()
             fig.savefig(f"{self.simulation.output_path}/pairs_posterior.png")
