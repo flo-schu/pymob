@@ -906,11 +906,17 @@ class NumpyroBackend(InferenceBackend):
         data_vars = self.config.data_structure.observed_data_variables
         predictive = Predictive(
             model=partial(model, make_predictions=True),
-            posterior_samples=posterior_samples, 
+            # use all samples that were not generated in the likelihood function
+            posterior_samples={
+                k: v for k, v in posterior_samples.items() if k not in 
+                [f"{k}_obs" for k in data_vars] + [f"{k}_res" for k in data_vars]
+            },
             return_sites=[f"{k}_obs" for k in data_vars],
             num_samples=n, 
             batch_ndims=2
         )
+        # using the same key, to generate predictions the same way
+        # as for the the posterior samples
         predictions = predictive(key)
 
         observations = {}
@@ -953,7 +959,10 @@ class NumpyroBackend(InferenceBackend):
 
 
     @lru_cache
-    def prior_predictions(self, n=100, seed=1):
+    def prior_predictions(self, n=None, seed=1):
+        if n is None:
+            n = self.n_predictions
+            
         key = jax.random.PRNGKey(seed)
         obs, masks = self.observation_parser()
 
@@ -1113,27 +1122,10 @@ class NumpyroBackend(InferenceBackend):
 
 
     def svi_posterior(self, svi_result, model, guide, key, n=1000):
-        key, *subkeys = jax.random.split(key, 4)
-        keys = iter(subkeys)
         obs, masks = self.observation_parser()
 
-        # # prepare model without obs, so obs are sampled from the posterior
-        # model_ = partial(
-        #     model, 
-        #     solver=self.evaluator, 
-        #     **self.preprocessing(obs=obs, masks=masks,)
-        # )    
-
-        # params = svi_result.params
-
-        # # this gets the parameters of the normal_base_distributions
-        # predictive = Predictive(
-        #     guide, params=params, 
-        #     num_samples=n, batch_ndims=2
-        # )
-        # posterior_samples = predictive(next(keys))
         posterior_samples = self.posterior_draws_from_svi(
-            guide=guide, svi_result=svi_result, n=n, key=next(keys)
+            guide=guide, svi_result=svi_result, n=n, key=key
         )
 
         # this gets all the parameters and predictions
@@ -1141,14 +1133,14 @@ class NumpyroBackend(InferenceBackend):
             model, posterior_samples, #params=params, 
             num_samples=n, batch_ndims=2
         )
-        posterior = predictive(next(keys))
+        posterior = predictive(key)
 
         log_likelihood = self.calculate_log_likelihood(
             model=model, posterior_samples=posterior_samples, 
         )
 
         obs_predictions = self.predict_observations(
-            model=model, posterior_samples=posterior, key=next(keys), n=n
+            model=model, posterior_samples=posterior, key=key, n=n
         )
         
         return self.to_arviz_idata(
