@@ -1,9 +1,12 @@
 import numpy as np
 import pytest
+from matplotlib import pyplot as plt
+
 from tests.fixtures import (
     init_simulation_casestudy_api,
     init_guts_casestudy_constant_exposure,
     init_guts_casestudy_variable_exposure,
+    init_bufferguts_leo_casestudy,
     init_bufferguts_casestudy,
 )
 
@@ -172,6 +175,20 @@ def test_bufferguts_hybrid_solution():
     axes = sim._plot.plot_multiexposure(sol_symbolic, vars=["exposure", "B", "D", "H", "S"], axes=axes, color="tab:red", linestyle="--", label_prefix="exact")
     fig = axes[0].figure
     fig.savefig(f"{sim.output_path}/solution_comparison.png")
+
+def test_bufferguts_leo():
+    sim = init_bufferguts_leo_casestudy()
+    sim.initialize(["Beta-Cyfluthrin_M-051896_acute_oral.xlsx", "Exposure", "BufferGUTS_SD"])
+    sim.setup_numpyro_inferer()
+
+    e = sim.dispatch({})
+    e()
+    e.results
+
+    sim.inferer.run()
+    sim.inferer.store_results()
+    fig = sim.plot_posterior_predictions()
+    fig.savefig(f"{sim.output_path}/posterior_model_fits.png")
 
 
 if __name__ == "__main__":
