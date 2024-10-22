@@ -274,7 +274,7 @@ def test_convergence_hierarchical_lotka_volterra():
 
 def test_hierarchical_lotka_volterra_user_defined_prob_model():
     pytest.skip()    
-    sim = init_lotka_volterra_case_study_hierarchical_presimulated()
+    sim = init_lotka_volterra_case_study_hierarchical_from_settings()
     sim.config.inference_numpyro.user_defined_probability_model = "hierarchical_lotka_volterra"
 
     sim.solver = JaxSolver
