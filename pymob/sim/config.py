@@ -827,7 +827,7 @@ class Config(BaseModel):
     def input_file_paths(self) -> list:
         paths_input_files = []
         for file in self.simulation.input_files:
-            fp = scenario_file(file, self.case_study.name, self.case_study.scenario)
+            fp = scenario_file(file, self.case_study.name, self.case_study.scenario, pkg_dir=self.case_study.package)
             paths_input_files.append(fp)
 
 
@@ -965,7 +965,7 @@ class Config(BaseModel):
                     "Config 'config.case_study.modules = [...]'"
                 )
 
-    def import_simulation_from_case_study(self) -> Callable:
+    def import_simulation_from_case_study(self) -> "SimulationBase":
         try:
             Simulation = getattr(self._modules["sim"], self.case_study.simulation)
         except:
