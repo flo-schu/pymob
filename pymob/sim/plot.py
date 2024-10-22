@@ -69,7 +69,7 @@ class SimulationPlot:
         columns: Optional[str|Dict[str,List[str|int]]] = None,
         obs_idata_map: Dict[str,str|Callable] = {},
         idata_groups: Optional[ALLOWED_IDATA_GROUPS] = None,
-        pred_mode: Literal["draws", "mean+hdi"] = "mean+hdi",
+        pred_mode: str = "mean+hdi",
         hdi_interval: float = 0.95,
         obs_style: Dict = {},
         pred_mean_style: Dict = {},
@@ -122,7 +122,7 @@ class SimulationPlot:
         self.pred_draws_style.update(pred_draws_style)
         
         self.create_figure()
-        self.inf_preds = []
+        self.inf_preds: Dict[str: xr.DataArray] = {}
 
 
     def create_figure(self):
@@ -142,6 +142,27 @@ class SimulationPlot:
             for j, col in enumerate(self.columns):
                 self.axes_map[row][col] = axes[i,j]
 
+    def clean_idata_group(self, idata_group: str):
+        # this mask is rigid. It will eliminate each draw where any of the 
+        # variables contained an inf value
+        group = self.idata[idata_group]
+        
+        stack_dims = [d for d in group.dims if d not in ["chain", "draw"]]
+
+        mask = (group == np.inf).sum(stack_dims).to_array().sum("variable") > 0
+        n_inf = int(mask.sum())
+        if n_inf > 0:
+            warnings.warn(
+                f"There were {n_inf} NaN or Inf values in the idata group "+
+                f"'{idata_group}'. See "+
+                "Simulation.inf_preds for a mask with the coordinates.",
+                category=UserWarning
+            )
+
+        self.inf_preds.update({idata_group: mask})
+
+        return group.where(~mask, drop=True)
+
     def plot_data_variables(self):
         for i, row in enumerate(self.rows):
             for j, col in enumerate(self.columns):
@@ -152,16 +173,6 @@ class SimulationPlot:
 
         self.figure.tight_layout()
         
-        # warn about infinity prior_predictions
-        n_inf = len(self.inf_preds)
-        if n_inf > 0:
-            warnings.warn(
-                f"There were {n_inf} NaN or Inf values in the predictions. See "+
-                "Simulation.inf_preds for a list of values.",
-                category=UserWarning
-            )
-
-
     def plot_observations(
         self,
         data_variable: str,
@@ -201,8 +212,9 @@ class SimulationPlot:
         x_dim = self.config.simulation.x_dimension
         idata_dims = ["chain", "draw"]
 
-        idata_dataset = self.idata[idata_group]
-        
+        # get idata dataset and remove inf draws from the prior/posterior
+        idata_dataset = self.clean_idata_group(idata_group)
+
         prediction_data_variable = self.obs_idata_map.get(
             data_variable, data_variable
         )
@@ -234,10 +246,6 @@ class SimulationPlot:
             #     # skip plotting combinations, where all values are NaN
             #     continue
             preds = predictions.sel(i=i)
-
-            if preds.isnull().any() or (preds == np.inf).any():
-                self.inf_preds.append(preds)
-                continue
 
             self.plot_single_prediction(predictions=preds, ax=ax)
             

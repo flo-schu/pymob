@@ -28,6 +28,7 @@ from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
 from pymob.sim.config import Config, ParameterDict, DataVariable, Param
+from pymob.sim.plot import SimulationPlot
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -96,6 +97,7 @@ def update_parameters_dict(config, x, parnames):
 
 
 class SimulationBase:
+    SimulationPlot = SimulationPlot
     model: Optional[Callable] = None
     solver: Optional[Callable] = None
     _mod: ModuleType
@@ -1481,19 +1483,33 @@ class SimulationBase:
         Placeholder method. Minimally plots the prior predictions of a 
         simulation.
         """
-        from pymob.sim.plot import SimulationPlot
 
-        idata = self.inferer.prior_predictions(n=100)
+        idata = self.inferer.prior_predictions(n=10)
 
-        simplot = SimulationPlot(
+        simplot = self.SimulationPlot(
             observations=self.observations,
             idata=idata,
             coordinates=self.dimension_coords,
             config=self.config,
-            rows=["rabbits", "wolves"],
-            idata_groups=["prior_model_fits"],
-            # pred_mean_style={"color": "tab:red"}
-        )
+            idata_groups=["prior_predictive"],
+        )   
 
         simplot.plot_data_variables()
         simplot.save("prior_predictive.png")
+
+    def posterior_predictive_checks(self):
+        """OVERWRITE IF NEEDED.
+        Placeholder method. Minimally plots the posterior predictions of a 
+        simulation.
+        """
+
+        simplot = self.SimulationPlot(
+            observations=self.observations,
+            idata=self.inferer.idata,
+            coordinates=self.dimension_coords,
+            config=self.config,
+            idata_groups=["posterior_predictive"],
+        )
+
+        simplot.plot_data_variables()
+        simplot.save("posterior_predictive.png")
