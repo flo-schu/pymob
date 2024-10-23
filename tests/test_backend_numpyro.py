@@ -301,16 +301,11 @@ def test_hierarchical_lotka_volterra_user_defined_prob_model():
 
 
 def test_commandline_api_infer():
-    # TODO: This will run, once methods are available for 
-    # - prior_predictive_checks, 
-    # - store_results, 
-    # - posterior_predictive_checks 
-    pytest.skip()
     from pymob.infer import main
     runner = CliRunner()
     
-    args = "--case_study=lotka_volterra_case_study "\
-        "--scenario=test_scenario "\
+    args = "--case_study=lotka_volterra_case_study "+\
+        "--scenario=test_scenario "+\
         "--inference_backend=numpyro"
     result = runner.invoke(main, args.split(" "))
 
@@ -319,11 +314,4 @@ def test_commandline_api_infer():
 
 
 if __name__ == "__main__":
-    import sys
-    import os
-    sys.path.append(os.getcwd())
-    # test_hierarchical_lotka_volterra_user_defined_prob_model()
-    # test_hierarchical_lotka_volterra()
-    # test_user_defined_probability_model()
-    # test_prior_parsing()
-    # test_convergence_nuts_kernel_jaxsolver()
+    pass
