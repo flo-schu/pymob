@@ -251,6 +251,17 @@ class SimulationBase:
 
         self.create_data_scaler()
         
+    def save_observations(self, filename="observations.nc", force=False):
+        fp = os.path.join(self.data_path, filename)
+        if filename not in self.config.case_study.observations:
+            self.config.case_study.observations.append(filename)
+
+        if not os.path.exists(fp) or force:
+            self.observations.to_netcdf(fp)
+        else:
+            if input(f"Observations {fp} exist. Overwrite? [y/N]") == "y":
+                self.observations.to_netcdf(fp)
+
 
     @property
     def coordinates(self):
@@ -1172,8 +1183,56 @@ class SimulationBase:
         """
         initializes the simulation. Performs any extra work, not done in 
         parameterize or set_coordinates. 
+
+        Overwrite in a case study simulation if special tasks are necessary
         """
-        pass
+        warnings.warn(
+            "Using default initialize method, "+
+            "(load observations, define 'y0', define 'x_in'). "+
+            "This may be insufficient for more complex simulations.",
+            category=UserWarning
+        )
+
+        obs_path = os.path.join(self.data_path, self.config.case_study.observations)
+        if obs_path is not None:
+            if os.path.exists(obs_path):
+                self.observations = xr.load_dataset(obs_path)
+            else:
+                raise FileNotFoundError(
+                    "Observations could not be found under the following path: "+
+                    f"'{obs_path}'. Make sure it exists "+
+                    "('sim.config.case_study.observations')"
+                )
+        else:
+            warnings.warn(
+                "'sim.config.case_study.observations' is undefined",
+                category=UserWarning
+            )
+
+        if self.config.simulation.y0 is not None:
+            self.model_parameters["y0"] = self.parse_input(
+                input="y0", 
+                reference_data=self.observations,
+                drop_dims=[self.config.simulation.x_dimension]
+            )
+        else:
+            warnings.warn(
+                "'sim.config.simulation.y0' is undefined.",
+                category=UserWarning
+            )
+
+        if self.config.simulation.y0 is not None:
+            self.model_parameters["x_in"] = self.parse_input(
+                input="x_in", 
+                reference_data=self.observations,
+                drop_dims=[]
+            )
+        else:
+            warnings.warn(
+                "'sim.config.simulation.y0' is undefined.",
+                category=UserWarning
+            )
+
     
     def dump(self, results):
         pass
@@ -1484,7 +1543,7 @@ class SimulationBase:
         simulation.
         """
 
-        idata = self.inferer.prior_predictions(n=10)
+        idata = self.inferer.prior_predictions()
 
         simplot = self.SimulationPlot(
             observations=self.observations,
