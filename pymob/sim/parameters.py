@@ -113,6 +113,11 @@ class RandomVariable(BaseModel):
         else:
             obs = str(self.obs).replace(" ","")
             parameters = parameters + f",obs={obs}"
+        if self.obs_inv is None:
+            pass
+        else:
+            obs_inv = str(self.obs_inv).replace(" ","")
+            parameters = parameters + f",obs_inv={obs_inv}"
         return f"{distribution}({parameters})"
 
     @field_validator("distribution", mode="after")

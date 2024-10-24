@@ -231,8 +231,8 @@ def test_convergence_hierarchical_lotka_volterra():
     # this reorders the parameters, beginning with alpha_species_hyper
     sim.config.model_parameters.reorder(["alpha_species_hyper", "alpha_sigma"])
 
-    sim.config.error_model.rabbits = "norm(loc=0, scale=1, obs=(obs-rabbits)/jnp.sqrt(rabbits+1e-6))"
-    sim.config.error_model.wolves = "norm(loc=0, scale=1, obs=(obs-wolves)/jnp.sqrt(wolves+1e-6))"
+    sim.config.error_model.rabbits = "norm(loc=0, scale=1, obs=(obs-rabbits)/jnp.sqrt(rabbits+1e-6),obs_inv=res*jnp.sqrt(rabbits+1e-6)+rabbits)"
+    sim.config.error_model.wolves = "norm(loc=0, scale=1, obs=(obs-wolves)/jnp.sqrt(wolves+1e-6),obs_inv=res*jnp.sqrt(wolves+1e-6)+wolves)"
 
 
     # using SVI, because it is much faster than NUTS. 
