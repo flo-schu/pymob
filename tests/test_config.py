@@ -16,7 +16,7 @@ def test_simulation():
     sim = SimulationBase()
     sim.config.case_study.name = "lotka_volterra_case_study"
     sim.config.case_study.scenario = "test_scenario_scripting_api"
-    sim.config.case_study.observations = ["simulated_data.nc"]
+    sim.config.case_study.observations = "simulated_data.nc"
     sim.config.case_study.data_path = None
 
     # load data before specifying dims
@@ -65,6 +65,7 @@ def test_simulation():
         fp=f"{scenario}/test_settings.cfg",
         force=True, 
     )
+    sim.save_observations(filename=sim.config.case_study.observations, force=True)
 
 def test_load_generated_settings():
     sim = SimulationBase(f"{scenario}/test_settings.cfg")

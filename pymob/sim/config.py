@@ -337,7 +337,7 @@ class Casestudy(BaseModel):
     output: Optional[str] = None
     data: Optional[str] = None
 
-    observations: OptionListStr = []
+    observations: Optional[str] = None
     
     logging: str = "DEBUG"
     logfile: Optional[str] = None
@@ -590,7 +590,7 @@ class Inference(BaseModel):
     backend: Optional[str] = None
     extra_vars: OptionListStr = []
     plot: Optional[str|Callable] = None
-    n_predictions: Annotated[int, to_str] = 1
+    n_predictions: Annotated[int, to_str] = 100
 
 class Multiprocessing(BaseModel):
     _name = "multiprocessing"
@@ -831,12 +831,12 @@ class Config(BaseModel):
             paths_input_files.append(fp)
 
 
-        for file in self.case_study.observations:
-            if not os.path.isabs(file):
-                fp = os.path.join(self.case_study.data_path, file)
-            else:
-                fp = file
-            paths_input_files.append(fp)
+        file = self.case_study.observations
+        if not os.path.isabs(file):
+            fp = os.path.join(self.case_study.data_path, file)
+        else:
+            fp = file
+        paths_input_files.append(fp)
 
         return paths_input_files
 
