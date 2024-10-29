@@ -926,29 +926,37 @@ class NumpyroBackend(InferenceBackend):
 
         observations = {}
         for data_var in self.config.data_structure.observed_data_variables:
-            if self.error_model[data_var].obs_transform_func is not None:
-                transform_inv = self.error_model[data_var].obs_transform_func_inv
-                if transform_inv is None:
-                    warnings.warn(
-                        "Cannot make predictions of observations from normalized "+
-                        "observations (residuals). Please provide an inverse observation "+
-                        f"transform: e.g. `sim.config.error_model['{data_var}'].obs_inv = ...`."+
-                        "residuals are denoted as 'res'. See Lotka-volterra case "+
-                        "study for an example. "
-                    )
-                    # this will fetch the residuals (they are called _obs)
-                    obs = predictions[f"{data_var}_obs"]
-                else:
-                    obs = transform_inv(
-                        res=predictions[f"{data_var}_obs"],
-                        **{data_var: posterior_samples[data_var]}
-                    )
-                
-                # get the deterministic residuals res=y_obs-y_det regardless
-                res = posterior_samples[f"{data_var}_res"] 
-                observations.update({f"{data_var}_res": res})
-            else:
+            if data_var not in self.error_model:
+                # catches the case where a user defined error model was provided
+                # and error models were not defined.
+                # TODO: Use trace handler to obtain the different components
+                #       prior, likelihood and deterministic transforms to populate
+                #       missing components
                 obs = predictions[f"{data_var}_obs"]
+            else:
+                if self.error_model[data_var].obs_transform_func is not None:
+                    transform_inv = self.error_model[data_var].obs_transform_func_inv
+                    if transform_inv is None:
+                        warnings.warn(
+                            "Cannot make predictions of observations from normalized "+
+                            "observations (residuals). Please provide an inverse observation "+
+                            f"transform: e.g. `sim.config.error_model['{data_var}'].obs_inv = ...`."+
+                            "residuals are denoted as 'res'. See Lotka-volterra case "+
+                            "study for an example. "
+                        )
+                        # this will fetch the residuals (they are called _obs)
+                        obs = predictions[f"{data_var}_obs"]
+                    else:
+                        obs = transform_inv(
+                            res=predictions[f"{data_var}_obs"],
+                            **{data_var: posterior_samples[data_var]}
+                        )
+                    
+                    # get the deterministic residuals res=y_obs-y_det regardless
+                    res = posterior_samples[f"{data_var}_res"] 
+                    observations.update({f"{data_var}_res": res})
+                else:
+                    obs = predictions[f"{data_var}_obs"]
 
             observations.update({f"{data_var}_obs": obs})
 
