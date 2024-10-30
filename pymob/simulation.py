@@ -1576,6 +1576,13 @@ class SimulationBase:
 
         idata = self.inferer.prior_predictions()
 
+        checks = {}
+        flag = self.inferer.check_prior_for_nans(idata=idata)
+        checks.update({"NaN values in prior draws": flag})
+
+        if not all(checks.values()):
+            raise ValueError("Not all checks passed.")
+
         simplot = self.SimulationPlot(
             observations=self.observations,
             idata=idata,

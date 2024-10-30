@@ -620,3 +620,20 @@ class InferenceBackend(ABC):
             fig = plt.gcf()
             fig.tight_layout()
             fig.savefig(f"{self.simulation.output_path}/pairs_posterior.png")
+
+    def check_prior_for_nans(self, idata):
+        nans = idata.prior.isnull().sum().to_array()
+        if np.any(nans > 0):
+            prior_names = nans.where(nans > 0, drop=True)["variable"].values
+            warnings.warn(
+                f"NaNs occurred in the prior draws of {list(prior_names)}. "+
+                "Make sure your priors are correctly specified. "+
+                "I.e. prior parameters are inside the support of the distribution "+
+                "(negative values, out of bounds values), this is especially "+
+                "relevant if hyper-priors are used. "+
+                f"Prior: {self.prior}",
+                category=UserWarning
+            )
+            return False
+        else:
+            return True

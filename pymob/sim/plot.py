@@ -84,7 +84,7 @@ class SimulationPlot:
         self.config: Config = config
 
         if rows is None:
-            self.rows = self.config.data_structure.data_variables
+            self.rows = self.config.data_structure.observed_data_variables
         else:
             self.rows = rows
 
