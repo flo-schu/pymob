@@ -73,12 +73,12 @@ def ExponentialTrans(rate):
     )
 
 # Uniform Transformation
-def UniformTrans(a, b):
+def UniformTrans(low, high):
     return TransformedDistribution(
         base_distribution=Normal(0, 1),
         transforms=[
             transforms.SigmoidTransform(),
-            transforms.AffineTransform(loc=a, scale=b - a)
+            transforms.AffineTransform(loc=low, scale=high - low)
         ]
     )
 
