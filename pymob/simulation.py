@@ -253,8 +253,8 @@ class SimulationBase:
         
     def save_observations(self, filename="observations.nc", force=False):
         fp = os.path.join(self.data_path, filename)
-        if filename not in self.config.case_study.observations:
-            self.config.case_study.observations.append(filename)
+        if filename != self.config.case_study.observations:
+            self.config.case_study.observations = filename
 
         if not os.path.exists(fp) or force:
             self.observations.to_netcdf(fp)
