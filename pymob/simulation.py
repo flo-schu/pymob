@@ -4,7 +4,7 @@ import copy
 import inspect
 import warnings
 import importlib
-from typing import Optional, List, Union, Literal, Any, Tuple
+from typing import Optional, List, Union, Literal, Any, Tuple, Sequence
 from types import ModuleType
 import configparser
 from functools import partial
@@ -416,7 +416,10 @@ class SimulationBase:
         return n_ode_states
         
     @staticmethod
-    def validate_model_input(model_input) -> Dict[str, OrderedDict]:
+    def validate_model_input(model_input) -> OrderedDict[str, Sequence[float]]:
+        """Returns a copy of the model input. This means, the original model input
+        will not be overwritten by any action.
+        """
         if isinstance(model_input, xr.Dataset):
             model_input = {
                 k: dv.values for k, dv in model_input.data_vars.items()
@@ -589,28 +592,56 @@ class SimulationBase:
 
         # return evaluator
 
-    def dispatch(self, theta, y0=None, x_in=None):
-        """Dispatch an evaluator, which will compute the model at parameters
-        (theta). Evaluators are advantageous, because they are easier serialized
+    def dispatch(
+            self, 
+            theta: Dict[str, float|Sequence[float]] = {}, 
+            y0: Dict[str, float|Sequence[float]] = {}, 
+            x_in: Dict[str, float|Sequence[float]] = {}, 
+        ):
+        """Dispatch an evaluator, which will compute the model for the parameters
+        (theta), starting values (y0) and model input (x_in). 
+        
+        Evaluators are advantageous, because they are easier serialized
         than the whole simulation object. Comparison can then happen back in 
         the simulation.
 
-        Theoretically, this could also be used to constrain coordinates etc, 
-        before evaluating.  
+        In addition, evaluators can be dispatched and seeded and evaluated in
+        parallel, because they are decoupled from the simulation object
+
+        Parameters
+        ----------
+
+        theta : Dict[float|Sequence[float]]
+            Dictionary of model parameters that should be changed for dispatch.
+            Unspecified model parameters will assume the default values, 
+            specified under config.model_parameters.NAME.value
+
+        y0 : Dict[float|Sequence[float]]
+            Dictionary of initial values that should be changed for dispatch.
+        
+        x_in : Dict[float|Sequence[float]]
+            Dictionary of model input values that should be changed for dispatch.
+        
         """
         model_parameters = self.parameterize(dict(theta)) #type: ignore
         # can be initialized
         if "y0" in model_parameters:
-            y0 = self.subset_by_batch_dimension(model_parameters["y0"])
-            y0 = self.validate_model_input(model_parameters["y0"])
-            model_parameters["y0"] = y0
+            y0_ = self.subset_by_batch_dimension(model_parameters["y0"])
+            y0_ = self.validate_model_input(y0_)
+            
+            # update keys passed to y0
+            y0_.update(y0)
+            model_parameters["y0"] = y0_
         else:
             model_parameters["y0"] = OrderedDict({})
         
         if "x_in" in model_parameters:
-            x_in = self.subset_by_batch_dimension(model_parameters["x_in"])
-            x_in = self.validate_model_input(model_parameters["x_in"])
-            model_parameters["x_in"] = x_in
+            x_in_ = self.subset_by_batch_dimension(model_parameters["x_in"])
+            x_in_ = self.validate_model_input(x_in_)
+
+            # update keys passed to x_in
+            x_in_.update(x_in)
+            model_parameters["x_in"] = x_in_
         else:
             model_parameters["x_in"] = OrderedDict({})
         

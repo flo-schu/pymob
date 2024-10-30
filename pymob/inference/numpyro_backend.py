@@ -233,8 +233,8 @@ class NumpyroBackend(InferenceBackend):
         callable
             The evaluation function
         """
-        def evaluator(theta, seed=None):
-            evaluator = self.simulation.dispatch(theta=theta)
+        def evaluator(theta, y0={}, x_in={}, seed=None):
+            evaluator = self.simulation.dispatch(theta=theta, y0=y0, x_in=x_in)
             evaluator(seed)
             return evaluator.Y
         
@@ -286,6 +286,9 @@ class NumpyroBackend(InferenceBackend):
         error_model = self.error_model.copy()
         extra = {"EPS": EPS}
         gaussian_base = self.gaussian_base_distribution
+        data_variables_y0 = [
+            f"{dv}_y0" for dv in self.config.data_structure.data_variables
+        ]
 
         def sample_prior(prior: Dict, obs: Dict, indices: Dict):
             theta = {}
@@ -397,13 +400,13 @@ class NumpyroBackend(InferenceBackend):
         ):
             # construct priors with numpyro.sample and sample during inference
             if gaussian_base:
-                theta_gaussian, theta = sample_prior_gaussian_base(
+                theta_gaussian, theta_ = sample_prior_gaussian_base(
                     prior=prior, 
                     obs=obs, 
                     indices=indices,
                 )
             else:
-                _, theta = sample_prior(
+                _, theta_ = sample_prior(
                     prior=prior, 
                     obs=obs, 
                     indices=indices,
@@ -413,7 +416,9 @@ class NumpyroBackend(InferenceBackend):
                 return
             
             # calculate deterministic simulation with parameter samples
-            sim_results = solver(theta=theta)
+            y0 = {k.replace("_y0",""): v for k, v in theta_.items() if k in data_variables_y0}
+            theta = {k: v for k, v in theta_.items() if k not in data_variables_y0}
+            sim_results = solver(theta=theta, y0=y0)
 
             # store data_variables as deterministic model output
             for deterministic_name, deterministic_value in sim_results.items():
@@ -424,7 +429,7 @@ class NumpyroBackend(InferenceBackend):
 
             if user_error_model is None:
                 _ = likelihood(
-                    theta=theta,
+                    theta=theta_,
                     simulation_results=sim_results,
                     indices=indices,
                     observations=obs,
