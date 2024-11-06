@@ -725,7 +725,15 @@ class NumpyroBackend(InferenceBackend):
             """
             
             if self.gaussian_base_distribution:
-                theta = {f"{key}_normal_base": val for key, val in theta.items()}
+                theta_ = theta.copy()
+                theta = {}
+                for key, val in theta_.items():
+                    if "_normal_base" in key:
+                        theta_i = {key: val}
+                    else:
+                        theta_i = {f"{key}_normal_base": val}
+
+                    theta.update(theta_i)
             else:
                 pass
         
