@@ -3,6 +3,7 @@ import numpy as np
 import xarray as xr
 import pytest
 
+from pymob.solvers.diffrax import JaxSolver
 from pymob.sim.config import Config, DataVariable, Modelparameters
 from pymob.sim.parameters import Param, RandomVariable, Expression, OptionRV
 from pymob.simulation import SimulationBase
@@ -21,6 +22,20 @@ def init_simulation_casestudy_api(scenario="test_scenario"):
     sim = Simulation(config=config)
     sim.config.import_casestudy_modules(reset_path=True)
     sim.setup()
+    return sim
+
+def init_case_study_and_scenario(case_study, scenario) -> SimulationBase:
+    """Generic utility to import and setup a case study and scenario"""
+    config = Config(
+        f"case_studies/{case_study}/scenarios/{scenario}/settings.cfg"
+    )
+    
+    config.import_casestudy_modules(reset_path=True)
+    Simulation = config.import_simulation_from_case_study()
+    
+    sim = Simulation(config)
+    sim.setup()
+
     return sim
 
 def init_lotkavolterra_simulation_replicated():
@@ -211,3 +226,33 @@ def init_lotka_volterra_case_study_hierarchical_from_settings(
     sim.setup()
 
     return sim
+
+def create_simulation_for_test_numpyro_behavior():
+    config = Config("case_studies/lotka_volterra_case_study/scenarios/test_scenario/settings.cfg")
+    config.case_study.name = "lotka_volterra_case_study"
+    config.case_study.scenario = "test_scenario"
+    config.import_casestudy_modules(reset_path=True)
+    sim = config.import_simulation_from_case_study()
+    sim = sim(config)
+    sim.setup()
+
+    sim.solver = JaxSolver
+    sim.config.case_study.simulation = "Simulation_v2"
+    sim.config.jaxsolver.throw_exception = False
+    sim.config.inference_numpyro.kernel = "nuts"
+    sim.config.inference_numpyro.init_strategy = "init_to_median"
+    sim.config.inference_numpyro.gaussian_base_distribution = False
+    sim.config.inference_numpyro.user_defined_probability_model = "lotka_volterra"
+    sim.config.inference_numpyro.user_defined_preprocessing = "dummy_preprocessing"
+
+    sim.config.error_model.wolves = "norm(loc=0,scale=1,obs=(obs-wolves)/jnp.sqrt(wolves+1e-6),obs_inv=res*jnp.sqrt(wolves+1e-06)+wolves)"
+    sim.config.error_model.rabbits = "norm(loc=0,scale=1,obs=(obs-rabbits)/jnp.sqrt(rabbits+1e-6),obs_inv=res*jnp.sqrt(rabbits+1e-06)+rabbits)"
+
+    sim.config.model_parameters.gamma = Param(value=0.3, free=False)
+    sim.config.model_parameters.delta = Param(value=0.01, free=False)
+
+    sim.config.simulation.input_files = []
+    sim.config.case_study.scenario = "test_numpyro_behavior"
+    sim.config.create_directory("scenario", force=True)
+    sim.config.save(force=True)
+    
