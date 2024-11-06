@@ -1229,7 +1229,10 @@ class NumpyroBackend(InferenceBackend):
         # tested.
         posterior = self.idata.posterior  # type: ignore
         n_samples = posterior.sizes["chain"] * posterior.sizes["draw"]
-    
+        data_variables_y0 = [
+            f"{dv}_y0" for dv in self.config.data_structure.data_variables
+        ]
+
         if n is not None:
             key = jax.random.PRNGKey(seed)
 
@@ -1253,8 +1256,13 @@ class NumpyroBackend(InferenceBackend):
         ) as pbar:
             for chain in posterior.chain:
                 for draw in posterior.draw:
-                    theta = posterior.sel(draw=draw, chain=chain)
-                    evaluator = self.simulation.dispatch(theta=self.get_dict(theta))
+                    theta_arr = posterior.sel(draw=draw, chain=chain)
+                    theta_dict = self.get_dict(theta_arr)
+                    
+                    # calculate deterministic simulation with parameter samples
+                    y0 = {k.replace("_y0",""): v for k, v in theta_dict.items() if k in data_variables_y0}
+                    theta = {k: v for k, v in theta_dict.items() if k not in data_variables_y0}
+                    evaluator = self.simulation.dispatch(theta=theta, y0=y0)
                     evaluator()
                     ds = evaluator.results
 
