@@ -312,38 +312,44 @@ class NumpyroBackend(InferenceBackend):
             theta_base = {}
             context = [theta, indices, obs, extra]
             for prior_name, prior_dist in prior.items():
-                dist = prior_dist.construct(context=context)
+                if prior_dist._dist_str == "deterministic":
+                    theta_i = prior_dist.construct(
+                        context=context, 
+                        extra_kwargs={"name": prior_name}
+                    )
+                else:    
+                    dist = prior_dist.construct(context=context)
 
-                try:
-                    transforms = getattr(dist, "transforms")
-                except:
-                    raise RuntimeError(
-                        f"The specified distribution {prior_dist} had no transforms. If setting "+
-                        "the option 'inference.numpyro.gaussian_base_distribution = 1', "+
-                        "you are only allowed to use parameter distribution, which can "+
-                        "be specified as transformed normal distributions. "+
-                        f"Currently {transformed_dist_map.keys()} are specified"+
-                        "You can use the numypro.distributions.TransformedDistribution "+
-                        "API to specify additional distributions with transforms."+
-                        "And pass them to the inferer by updating the distribution map: "+
-                        "sim.inferer.distribution_map.update({'newdist': your_new_distribution})"
+                    try:
+                        transforms = getattr(dist, "transforms")
+                    except:
+                        raise RuntimeError(
+                            f"The specified distribution {prior_dist} had no transforms. If setting "+
+                            "the option 'inference.numpyro.gaussian_base_distribution = 1', "+
+                            "you are only allowed to use parameter distribution, which can "+
+                            "be specified as transformed normal distributions. "+
+                            f"Currently {transformed_dist_map.keys()} are specified"+
+                            "You can use the numypro.distributions.TransformedDistribution "+
+                            "API to specify additional distributions with transforms."+
+                            "And pass them to the inferer by updating the distribution map: "+
+                            "sim.inferer.distribution_map.update({'newdist': your_new_distribution})"
+                        )
+
+                    # sample from a random normal distribution
+                    # CHECK: Expanding before 
+                    theta_base_i = numpyro.sample(
+                        name=f"{prior_name}_normal_base",
+                        fn=Normal(loc=0, scale=1).expand(batch_shape=prior_dist.shape),
                     )
 
-                # sample from a random normal distribution
-                # CHECK: Expanding before 
-                theta_base_i = numpyro.sample(
-                    name=f"{prior_name}_normal_base",
-                    fn=Normal(loc=0, scale=1).expand(batch_shape=prior_dist.shape),
-                )
 
+                    # apply the transforms 
+                    theta_i = numpyro.deterministic(
+                        name=prior_name,
+                        value=transform(transforms=transforms, x=theta_base_i)
+                    )
 
-                # apply the transforms 
-                theta_i = numpyro.deterministic(
-                    name=prior_name,
-                    value=transform(transforms=transforms, x=theta_base_i)
-                )
-
-                theta_base.update({prior_name: theta_base_i})
+                    theta_base.update({prior_name: theta_base_i})
                 theta.update({prior_name: theta_i})
 
             return theta_base, theta

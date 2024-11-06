@@ -4,6 +4,7 @@ from numpyro.distributions import Normal, TransformedDistribution
 from numpyro.distributions import transforms
 
 scipy_to_numpyro = {
+    "deterministic": (numpyro.deterministic, {"value": "value"}),
     # Continuous Distributions
     "norm": (numpyro.distributions.Normal, {"loc": "loc", "scale": "scale"}),
     "normal": (numpyro.distributions.Normal, {"loc": "loc", "scale": "scale"}),

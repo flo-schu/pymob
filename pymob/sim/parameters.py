@@ -142,6 +142,9 @@ class RandomVariable(BaseModel):
         if dist is None:
             return new_value
         
+        if distribution == "deterministic":
+            return new_value
+        
         dist_args = () if dist.shapes is None else dist.shapes
         dist_params = ("loc", "scale", *dist_args)
         unmatched_params = [k for k in new_value.keys() if k not in dist_params]
