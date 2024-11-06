@@ -174,7 +174,7 @@ class InferenceBackend(ABC):
         self.simulation = simulation
         self.config = simulation.config
 
-        self.indices = {v.name: list(v.values) for _, v in self.simulation.indices.items()}
+        self.indices = {v.name: np.array(v.values) for _, v in self.simulation.indices.items()}
         # parse model components
         self.prior = self.parse_model_priors(
             parameters=self.config.model_parameters.free,

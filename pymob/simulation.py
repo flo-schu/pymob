@@ -1559,6 +1559,39 @@ class SimulationBase:
             in self.dimension_coords.items()
         }
 
+    @staticmethod
+    def index_coordinates(array):
+        # Create a dictionary to map unique coordinates to indices
+        # using np.unique thereby retains the order of the elements in
+        # the order of their furst occurence
+        unique_coordinates = np.unique(array)
+        string_to_index = {
+            coord: index for index, coord 
+            in enumerate(unique_coordinates)
+        }
+
+        # Convert the original array to a list of indices
+        index_list = [string_to_index[string] for string in array]
+        return index_list
+
+    def create_index(self, coord):
+        if coord not in self.observations.coords:
+            raise KeyError(f"{coord} is not in {list(self.observations.coords)}")
+        
+        batch_dim = self.config.simulation.batch_dimension
+        # TODO: There may be a problem, when batch dimension is not defined!
+
+        return {coord: xr.DataArray(
+                self.index_coordinates(self.observations[coord].values),
+                dims=(batch_dim), 
+                coords={
+                    batch_dim: self.observations[batch_dim], 
+                    coord: self.observations[coord]
+                }, 
+                name=f"{coord}_index"
+            )
+        }
+
     def reorder_dims(self, Y):
         results = {}
         for var, mapper in self.var_dim_mapper.items():
