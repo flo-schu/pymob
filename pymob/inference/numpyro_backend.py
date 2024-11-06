@@ -629,13 +629,15 @@ class NumpyroBackend(InferenceBackend):
         return_type:Literal["joint-log-likelihood", "full", "summed-by-site", "summed-by-prior-data", "custom"]="joint-log-likelihood",
         check=True,
         custom_return_fn: Optional[Callable] = None,
+        scaled=True,
         vectorize=False,
         gradients=False,
     ) -> Tuple[Errorfunction,ErrorModelFunction]:
         """Log density relies heavily on the substitute utility
         
-        The log density is synonymous for log-likelihood (it is the log 
-        probability density of the model). 
+        The log density is the scaled log-likelihood. In case the the scale handler
+        is  used, log_density reflects this. Usually, the scaled log-density
+        should be returned, because it is loss used for the optimizer/sampler
 
         The general method is actually quite simple. Values of all SAMPLE
         sites are replaced according to the key: value pairs in `theta`.
@@ -770,15 +772,22 @@ class NumpyroBackend(InferenceBackend):
             if return_type == "joint-log-likelihood":
                 return joint_log_density
             
+            def get_scale(site):
+                # get the scale factor for the log probability
+                scale = site["scale"]
+                if scale is None or not scaled:
+                    return jnp.array(1.0, dtype=float)
+                else:
+                    return scale
             
             prior_loglik = {
-                name: site["fn"].log_prob(site["value"])
+                name: site["fn"].log_prob(site["value"]) * get_scale(site)
                 for name, site in trace.items()
                 if site["type"] == "sample" and not site["is_observed"]
             }
 
             data_loglik = {
-                name: site["fn"].log_prob(site["value"])
+                name: site["fn"].log_prob(site["value"]) * get_scale(site)
                 for name, site in trace.items()
                 if site["type"] == "sample" and site["is_observed"]
             }
