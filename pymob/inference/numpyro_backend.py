@@ -1161,16 +1161,28 @@ class NumpyroBackend(InferenceBackend):
         )
         posterior = predictive(key)
 
+        # passing complete posterior is identical to only passing only posterior_samples
         log_likelihood = self.calculate_log_likelihood(
             model=model, posterior_samples=posterior_samples, 
         )
 
+        # here only the transformed data are passed. I suppose this is enough,
+        # because. The transformed data are the only thing required for the
         obs_predictions = self.predict_observations(
             model=model, posterior_samples=posterior, key=key, n=n
         )
-        
+
+        # TODO: When passing the complete posterior to the calculate_log_likelihood
+        # function the results are the same as when only using the posterior,
+        # but when passing it to predict_observations, the results are different
+        # I suppose this is correct, but make sure to udnerstand what's going on
+        # and then document it.
+        complete_posterior = {}
+        complete_posterior.update(posterior_samples)
+        complete_posterior.update(posterior)
+
         return self.to_arviz_idata(
-            posterior=posterior,
+            posterior=complete_posterior,
             posterior_predictive=obs_predictions,
             log_likelihood=log_likelihood,
             observed_data=obs,
