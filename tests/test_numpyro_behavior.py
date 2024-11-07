@@ -1,10 +1,8 @@
 import pytest
 import numpy as np
 import xarray as xr
-from pymob.sim.config import Config, Param
-from pymob.solvers import JaxSolver
 
-from fixtures import (
+from tests.fixtures import (
     create_simulation_for_test_numpyro_behavior,
     init_case_study_and_scenario
 )
@@ -80,4 +78,5 @@ def test_effect_handler_reparam():
     # TODO: Reparameterization can also be handled https://num.pyro.ai/en/stable/reparam.html#module-numpyro.infer.reparam
 
 if __name__ == "__main__":
-    test_effect_handler_scaling()
+    pass
+    # test_effect_handler_scaling()
