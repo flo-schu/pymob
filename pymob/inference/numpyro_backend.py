@@ -255,9 +255,10 @@ class NumpyroBackend(InferenceBackend):
         """
         obs = self.simulation.observations #\
             # .transpose(*self.simulation.dimensions)
-        data_vars = self.config.data_structure.observed_data_variables + self.extra_vars
+        y0 = self.simulation.model_parameters.get("y0", {})
+        observed_data_vars = self.config.data_structure.observed_data_variables + self.extra_vars
 
-        if len(data_vars) == 0:
+        if len(observed_data_vars) == 0:
             warnings.warn(
                 "No observed data_variables were found. Is this correct? "+
                 "Make sure you have marked "+
@@ -268,12 +269,17 @@ class NumpyroBackend(InferenceBackend):
 
         masks = {}
         observations = {}
-        for d in data_vars:
+        for d in observed_data_vars:
             o = jnp.array(obs[d].values)
             m = jnp.logical_not(jnp.isnan(o))
             observations.update({d:o})
             masks.update({d:m})
         
+        # add y0 values to the observation dict
+        for d in self.config.data_structure.data_variables:
+            if d in y0:
+                observations.update({f"{d}_y0": jnp.array(y0[d])})
+
         return observations, masks
     
     def parse_probabilistic_model(self):

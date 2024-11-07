@@ -22,6 +22,7 @@ import itertools as it
 
 from pymob.simulation import SimulationBase
 from pymob.sim.parameters import Param, RandomVariable, Expression
+from pymob.sim.config import Datastructure
 from pymob.utils.config import lookup_from
 
 class Errorfunction(Protocol):
@@ -179,6 +180,7 @@ class InferenceBackend(ABC):
         self.prior = self.parse_model_priors(
             parameters=self.config.model_parameters.free,
             dim_shapes=self.simulation.parameter_shapes,
+            data_structure=self.config.data_structure,
             indices=self.indices
         )
 
@@ -242,6 +244,7 @@ class InferenceBackend(ABC):
         cls, 
         parameters: Dict[str,Param], 
         dim_shapes: Dict[str,Tuple[int, ...]],
+        data_structure: Datastructure,
         indices: Dict[str, Any] = {}
     ):
         priors = {}
@@ -262,6 +265,14 @@ class InferenceBackend(ABC):
                         continue
 
                     elif ua in priors:
+                        continue
+
+                    elif ua in data_structure.data_variables:
+                        # allows observations
+                        continue
+
+                    elif ua.strip("_y0") in data_structure.data_variables:
+                        # allows initial values
                         continue
 
                     else:

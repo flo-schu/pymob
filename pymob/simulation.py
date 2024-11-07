@@ -928,7 +928,7 @@ class SimulationBase:
 
         display(widgets.HBox([widgets.VBox([s for _, s in sliders.items()]), out]))
     
-    def set_inferer(self, backend):
+    def set_inferer(self, backend: Literal["numpyro", "scipy", "pyabc", "pymoo"]):
         extra = (
             "set_inferer(backend='{0}') was not executed successfully, because "
             "'{0}' dependencies were not found. They can be installed with "
@@ -961,6 +961,17 @@ class SimulationBase:
                 from pymob.inference.numpyro_backend import NumpyroBackend
 
             self.inferer = NumpyroBackend(simulation=self)
+    
+        elif backend == "scipy":
+            numpyro = import_optional_dependency(
+                "scipy", errors="raise", extra=extra.format("scipy")
+            )
+            if numpyro is not None:
+                from pymob.inference.scipy_backend import ScipyBackend
+
+            self.inferer = ScipyBackend(simulation=self)
+    
+    
     
         else:
             raise NotImplementedError(f"Backend: {backend} is not implemented.")
