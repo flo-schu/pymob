@@ -294,15 +294,21 @@ class NumpyroBackend(InferenceBackend):
             theta = {}
             context = [theta, indices, obs, extra]
             for prior_name, prior_dist in prior.items():
-                dist = prior_dist.construct(context=context)
+                if prior_dist._dist_str == "deterministic":
+                    theta_i = prior_dist.construct(
+                        context=context, 
+                        extra_kwargs={"name": prior_name}
+                    )
+                else:  
+                    dist = prior_dist.construct(context=context)
 
-                # TODO: distribution expansion is not so trivial unfortunately
-                dist = dist.expand(batch_shape=prior_dist.shape)
+                    # TODO: distribution expansion is not so trivial unfortunately
+                    dist = dist.expand(batch_shape=prior_dist.shape)
 
-                theta_i = numpyro.sample(
-                    name=prior_name,
-                    fn=dist,
-                )
+                    theta_i = numpyro.sample(
+                        name=prior_name,
+                        fn=dist,
+                    )
                 theta.update({prior_name: theta_i})
 
             return {}, theta
