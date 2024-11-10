@@ -4,6 +4,7 @@ import xarray as xr
 from matplotlib import pyplot as plt
 
 from pymob.simulation import SimulationBase
+from pymob.sim.config import Datastructure
 from pymob.inference.scipy_backend import ScipyBackend
 
 from tests.fixtures import (
@@ -21,6 +22,7 @@ def test_prior_parsing():
     parsed_params = ScipyBackend.parse_model_priors(
         parameters=params.free,
         dim_shapes={k:(100, 2) for k, _ in params.all.items()},
+        data_structure=Datastructure()
     )
 
     inferer = ScipyBackend(SimulationBase())
@@ -34,6 +36,7 @@ def test_prior_parsing_error():
         parsed_params = ScipyBackend.parse_model_priors(
             parameters=params.free,
             dim_shapes={k:() for k, _ in params.all.items()},
+            data_structure=Datastructure()
         )
         raise AssertionError("Parameter parsing should have failed.")
     except KeyError:
