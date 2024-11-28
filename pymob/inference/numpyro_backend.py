@@ -489,7 +489,7 @@ class NumpyroBackend(InferenceBackend):
     def preprocessing(**kwargs):
         return kwargs
 
-    def run(self, print_debug=True):
+    def run(self, print_debug=True, render_model=True):
         # set parameters of JAX and numpyro
         # jax.config.update("jax_enable_x64", True)
 
@@ -513,19 +513,20 @@ class NumpyroBackend(InferenceBackend):
             **model_kwargs
         )    
 
-        try:
-            import graphviz
-            graph = numpyro.render_model(model)
-            graph.render(
-                filename=f"{self.simulation.output_path}/probability_model",
-                view=False, cleanup=True, format="png"
-            ) 
-        except graphviz.backend.ExecutableNotFound:
-            warnings.warn(
-                "Model is not rendered, because the graphviz executable is "+
-                "not found. Try search for 'graphviz executables not found' "+
-                "and the used OS. This should be an easy fix :-)"
-            )
+        if render_model:
+            try:
+                import graphviz
+                graph = numpyro.render_model(model, render_distributions=True)
+                graph.render(
+                    filename=f"{self.simulation.output_path}/probability_model",
+                    view=False, cleanup=True, format="png",
+                ) 
+            except graphviz.backend.ExecutableNotFound:
+                warnings.warn(
+                    "Model is not rendered, because the graphviz executable is "+
+                    "not found. Try search for 'graphviz executables not found' "+
+                    "and the used OS. This should be an easy fix :-)"
+                )
 
 
         if print_debug:
