@@ -618,7 +618,7 @@ class InferenceBackend(ABC):
         if hasattr(self.idata, "posterior"):
             axes = az.plot_trace(
                 self.idata,
-                var_names=self.simulation.model_parameter_names
+                var_names=list(self.config.model_parameters.free.keys())
             )
             fig = plt.gcf()
             fig.tight_layout()
@@ -626,7 +626,7 @@ class InferenceBackend(ABC):
             axes = az.plot_pair(
                 self.idata, 
                 divergences=True, 
-                var_names=self.simulation.model_parameter_names
+                var_names=list(self.config.model_parameters.free.keys())
             )
             fig = plt.gcf()
             fig.tight_layout()
