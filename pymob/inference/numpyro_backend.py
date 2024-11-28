@@ -241,6 +241,22 @@ class NumpyroBackend(InferenceBackend):
 
         return {"transform": func, "args": [str(s) for s in free_symbols]}
 
+    def check_tolerance_and_jax_mode(self):
+        x64 = jax.config.read("jax_enable_x64")
+        atol = self.config.jaxsolver.atol
+        if atol < 1e-8 and not x64:
+            warnings.warn(
+                "Jax is not running in 64 bit mode but the precision is smaller "+
+                f"than 1e-8 (config.jaxsolver.atol={atol} < 1e-8). "
+                "Increase the absolute tolerance value or run jax in 64 bit mode. "
+                "Script: `jax.config.update('jax_enable_x64', True)`. "
+                "Commandline: Set environmental variable `JAX_ENABLE_X64=True`.",
+                category=UserWarning
+            )
+        else:
+            print("Jax 64 bit mode:", x64)
+            print("Absolute tolerance:", atol)
+
 
     def parse_deterministic_model(self) -> Callable:
         """Parses an evaluation function from the Simulation object, which 
