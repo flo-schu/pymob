@@ -91,7 +91,8 @@ class ErrorModelFunction(Protocol):
         simulation_results: Dict, 
         indices: Dict,
         observations: Dict, 
-        masks: Dict
+        masks: Dict,
+        make_predictions: bool
     ) -> Any:
         ...
 
