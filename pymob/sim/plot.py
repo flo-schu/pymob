@@ -129,11 +129,11 @@ class SimulationPlot:
         r = len(self.rows)
         c = len(self.columns)
         self.figure, axes = plt.subplots(
-            r, c,
-            figsize=(5+(c-1*2), 3+(r-1)*2),
+            nrows=r, ncols=c,
             sharex=self.sharex,
             sharey=self.sharey,
             squeeze=False,
+            figsize=(5+(c-1*2), 3+(r-1)*2),
         )
 
         self.axes_map = {}
@@ -169,7 +169,9 @@ class SimulationPlot:
                 ax = self.axes_map[row][col]
                 for igroup in self.idata_groups:
                     self.plot_predictions(idata_group=igroup, data_variable=row, column=col, ax=ax)
-                self.plot_observations(data_variable=row, column=col, ax=ax)
+
+                if self.config.data_structure.all[row].observed:
+                    self.plot_observations(data_variable=row, column=col, ax=ax)
 
         self.figure.tight_layout()
         
@@ -307,7 +309,19 @@ class SimulationPlot:
             **self.pred_draws_style
         )
     
+    def set_titles(self, title: Callable):
+        for c in self.columns:
+            ax = self.axes_map[self.rows[0]][c]
+            ax.set_title(label=title(self, c))
+
+        self.figure.tight_layout()
+
+    def close(self):
+        plt.close(self.figure)
+
     def save(self, filename):
         self.figure.savefig(
             f"{self.config.case_study.output_path}/{filename}"
         )
+
+        
