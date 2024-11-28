@@ -39,6 +39,7 @@ def main(case_study, scenario, package, output, random_seed, n_cores, inference_
     Simulation = config.import_simulation_from_case_study()
     sim = Simulation(config)
     sim.setup()
+    sim.config.save(os.path.join(sim.output_path, "settings.cfg"), force=True)
 
     sim.set_inferer(backend=inference_backend)
     sim.prior_predictive_checks()
