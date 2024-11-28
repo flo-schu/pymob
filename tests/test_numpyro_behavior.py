@@ -68,10 +68,52 @@ def test_effect_handler_scaling():
     )
 
 def test_effect_handler_plate():
-    pytest.skip()
-    # TODO: Use a more complicated data structure e.g by calling
-    # replicate_obs(sim)
-    # then test if the dimensionalities work out
+    import jax
+    import jax.numpy as jnp
+    import numpyro
+    import numpyro.distributions as dist
+    from numpyro.infer import MCMC, NUTS
+
+    # Define the model with a multinomial inside a plate, using different n_trials for each batch
+    def model(lethality, n_trials):
+        batch_size, num_categories = lethality.shape  # Assumes probs has shape (batch_size, num_categories)
+        probs = numpyro.sample("p", dist.Dirichlet(jnp.ones((batch_size,3))))
+        
+        # Define a plate for the batch dimension
+        with numpyro.plate("batch", batch_size):
+            # Sample from a Multinomial distribution with a different total_count for each batch item
+            counts = numpyro.sample("lethality", dist.Multinomial(
+                total_count=n_trials, probs=probs), obs=lethality)
+        return counts
+
+    # Define parameters for the multinomial distribution
+    n_trials = np.array([10, 15, 20, 25, 30, 35, 40, 45, 50, 55]) * 100
+    probs = np.array([
+        [0.2, 0.5, 0.3],
+        [0.3, 0.4, 0.3],
+        [0.1, 0.7, 0.2],
+        [0.25, 0.25, 0.5],
+        [0.6, 0.2, 0.2],
+        [0.3, 0.3, 0.4],
+        [0.4, 0.4, 0.2],
+        [0.2, 0.3, 0.5],
+        [0.3, 0.3, 0.4],
+        [0.1, 0.6, 0.3]
+    ])  # Probability vector for each batch item
+
+    lethality = jnp.array(list(map(lambda n, p: np.random.multinomial(n=n, pvals=p), n_trials, probs)))
+
+    # Run MCMC sampling on the model
+    nuts_kernel = NUTS(model)
+    mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000)
+    mcmc.run(jax.random.PRNGKey(0), lethality=lethality, n_trials=n_trials)
+
+    # Get samples
+    samples = mcmc.get_samples()["p"]
+
+    # allow 5% deviation from any true probability value
+    np.testing.assert_allclose(samples.mean(axis=0), probs, atol=0.05)
+
 
 def test_effect_handler_reparam():
     pytest.skip()
@@ -79,4 +121,5 @@ def test_effect_handler_reparam():
 
 if __name__ == "__main__":
     pass
+    # test_effect_handler_plate()
     # test_effect_handler_scaling()
