@@ -154,9 +154,27 @@ class NumpyroBackend(InferenceBackend):
         else:
             self.inference_model = self.parse_probabilistic_model()
 
+        if self.user_defined_error_model is not None:
+            user_error_model = getattr(
+                self.simulation._prob,
+                self.user_defined_error_model
+            )
+
+            self.inference_model = partial(
+                self.inference_model,
+                user_error_model=user_error_model
+            )
+
+        self.check_tolerance_and_jax_mode()
+    
+
     @property
     def user_defined_probability_model(self):
         return self.config.inference_numpyro.user_defined_probability_model
+    
+    @property
+    def user_defined_error_model(self):
+        return self.config.inference_numpyro.user_defined_error_model
     
     @property
     def user_defined_preprocessing(self):
