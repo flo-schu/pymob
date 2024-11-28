@@ -833,13 +833,16 @@ class Config(BaseModel):
 
 
         file = self.case_study.observations
-        if not os.path.isabs(file):
-            fp = os.path.join(self.case_study.data_path, file)
+        if file is None:
+            return paths_input_files
         else:
-            fp = file
-        paths_input_files.append(fp)
+            if not os.path.isabs(file):
+                fp = os.path.join(self.case_study.data_path, file)
+            else:
+                fp = file
+            paths_input_files.append(fp)
 
-        return paths_input_files
+            return paths_input_files
 
     def print(self):
         print("Simulation configuration", end="\n")
