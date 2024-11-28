@@ -306,6 +306,33 @@ class SimulationBase:
         )
 
     def load_modules(self):
+        # test if the case study is installed as a package
+        package = self.__module__.split(".")[0]
+        spec = importlib.util.find_spec(package)
+        if spec is not None and package != "pymob":
+            for module in MODULES:
+                try:
+                    # TODO: Consider importing modules as a nested dictionary 
+                    # with the indexing key being the package. The package
+                    # cannot be derived from the class, if a method, that is 
+                    # executed on a lower level case-study, should target that 
+                    # a module belonging to the same package, because if the
+                    # object is used, it would resolve to the package of the
+                    # higher level case-study
+                    m = importlib.import_module(f"{package}.{module}")
+                    setattr(self, f"_{module}", m)
+                except ModuleNotFoundError:
+                    warnings.warn(
+                        f"Module {module}.py not found in {package}."
+                        f"Missing modules can lead to unexpected behavior. "
+                        f"Does your case study have a {module}.py file? "
+                        f"It should have the line `from PARENT_CASE_STUDY."
+                        f"{module} import *` to import all objects from "
+                        "the parent case study."
+                    )
+            return
+
+
         # append relevant paths to sys
         package = os.path.join(
             self.config.case_study.root, 

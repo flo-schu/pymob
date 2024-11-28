@@ -926,6 +926,33 @@ class Config(BaseModel):
         and imports them with import_module(...)
         """
 
+        # potential BUG: This is not safe. It is not guaranteed that the 
+        # case study has the same name as the package. But it might be in the future
+        package = self.case_study.name
+        spec = importlib.util.find_spec(package)
+        if spec is not None:
+            for module in self.case_study.modules:
+                try:
+                    # TODO: Consider importing modules as a nested dictionary 
+                    # with the indexing key being the package. The package
+                    # cannot be derived from the class, if a method, that is 
+                    # executed on a lower level case-study, should target that 
+                    # a module belonging to the same package, because if the
+                    # object is used, it would resolve to the package of the
+                    # higher level case-study
+                    m = importlib.import_module(f"{package}.{module}")
+                    self._modules.update({module: m})
+                except ModuleNotFoundError:
+                    warnings.warn(
+                        f"Module {module}.py not found in {package}."
+                        f"Missing modules can lead to unexpected behavior. "
+                        f"Does your case study have a {module}.py file? "
+                        f"It should have the line `from PARENT_CASE_STUDY."
+                        f"{module} import *` to import all objects from "
+                        "the parent case study."
+                    )
+            return
+
         # reset the path to avoid importing modules form case-studies used
         # before in the same session
         if reset_path:
