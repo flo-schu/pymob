@@ -672,43 +672,53 @@ def rect_interpolation(
     one more step after the end of the timeseries
     """
     data_arrays = []
-    for k in x_in.data_vars.keys():
-        v = x_in[k]
+    data_vars = tuple(x_in.data_vars.keys())
+    dataset_dims = tuple(x_in.dims.keys())
+
+    for k in data_vars:
+        v_orig = x_in[k]
+        v = v_orig.transpose(x_dim, ...)
         x = v[x_dim].values
         y = v.values
+        x_dim_loc = v.dims.index(x_dim)
 
         ts_ = np.concatenate([x, np.array(x[-1]+1, ndmin=1)]) 
         if y.ndim == 1:
             ys_ = np.concatenate([y, np.array(y[-1], ndmin=1)])
         elif y.ndim == 2:
-            ys_ = np.row_stack([y, np.array(y[-1], ndmin=2)]) 
+            if x_dim_loc == 0:
+                ys_ = np.row_stack([y, np.expand_dims(y[-1], axis=0)]) 
         elif y.ndim == 3:
-            ys_ = [
-                np.row_stack([y_i, np.array(y_i[-1], ndmin=2)])
-                for y_i in y
-            ]
+            if x_dim_loc == 0:
+                ys_ = np.row_stack([y, np.expand_dims(y[-1], axis=0)])
+            else:
+                raise ValueError(f"{x_dim_loc} should be the first dimension.")
         else:
             raise NotImplementedError(
                 "Dimensions of interpolation > 2 or 0 are not implemented"
             )
 
         xs, ys = rectilinear_interpolation(ts=ts_, ys=ys_) # type:ignore
-        if y.ndim <= 2:
-            xs = xs
-        else:
-            xs = xs[0] # type:ignore
+        # if y.ndim <= 2:
+        #     xs = xs
+        # else:
+        #     xs = xs[0] # type:ignore
 
         coords = {x_dim: xs}
         coords.update({d: v.coords[d].values for d in v.dims if d != x_dim})
-        coords = {d:coords[d] for d in v.dims}
+        # coords = {d:coords[d] for d in v.dims}
 
         y_reindexed = xr.DataArray(
             ys, 
             coords=coords,
             name=v.name
         )
+        y_reindexed = y_reindexed.transpose(*v_orig.dims)
+
         data_arrays.append(y_reindexed)
 
     x_in_interpolated = xr.combine_by_coords(data_objects=data_arrays)
+    x_in_interpolated = x_in_interpolated.transpose(*dataset_dims)
 
-    return x_in_interpolated
+
+    return x_in_interpolated[[*dataset_dims, *data_vars]]
