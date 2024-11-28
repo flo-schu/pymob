@@ -286,10 +286,17 @@ class NumpyroBackend(InferenceBackend):
                 category=UserWarning
             )
 
+        # this was implemented to deal with import export and the required precision
+        # for jax 
+        if jax.config.jax_enable_x64:
+            bit = "64"
+        else:
+            bit = "32"
+
         masks = {}
         observations = {}
         for d in observed_data_vars:
-            o = jnp.array(obs[d].values)
+            o = jnp.array(self.cast_to_precision(obs[d].values, precision=bit))
             m = jnp.logical_not(jnp.isnan(o))
             observations.update({d:o})
             masks.update({d:m})
@@ -297,10 +304,24 @@ class NumpyroBackend(InferenceBackend):
         # add y0 values to the observation dict
         for d in self.config.data_structure.data_variables:
             if d in y0:
-                observations.update({f"{d}_y0": jnp.array(y0[d])})
+                observations.update({
+                    f"{d}_y0": jnp.array(self.cast_to_precision(y0[d], precision=bit))
+                })
 
         return observations, masks
     
+    @staticmethod
+    def cast_to_precision(value, precision="64"):
+        if precision in str(value.dtype):
+            return value
+        
+        if np.issubdtype(value.dtype, np.floating):
+            return value.astype(f"float{precision}")
+        elif np.issubdtype(value.dtype, np.integer):
+            return value.astype(f"int{precision}")
+        else:
+            return value
+
     def parse_probabilistic_model(self):
         EPS = self.EPS
         prior = self.prior.copy()
