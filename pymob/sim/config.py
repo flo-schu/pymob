@@ -738,6 +738,7 @@ class Pymoo(BaseModel):
 class Numpyro(BaseModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
     user_defined_probability_model: Optional[str] = None
+    user_defined_error_model: Optional[str] = None
     user_defined_preprocessing: Optional[str] = None
     gaussian_base_distribution: bool = False
     
