@@ -493,7 +493,7 @@ class InferenceBackend(ABC):
             return
         elif isinstance(plot, str):
             try:
-                plot_func = getattr(self.simulation, plot)
+                plot_func = getattr(self.simulation._plot, plot)
                 plot_func(self.simulation)
             except AttributeError:
                 warnings.warn(
