@@ -744,10 +744,10 @@ class SimulationBase:
                 }
                 input_coords = {k:reference_data.coords[k] for k in input_dims}
             
-
+            # this asserts that new dims is in the right order
             new_dims = {
-                k: v for k, v in input_dims.items() 
-                if k in self.config.data_structure.all[key].dimensions
+                k: input_dims[k] for k in self.config.data_structure.all[key].dimensions
+                if k not in drop_dims
             }
 
             input_coords = {k: input_coords[k] for k in new_dims.keys()}
