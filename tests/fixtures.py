@@ -24,12 +24,12 @@ def init_simulation_casestudy_api(scenario="test_scenario"):
     sim.setup()
     return sim
 
-def init_case_study_and_scenario(case_study, scenario) -> SimulationBase:
+def init_case_study_and_scenario(case_study, scenario, package="case_studies") -> SimulationBase:
     """Generic utility to import and setup a case study and scenario"""
     config = Config(
-        f"case_studies/{case_study}/scenarios/{scenario}/settings.cfg"
+        f"{package}/{case_study}/scenarios/{scenario}/settings.cfg"
     )
-    
+    config.case_study.package = package
     config.import_casestudy_modules(reset_path=True)
     Simulation = config.import_simulation_from_case_study()
     
