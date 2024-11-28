@@ -233,13 +233,13 @@ def string_to_datavar(option:str|DataVariable) -> DataVariable:
         return DataVariable.model_validate(param_dict, strict=False)
         
 
-def dict_to_string(dct: Dict):
+def dict_to_string(dct: Dict, replace_whitespace=""):
     string_items = []
     for k, v in dct.items():
         if isinstance(v, np.ndarray):
             v = v.tolist()
 
-        expr = f"{k}={v}".replace(" ", "")
+        expr = f"{k}={v}".replace(" ", replace_whitespace)
         string_items.append(expr)
 
     return " ".join(string_items)
