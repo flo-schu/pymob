@@ -1602,7 +1602,9 @@ class SimulationBase:
         # Create a dictionary to map unique coordinates to indices
         # using np.unique thereby retains the order of the elements in
         # the order of their furst occurence
-        unique_coordinates = np.unique(array)
+        # use an unsorted unique index
+        unique_coordinates, index = np.unique(array, return_index=True)
+        unique_coordinates = unique_coordinates[index.argsort()]
         string_to_index = {
             coord: index for index, coord 
             in enumerate(unique_coordinates)
