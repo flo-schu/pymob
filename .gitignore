@@ -22,3 +22,8 @@ config/settings.json
 /*.egg-info/
 docs/build
 build
+
+
+# linked case studies
+bufferguts
+guts_base
