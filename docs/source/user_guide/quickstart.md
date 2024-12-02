@@ -142,3 +142,26 @@ sim.inferer.idata.posterior
 ```
 
 We can inspect our estimates and see that the parameters are well esimtated by the model.
+
+## Exporting the simulation and running it via the case study API
+
+After constructing the simulation, all settings of the simulation can be exported to a comprehensive configuration file, along with all the default settings. This is as simple as 
+
+```py
+sim.config.case_study.name = "quickstart"
+sim.config.case_study.scenario = "test"
+sim.config.create_directory("scenario", force=True)
+sim.config.create_directory("results", force=True)
+sim.save_observations(force=True)
+sim.config.save(force=True)
+```
+
+The simulation will be saved to the default path (`CASE_STUDY/scenarios/SCENARIO/settings.cfg`) or to a custom path spcified with the `fp` keyword. `force=True` will overwrite any existing config file, which is the reasonable choice in most cases.
+
+From there on, the simulation is (almost) ready to be executable from the commandline.
+
+### Commandline API
+
+The commandline API runs a series of commands that load the case study, execute the {meth}`pymob.simulation.SimulationBase.initialize` method and perform some more initialization tasks, before running the required job.
+
++ `pymob-infer`: Runs an inference job e.g. `pymob-infer --case_study=quickstart --scenario=test --inference_backend=numpyro`. While there are more commandline options, these are the two required 

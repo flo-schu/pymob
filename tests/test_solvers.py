@@ -1,14 +1,179 @@
 import os
 import time
 import numpy as np
+import xarray as xr
 
-from pymob.solvers.diffrax import JaxSolver
-from pymob.solvers.base import rect_interpolation, radius_interpolation, smoothed_interpolation, jump_interpolation
-from tests.fixtures import init_simulation_casestudy_api, init_bufferguts_casestudy
-from diffrax import Heun, Euler, Tsit5, Dopri5
+from pymob.sim.config import Param, DataVariable
+from pymob.solvers import JaxSolver, SolverBase
+from pymob.solvers.base import rect_interpolation
+from tests.fixtures import (
+    init_simulation_casestudy_api, 
+    init_lotkavolterra_simulation_replicated,
+    init_bufferguts_casestudy, 
+    setup_solver
+)
 
-from pymob.sim.evaluator import Evaluator
 from pymob import SimulationBase
+
+def test_solver_preprocessing():
+    sim = init_simulation_casestudy_api()
+    sim.config.model_parameters.gamma = Param(value=0.3)
+    sim.config.model_parameters.delta = Param(value=0.01)
+    
+    # test SolverBase
+    solver = setup_solver(sim, solver=SolverBase)
+    y0 = sim.parse_input("y0",drop_dims=["time"])
+    y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
+    np.testing.assert_equal([y.shape for y in y0_solver], [(1,1), (1,1)])
+
+    # test jax solver
+    solver = setup_solver(sim, solver=JaxSolver)
+    y0 = sim.parse_input("y0",drop_dims=["time"])
+    y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
+    np.testing.assert_equal([y.shape for y in y0_solver], [(1,1), (1,1)])
+
+def test_solver_preprocessing_replicated():
+    sim = init_lotkavolterra_simulation_replicated()
+
+    # test SolverBase
+    solver = setup_solver(sim, solver=SolverBase)
+    y0 = sim.parse_input("y0",drop_dims=["time"])
+    y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
+    np.testing.assert_equal([y.shape for y in y0_solver], [(2,1), (2,1)])
+    np.testing.assert_equal(y0_solver, [np.array([[9],[5]]), np.array([[40], [50]])])
+
+    sim.config.simulation.batch_dimension = "idx" # this is not existing
+    solver = setup_solver(sim, solver=JaxSolver)
+    y0 = sim.parse_input("y0",drop_dims=["time"])
+    y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
+    np.testing.assert_equal([y.shape for y in y0_solver], [(1,2), (1,2)])
+    np.testing.assert_equal(y0_solver, [np.array([[9, 5]]), np.array([[40, 50]])])
+    
+    sim.config.simulation.batch_dimension = "id" # This exists!
+    solver = setup_solver(sim, solver=JaxSolver)
+    y0 = sim.parse_input("y0",drop_dims=["time"])
+    y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
+    np.testing.assert_equal([y.shape for y in y0_solver], [(2,1), (2,1)])
+    np.testing.assert_equal(y0_solver, [np.array([[9],[5]]), np.array([[40], [50]])])
+    
+    # test parameter processing
+    theta = sim.model_parameter_dict
+    theta_solver_ode, theta_solver_pp = solver.preprocess_parameters(theta)
+    np.testing.assert_equal(
+        [t.shape for t in theta_solver_ode], 
+        [(2,1), (2,1), (2,1), (2,1)]
+    )
+
+
+def test_solver_preprocessing_complex_parameters():
+    sim = init_lotkavolterra_simulation_replicated()
+
+    # step 1 of mischief ;) add a parameter with more than 1 dimension
+    # without declaring these coordinates. By using the same number
+    # of parameters as the batch_dimension no error is thrown.
+    # This is an expected behavior, but will issue a warning if declared
+    # without dimensions
+    sim.config.model_parameters.gamma.value = [0,1]
+    sim.config.model_parameters.gamma.dims = ("id",)
+
+    # test SolverBase
+    solver = setup_solver(sim, solver=SolverBase)
+
+    # test parameter processing
+    theta = sim.model_parameter_dict
+    theta_solver_ode, theta_solver_pp = solver.preprocess_parameters(theta)
+
+    # step 2 of mischief ;) this is not allowed and should raise an exception
+    sim.config.model_parameters.gamma.value = [0,1,2]
+    sim.config.model_parameters.gamma.dims = ()
+
+    # test parameter processing
+    solver = setup_solver(sim, solver=SolverBase)
+    theta = sim.model_parameter_dict
+
+    try:
+        theta_solver_ode, theta_solver_pp = solver.preprocess_parameters(theta)
+        raise AssertionError(
+            "This behavior should throw an exception. Multidimensional"+
+            "Array values were specified without explicitly defining dimensions"
+        )
+    except ValueError:
+        pass
+    
+    # step 3: fixing mischief conducted
+    # there should be a quick fix for this
+    # TODO: Add a dummy coordinate for the parameter dimension.
+    sim.config.model_parameters.gamma.dims = ("test_dim",)
+    
+    try:
+        sim.dimension_coords
+        raise AssertionError(
+            "This behavior should throw an exception. Parameter dimension"+
+            "was specified without explicitly defining coordinates for that "+
+            "dimension."
+        )
+    except KeyError:
+        pass
+    
+
+    # step 4: try to fix but should not work because dimension size does not match 
+    # value shape
+    sim.coordinates["test_dim"] = ["a", "b"]
+
+    sim.dimension_coords
+    sim.dimension_sizes
+
+    solver = setup_solver(sim, solver=SolverBase)
+    theta = sim.model_parameter_dict
+
+    try:
+        theta_solver_ode, theta_solver_pp = solver.preprocess_parameters(theta)
+        raise AssertionError(
+            "This behavior should throw an exception. Multidimensional"+
+            "Array values were specified without explicitly defining dimensions"
+        )
+    except ValueError:
+        pass
+    
+    
+    # step 5: Correct the coordinate shape
+    sim.coordinates["test_dim"] = ["a", "b", "c"]
+
+    solver = setup_solver(sim, solver=SolverBase)
+    theta = sim.model_parameter_dict
+    theta_solver_ode, theta_solver_pp = solver.preprocess_parameters(theta)
+
+    np.testing.assert_equal(
+        [t.shape for t in theta_solver_ode], 
+        [(2,1), (2,1), (2,3), (2,1)]
+    )
+
+def test_solver_dimensional_order():
+    sim = init_lotkavolterra_simulation_replicated()
+    theta = sim.model_parameter_dict
+    sim.solver = JaxSolver
+
+    sim.data_structure_and_dimensionality
+    sim.dispatch_constructor()
+    e = sim.dispatch(theta)
+    e()
+    res_id_time = e.results
+
+    # reorder dimensions of the data variables to see if they can be processed
+    sim.config.data_structure.wolves.dimensions = ["time", "id"] # type: ignore
+    sim.config.data_structure.rabbits.dimensions = ["time", "id"] # type: ignore
+
+    sim.dispatch_constructor()
+    e = sim.dispatch(theta)
+    e()
+    res_time_id = e.results
+
+    np.testing.assert_equal(
+        (res_id_time.to_array() - res_time_id.to_array()).values, 0
+    )
+
+
+
 
 def test_benchmark_time():
     sim = init_simulation_casestudy_api()
@@ -156,4 +321,6 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.append(os.getcwd())
+    # test_solver_dimensional_order()
+    # test_solver_preprocessing_replicated()
     # test_benchmark_jaxsolver()

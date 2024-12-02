@@ -1,4 +1,5 @@
 import os
+import sys
 import click
 import resource
 
@@ -8,7 +9,7 @@ from pymob.simulation import SimulationBase
 from pymob.sim.config import Config
 
 @click.command()
-@click.option("-c", "--case_study", type=str, default="test_case_study", 
+@click.option("-c", "--case_study", type=str, default="lotka_volterra_case_study", 
               help=help.case_study)
 @click.option("-s", "--scenario", type=str, default="test_scenario", 
               help=help.scenario)
@@ -27,6 +28,7 @@ def main(case_study, scenario, package, output, random_seed, n_cores, inference_
     config = Config(cfg)
     config.case_study.name = case_study
     config.case_study.scenario = scenario
+    config.case_study.package = package
     config.import_casestudy_modules()
 
     if n_cores is not None: config.multiprocessing.cores = n_cores
@@ -37,6 +39,7 @@ def main(case_study, scenario, package, output, random_seed, n_cores, inference_
     Simulation = config.import_simulation_from_case_study()
     sim = Simulation(config)
     sim.setup()
+    sim.config.save(os.path.join(sim.output_path, "settings.cfg"), force=True)
 
     sim.set_inferer(backend=inference_backend)
     sim.prior_predictive_checks()

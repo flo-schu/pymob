@@ -5,7 +5,7 @@ from pymob.sim.config import Config
 from pymob.utils import help
 
 @click.command()
-@click.option("-c", "--case_study", type=str, default="test_case_study", 
+@click.option("-c", "--case_study", type=str, default="lotka_volterra_case_study", 
               help=help.case_study)
 @click.option("-s", "--scenario", type=str, default="test_scenario", 
               help=help.scenario)
