@@ -1010,4 +1010,27 @@ class Config(BaseModel):
             )
         
         return Simulation
-        
+
+    def set_option(self, section: str, option: str, value: str):
+        sect = getattr(self, section)
+        setattr(sect, option, value)
+
+
+import click
+
+@click.command
+@click.option("--file", "-f", type=str, nargs=1, help="Path to the config file (usually in scenario/.../settings.cfg)")
+@click.option("--options", "-o", type=str, multiple=True, help="The option or options to configure. Combine sections and option like this 'simulation.seed=1' options that have spaces need to be wraped in quotes")
+def configure(file, options: Tuple[str, ...]):
+    config = Config(file)
+    for opt in options:
+        key, val = opt.split("=", 1)
+
+        section, option = key.strip(" ").rsplit(".", 1)
+
+        section = section.replace("-","_").replace(".","_")
+
+        value = val.strip(" ")
+        config.set_option(section, option, value)
+
+    config.save(file, force=True)

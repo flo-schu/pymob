@@ -47,6 +47,7 @@ classifiers = [
 [project.scripts]
 pymob-simulate = "pymob:simulate.main"
 pymob-infer = "pymob:infer.main"
+pymob-config = "pymob:sim.config.configure"
 
 [tool.setuptools.packages.find]
 include = ["pymob*"]
