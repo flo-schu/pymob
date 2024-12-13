@@ -1249,6 +1249,9 @@ class NumpyroBackend(InferenceBackend):
 
 
     def svi_posterior(self, svi_result, model, guide, key, n=1000):
+        # TODO: Harmonize SVI posterior and nuts posterior. The base function
+        # should only accept only samples from the posterior. Then the tool
+        # could be used to generate observations with higher time resolution
         obs, masks = self.observation_parser()
 
         posterior_samples = self.posterior_draws_from_svi(
