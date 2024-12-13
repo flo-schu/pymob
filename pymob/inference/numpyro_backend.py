@@ -1170,9 +1170,17 @@ class NumpyroBackend(InferenceBackend):
             if k in [f"{d}_obs" for d in data_variables]
         }
         
-        likelihood_ = {k: log_likelihood[f"{k}_obs"] for k in obs_data_variables}
-        observed_data_ = {k: observed_data[k] for k in obs_data_variables}
-
+        likelihood_ = {
+            k.replace("_obs", ""): v 
+            for k, v in log_likelihood.items() 
+            if k in [f"{d}_obs" for d in obs_data_variables]
+        }
+        
+        observed_data_ = {
+            k: v for k, v in observed_data.items() 
+            if k in obs_data_variables
+        }
+        
         if len(prior_) > 0 and len(prior_keys) != len(prior_):
             miss_keys = [k for k in prior_keys if k not in prior]
         else:
