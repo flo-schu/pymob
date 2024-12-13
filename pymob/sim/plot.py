@@ -216,6 +216,7 @@ class SimulationPlot:
 
         # get idata dataset and remove inf draws from the prior/posterior
         idata_dataset = self.clean_idata_group(idata_group)
+        idata_dataset.attrs.update({"group": idata_group})
 
         prediction_data_variable = self.obs_idata_map.get(
             data_variable, data_variable
@@ -228,7 +229,10 @@ class SimulationPlot:
             predictions = prediction_data_variable(idata_dataset)
             prediction_data_variable = predictions.name
         else:
-            predictions = idata_dataset[prediction_data_variable].copy()
+            if prediction_data_variable in idata_dataset:
+                predictions = idata_dataset[prediction_data_variable].copy()
+            else:
+                return
 
         # stack all dims that are not in the time dimension
         if len([d for d in predictions.dims if d not in idata_dims]) == 1:
