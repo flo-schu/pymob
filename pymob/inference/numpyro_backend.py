@@ -15,6 +15,7 @@ from matplotlib import pyplot as plt
 import sympy
 from arviz.data.inference_data import SUPPORTED_GROUPS_ALL
 
+import pymob
 from pymob.simulation import SimulationBase
 from pymob.sim.parameters import Expression, NumericArray
 from pymob.inference.base import Errorfunction, InferenceBackend, Distribution
@@ -1169,9 +1170,17 @@ class NumpyroBackend(InferenceBackend):
             if k in [f"{d}_obs" for d in data_variables]
         }
         
-        likelihood_ = {k: log_likelihood[f"{k}_obs"] for k in obs_data_variables}
-        observed_data_ = {k: observed_data[k] for k in obs_data_variables}
-
+        likelihood_ = {
+            k.replace("_obs", ""): v 
+            for k, v in log_likelihood.items() 
+            if k in [f"{d}_obs" for d in obs_data_variables]
+        }
+        
+        observed_data_ = {
+            k: v for k, v in observed_data.items() 
+            if k in obs_data_variables
+        }
+        
         if len(prior_) > 0 and len(prior_keys) != len(prior_):
             miss_keys = [k for k in prior_keys if k not in prior]
         else:
@@ -1215,6 +1224,14 @@ class NumpyroBackend(InferenceBackend):
             coords=posterior_coords
         )
 
+        for group_key in idata.groups():
+            if self.config.simulation.batch_dimension in idata[group_key].coords:
+                idata[group_key] = idata[group_key].assign_coords({  # type: ignore
+                  k: (self.config.simulation.batch_dimension, v) 
+                    for k, v in self.indices.items()
+                }) 
+                idata[group_key].attrs.update({"pymob_version": pymob.__version__})
+
         return idata
     
 
@@ -1232,6 +1249,9 @@ class NumpyroBackend(InferenceBackend):
 
 
     def svi_posterior(self, svi_result, model, guide, key, n=1000):
+        # TODO: Harmonize SVI posterior and nuts posterior. The base function
+        # should only accept only samples from the posterior. Then the tool
+        # could be used to generate observations with higher time resolution
         obs, masks = self.observation_parser()
 
         posterior_samples = self.posterior_draws_from_svi(
