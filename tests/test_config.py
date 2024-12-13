@@ -1,7 +1,8 @@
 import pytest
+from click.testing import CliRunner
 import tempfile
 from pymob.simulation import SimulationBase, Config
-from pymob.sim.config import DataVariable, Datastructure
+from pymob.sim.config import DataVariable, Datastructure, configure
 from pymob.sim.parameters import Param, RandomVariable, Expression
 from pymob.utils.store_file import import_package
 from pymob.solvers.scipy import solve_ivp_1d
@@ -304,6 +305,22 @@ def test_data_variables():
     config.data_structure.B = DataVariable(dimensions=["a", "b"], dimensions_evaluator=["b","a"])
     assert config.data_structure.dimdict == {"wolves": ["time"], "B": ["a", "b"]}
     assert config.data_structure.var_dim_mapper == {"wolves": [0], "B": [1,0]}
+
+
+
+def test_commandline_api_infer():
+    runner = CliRunner()
+    
+    args = [
+        "--file=case_studies/lotka_volterra_case_study/scenarios/test_scenario_scripting_api/test_settings.cfg",
+        "-o inference.numpyro.kernel=nuts",
+        "-o simulation.y0 = wolves=wolves rabbits=rabbits",
+        "-o inference.n_predictions=10",
+    ]
+    result = runner.invoke(configure, args)
+
+    if result.exception is not None:
+        raise result.exception
 
 
 if __name__ == "__main__":
