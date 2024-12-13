@@ -4,7 +4,7 @@ import copy
 import inspect
 import warnings
 import importlib
-from typing import Optional, List, Union, Literal, Any, Tuple, Sequence
+from typing import Optional, List, Union, Literal, Any, Tuple, Sequence, Mapping
 from types import ModuleType
 import configparser
 from functools import partial
@@ -27,7 +27,7 @@ from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import scenario_file, parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
-from pymob.sim.config import Config, ParameterDict, DataVariable, Param
+from pymob.sim.config import Config, ParameterDict, DataVariable, Param, NumericArray
 from pymob.sim.plot import SimulationPlot
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
@@ -621,9 +621,9 @@ class SimulationBase:
 
     def dispatch(
             self, 
-            theta: Dict[str, float|Sequence[float]] = {}, 
-            y0: Dict[str, float|Sequence[float]] = {}, 
-            x_in: Dict[str, float|Sequence[float]] = {}, 
+            theta: Mapping[str, float|NumericArray|Sequence[float]] = {}, 
+            y0: Mapping[str, float|NumericArray|Sequence[float]] = {}, 
+            x_in: Mapping[str, float|NumericArray|Sequence[float]] = {}, 
         ):
         """Dispatch an evaluator, which will compute the model for the parameters
         (theta), starting values (y0) and model input (x_in). 
