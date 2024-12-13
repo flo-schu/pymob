@@ -15,6 +15,7 @@ from matplotlib import pyplot as plt
 import sympy
 from arviz.data.inference_data import SUPPORTED_GROUPS_ALL
 
+import pymob
 from pymob.simulation import SimulationBase
 from pymob.sim.parameters import Expression, NumericArray
 from pymob.inference.base import Errorfunction, InferenceBackend, Distribution
@@ -1214,6 +1215,14 @@ class NumpyroBackend(InferenceBackend):
             dims=data_structure,
             coords=posterior_coords
         )
+
+        for group_key in idata.groups():
+            if self.config.simulation.batch_dimension in idata[group_key].coords:
+                idata[group_key] = idata[group_key].assign_coords({  # type: ignore
+                  k: (self.config.simulation.batch_dimension, v) 
+                    for k, v in self.indices.items()
+                }) 
+                idata[group_key].attrs.update({"pymob_version": pymob.__version__})
 
         return idata
     
