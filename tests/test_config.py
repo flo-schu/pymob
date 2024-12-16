@@ -308,7 +308,7 @@ def test_data_variables():
 
 
 
-def test_commandline_api_infer():
+def test_commandline_api_configure():
     runner = CliRunner()
     
     args = [
@@ -316,6 +316,7 @@ def test_commandline_api_infer():
         "-o inference.numpyro.kernel=nuts",
         "-o simulation.y0 = wolves=wolves rabbits=rabbits",
         "-o inference.n_predictions=10",
+        "-o model-parameters.test_parameter=",
     ]
     result = runner.invoke(configure, args)
 

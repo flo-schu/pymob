@@ -46,6 +46,26 @@ default_path = sys.path.copy()
 #     prior: Optional[str] = None
 #     free: bool = True
 
+class PymobModel(BaseModel):
+    def __getitem__(self, key: str):
+        """Allow getting attribute by key (like a dict)"""
+        return getattr(self, key)
+
+    def __setitem__(self, key: str, value):
+        """Allow setting attribute by key (like a dict), with validation"""
+        if key not in self.__annotations__:
+            raise KeyError(f"Key '{key}' not found")
+
+        # Set the value to the attribute
+        setattr(self, key, value)
+
+        # Trigger Pydantic validation, like when setting the attribute directly
+        try:
+            # Re-validate the model instance after setting the value
+            self.__class__.parse_obj(self.dict())
+        except ValidationError as e:
+            raise ValueError(f"Validation failed: {e}")
+
 class ModelParameterDict(TypedDict):
     parameters: Dict[str, float|str|int]
     y0: xr.Dataset
@@ -323,7 +343,7 @@ OptionParam = Annotated[
 # ]
 
         
-class Casestudy(BaseModel):
+class Casestudy(PymobModel):
     model_config = {"validate_assignment" : True}
     init_root: str = Field(default=os.getcwd(), exclude=True)
     root: str = "."
@@ -437,7 +457,7 @@ class Casestudy(BaseModel):
 
 
 
-class Simulation(BaseModel):
+class Simulation(PymobModel):
     model_config = {"validate_assignment" : True, "extra": "allow"}
 
     model: Optional[str] = Field(default=None, validate_default=True, description="The deterministic model")
@@ -455,7 +475,7 @@ class Simulation(BaseModel):
     solver_post_processing: Optional[str] = Field(default=None, validate_default=True)
     seed: Annotated[int, to_str] = 1
 
-class Datastructure(BaseModel):
+class Datastructure(PymobModel):
     __pydantic_extra__: Dict[str,OptionDataVariable]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
@@ -561,7 +581,7 @@ class Datastructure(BaseModel):
     def observed_data_variables_max(self):
         return [v.max for v in self.__pydantic_extra__.values() if v.observed]
 
-class Solverbase(BaseModel):
+class Solverbase(PymobModel):
     model_config = ConfigDict(
         validate_assignment=True, 
         extra="forbid"
@@ -570,7 +590,7 @@ class Solverbase(BaseModel):
     exclude_kwargs_model: OptionTupleStr = ("t", "time", "x_in", "y", "x", "Y", "X")
     exclude_kwargs_postprocessing: OptionTupleStr = ("t", "time", "interpolation", "results")
 
-class Jaxsolver(Solverbase):
+class Jaxsolver(PymobModel):
     diffrax_solver: str = "Dopri5"
     rtol: float = 1e-6
     atol: float = 1e-7
@@ -580,7 +600,7 @@ class Jaxsolver(Solverbase):
     max_steps: int = int(1e5)
     throw_exception: bool = True
 
-class Inference(BaseModel):
+class Inference(PymobModel):
     model_config = {"validate_assignment" : True}
 
     eps: float = 1e-8
@@ -592,7 +612,7 @@ class Inference(BaseModel):
     plot: Optional[str|Callable] = None
     n_predictions: Annotated[int, to_str] = 100
 
-class Multiprocessing(BaseModel):
+class Multiprocessing(PymobModel):
     _name = "multiprocessing"
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
 
@@ -608,7 +628,7 @@ class Multiprocessing(BaseModel):
         else: 
             return cpu_set
         
-class Modelparameters(BaseModel):
+class Modelparameters(PymobModel):
     __pydantic_extra__: Dict[str,OptionParam]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
@@ -689,7 +709,7 @@ class Modelparameters(BaseModel):
             
         self.all = {k:self.all[k] for k in keys} 
 
-class Errormodel(BaseModel):
+class Errormodel(PymobModel):
     __pydantic_extra__: Dict[str,OptionRV]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
     
@@ -697,7 +717,7 @@ class Errormodel(BaseModel):
     def all(self) -> Dict[str,OptionRV]:
         return self.__pydantic_extra__
 
-class Pyabc(BaseModel):
+class Pyabc(PymobModel):
     model_config = {"validate_assignment" : True}
 
     sampler: str = "SingleCoreSampler"
@@ -709,7 +729,7 @@ class Pyabc(BaseModel):
     # database configuration
     database_path: str = f"{tempfile.gettempdir()}/pyabc.db"
 
-class Redis(BaseModel):
+class Redis(PymobModel):
     model_config = {"validate_assignment" : True, "protected_namespaces": ()}
 
     _name = "inference.pyabc.redis"
@@ -724,7 +744,7 @@ class Redis(BaseModel):
     model_id: Annotated[int, to_str] = Field(default=0, alias="eval.model_id")
 
 
-class Pymoo(BaseModel):
+class Pymoo(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
 
     algortihm: str = "UNSGA3"
@@ -735,7 +755,7 @@ class Pymoo(BaseModel):
     cvtol: Annotated[float, to_str] = 1e-7
     verbose: Annotated[bool, to_str] = True
     
-class Numpyro(BaseModel):
+class Numpyro(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
     user_defined_probability_model: Optional[str] = None
     user_defined_error_model: Optional[str] = None
@@ -1013,7 +1033,15 @@ class Config(BaseModel):
 
     def set_option(self, section: str, option: str, value: str):
         sect = getattr(self, section)
-        setattr(sect, option, value)
+        if isinstance(sect, Modelparameters):
+            if (value == "" or value == "None") and option in sect.all:
+                sect.remove(option)
+            elif (value == "" or value == "None") and option not in sect.all:
+                pass
+            else:
+                sect[option] = value
+        else:
+            sect[option] = value
 
 
 import click
@@ -1029,6 +1057,9 @@ def configure(file, options: Tuple[str, ...]):
         section, option = key.strip(" ").rsplit(".", 1)
 
         section = section.replace("-","_").replace(".","_")
+
+        if section == "jax_solver":
+            section == "jaxsolver"
 
         value = val.strip(" ")
         config.set_option(section, option, value)
