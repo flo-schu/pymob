@@ -157,8 +157,10 @@ class Evaluator:
         self.solver_options = solver_options
         
 
+        
+
         self.parameter_dims = self._regularize_batch_dimensions(
-            arg_names=mappar(model, {}, to="names"), # type: ignore
+            arg_names=list(mappar(model, {}, to="names")) + list(mappar(post_processing, {}, to="names")), # type: ignore
             arg_dims=parameter_dims
         )
 

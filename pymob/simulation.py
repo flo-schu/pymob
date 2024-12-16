@@ -577,7 +577,7 @@ class SimulationBase:
             # TODO: Handle similar to solver and model
             post_processing = getattr(self._mod, self.solver_post_processing)
         else:
-            post_processing = None
+            post_processing = lambda results, time, interpolation: results
 
         stochastic = self.config.simulation.modeltype
             
