@@ -23,11 +23,13 @@ from pymob.inference.analysis import (
     cluster_chains, rename_extra_dims, plot_posterior_samples,
     add_cluster_coordinates
 )
-from pymob.inference.numpyro_dist_map import scipy_to_numpyro, transformed_dist_map
+from pymob.inference.numpyro_dist_map import (
+    scipy_to_numpyro, transformed_dist_map, transform, inv_transform
+)
 
 import numpyro
 from numpyro.infer import Predictive
-from numpyro.distributions import Normal, transforms
+from numpyro.distributions import Normal
 from numpyro.distributions.distribution import DistributionMeta
 from numpyro import handlers
 from numpyro import infer
@@ -52,17 +54,6 @@ sympy2jax_extra_funcs = {
 }
 
 
-def transform(transforms, x):
-    for part in transforms:
-        x = part(x)
-    return x
-
-def inv_transform(transforms, y):
-    for part in transforms[::-1]:
-        y = part.inv(y)
-    return y
-
-
 def catch_patterns(expression_str):
     # tries to match array notation [0 1 2]
     pattern = r"\[(\d+(\.\d+)?(\s+\d+(\.\d+)?)*|\s*)\]"
@@ -80,10 +71,6 @@ def catch_patterns(expression_str):
 #     "halfnorm": HalfNormalTrans,
 #     "poisson": (dist.Poisson, {"mu": "rate"}),
 # }
-
-exp = transforms.ExpTransform
-sigmoid = transforms.SigmoidTransform
-C = transforms.ComposeTransform
 
 class ErrorModelFunction(Protocol):
     def __call__(
@@ -406,9 +393,11 @@ class NumpyroBackend(InferenceBackend):
 
                     # sample from a random normal distribution
                     # CHECK: Expanding before 
+                    # TODO: potentially just use the base dist here, because this is then
+                    # already truncated
                     theta_base_i = numpyro.sample(
                         name=f"{prior_name}_normal_base",
-                        fn=Normal(loc=0, scale=1).expand(batch_shape=prior_dist.shape),
+                        fn=dist.base_dist.expand(batch_shape=prior_dist.shape),
                     )
 
 
