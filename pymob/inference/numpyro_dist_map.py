@@ -6,25 +6,25 @@ from numpyro.distributions import transforms
 scipy_to_numpyro = {
     "deterministic": (numpyro.deterministic, {"value": "value"}),
     # Continuous Distributions
-    "norm": (numpyro.distributions.Normal, {"loc": "loc", "scale": "scale"}),
-    "normal": (numpyro.distributions.Normal, {"loc": "loc", "scale": "scale"}),
-    "halfnorm": (numpyro.distributions.HalfNormal, {"scale": "scale"}),
-    "halfnormal": (numpyro.distributions.HalfNormal, {"scale": "scale"}),
-    "expon": (numpyro.distributions.Exponential, {"scale": "rate"}),  # rate = 1/scale
-    "exponential": (numpyro.distributions.Exponential, {"scale": "rate"}),  # rate = 1/scale
+    "norm": (numpyro.distributions.Normal, {"loc": "loc", "scale": "scale", "low": "low", "high": "high"}),
+    "normal": (numpyro.distributions.Normal, {"loc": "loc", "scale": "scale", "low": "low", "high": "high"}),
+    "halfnorm": (numpyro.distributions.HalfNormal, {"scale": "scale", "high":"high"}),
+    "halfnormal": (numpyro.distributions.HalfNormal, {"scale": "scale", "high":"high"}),
+    "expon": (numpyro.distributions.Exponential, {"scale": "rate", "high": "high"}),  # rate = 1/scale
+    "exponential": (numpyro.distributions.Exponential, {"scale": "rate", "high": "high"}),  # rate = 1/scale
     "uniform": (numpyro.distributions.Uniform, {"loc": "low", "scale": "high"}),  # high = loc + scale
     "beta": (numpyro.distributions.Beta, {"a": "concentration1", "b": "concentration0"}),
-    "gamma": (numpyro.distributions.Gamma, {"a": "concentration", "scale": "rate"}),  # rate = 1/scale
-    "lognorm": (numpyro.distributions.LogNormal, {"scale": "loc", "s": "scale", "loc": "loc"}),
-    "lognormal": (numpyro.distributions.LogNormal, {"scale": "loc", "s": "scale", "loc": "loc"}),
-    "chi2": (numpyro.distributions.Chi2, {"df": "df"}),
-    "pareto": (numpyro.distributions.Pareto, {"b": "scale", "scale": "alpha"}),
-    "t": (numpyro.distributions.StudentT, {"df": "df", "loc": "loc", "scale": "scale"}),
-    "cauchy": (numpyro.distributions.Cauchy, {"loc": "loc", "scale": "scale"}),
-    "gumbel_r": (numpyro.distributions.Gumbel, {"loc": "loc", "scale": "scale"}),
-    "gumbel_l": (lambda loc, scale: numpyro.distributions.Gumbel(loc=-loc, scale=scale), {}),
-    "laplace": (numpyro.distributions.Laplace, {"loc": "loc", "scale": "scale"}),
-    "logistic": (numpyro.distributions.Logistic, {"loc": "loc", "scale": "scale"}),
+    "gamma": (numpyro.distributions.Gamma, {"a": "concentration", "scale": "rate", "low": "low", "high": "high"}),  # rate = 1/scale
+    "lognorm": (numpyro.distributions.LogNormal, {"scale": "loc", "s": "scale", "loc": "loc", "low": "low", "high": "high"}),
+    "lognormal": (numpyro.distributions.LogNormal, {"scale": "loc", "s": "scale", "loc": "loc", "low": "low", "high": "high"}),
+    "chi2": (numpyro.distributions.Chi2, {"df": "df", "low": "low", "high": "high"}),
+    "pareto": (numpyro.distributions.Pareto, {"b": "scale", "scale": "alpha", "low": "low", "high": "high"}),
+    "t": (numpyro.distributions.StudentT, {"df": "df", "loc": "loc", "scale": "scale", "low": "low", "high": "high"}),
+    "cauchy": (numpyro.distributions.Cauchy, {"loc": "loc", "scale": "scale", "low": "low", "high": "high"}),
+    "gumbel_r": (numpyro.distributions.Gumbel, {"loc": "loc", "scale": "scale", "low": "low", "high": "high"}),
+    "gumbel_l": (lambda loc, scale: numpyro.distributions.Gumbel(loc=-loc, scale=scale), {}), 
+    "laplace": (numpyro.distributions.Laplace, {"loc": "loc", "scale": "scale", "low": "low", "high": "high"}),
+    "logistic": (numpyro.distributions.Logistic, {"loc": "loc", "scale": "scale", "low": "low", "high": "high"}),
     "multivariate_normal": (numpyro.distributions.MultivariateNormal, {"mean": "loc", "cov": "covariance_matrix"}),
     "dirichlet": (numpyro.distributions.Dirichlet, {"alpha": "concentration"}),
     
@@ -41,17 +41,39 @@ scipy_to_numpyro = {
 }
 
 import jax.numpy as jnp
-from numpyro.distributions import Normal, TransformedDistribution
+from numpyro.distributions import Normal, TransformedDistribution, TruncatedNormal
 from numpyro.distributions import transforms
 
+
+def transform(transforms, x):
+    for part in transforms:
+        x = part(x)
+    return x
+
+def inv_transform(transforms, y):
+    for part in transforms[::-1]:
+        y = part.inv(y)
+    return y
+
+
+
 # LogNormal Transformation
-def LogNormalTrans(loc, scale):
+def LogNormalTrans(loc, scale, low=None, high=None):
+    _transforms = [
+        transforms.AffineTransform(loc=jnp.log(loc), scale=scale),
+        transforms.ExpTransform(),
+    ]
+
+    if high is not None:
+        high = inv_transform(_transforms, high)
+
+    if low is not None:
+        low = inv_transform(_transforms, low)
+
+    base_distribution=TruncatedNormal(loc=0, scale=1, low=low, high=high)
     return TransformedDistribution(
-        base_distribution=Normal(0, 1),
-        transforms=[
-            transforms.AffineTransform(loc=jnp.log(loc), scale=scale),
-            transforms.ExpTransform(),
-        ]
+        base_distribution=base_distribution,
+        transforms=_transforms
     )
 
 # LogNormal Transformation

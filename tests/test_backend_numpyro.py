@@ -107,6 +107,38 @@ def test_convergence_nuts_kernel_jaxsolver():
         rtol=1e-2, atol=1e-3
     )
 
+
+def test_convergence_svi_kernel_jaxsolver_truncated_alpha():
+    sim = init_simulation_casestudy_api("test_scenario_truncated_alpha")
+    sim.solver = JaxSolver
+    # TODO can the lotka volterra case study be run with the Jax solver
+    # without throw_exception = False
+    sim.dispatch_constructor(throw_exception=False)
+    
+    sim.config.inference_numpyro.gaussian_base_distribution = True
+
+    sim.config.inference_numpyro.kernel = "svi"
+    sim.config.inference_numpyro.svi_iterations = 10_000
+    sim.config.inference_numpyro.svi_learning_rate = 0.01
+    sim.set_inferer(backend="numpyro")
+    sim.inferer.run()
+    
+    posterior_mean = sim.inferer.idata.posterior.mean( # type: ignore
+        ("chain", "draw"))[sim.model_parameter_names]
+    true_parameters = sim.model_parameter_dict
+    
+    # tests if true parameters are close to recovered parameters from simulated
+    # data
+    np.testing.assert_allclose(
+        posterior_mean.to_dataarray().values,
+        np.array(list(true_parameters.values())),
+        rtol=1e-2, atol=1e-3
+    )
+
+    sim.inferer.plot_diagnostics()
+
+    # TODO: Test traceplot
+
 def test_convergence_svi_kernel():
     sim = init_simulation_casestudy_api("test_scenario")
 
