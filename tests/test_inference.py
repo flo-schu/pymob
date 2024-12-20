@@ -108,7 +108,7 @@ def test_posterior_predictions_nuts():
 
     np.testing.assert_equal(
         list(idata.unconstrained_posterior.data_vars.keys()),
-        ["rabbits", "wolves"]
+        ["alpha_normal_base", "beta_normal_base"]
     )
 
 
@@ -144,7 +144,7 @@ def test_posterior_predictions_svi():
 
     np.testing.assert_equal(
         list(idata.unconstrained_posterior.data_vars.keys()),
-        ["rabbits", "wolves"]
+        ["alpha_normal_base", "beta_normal_base"]
     )
 
 def test_model_check():
