@@ -497,7 +497,7 @@ class InferenceBackend(ABC):
                 plot_func(self.simulation)
             except AttributeError:
                 warnings.warn(
-                    f"Plot function {plot} was not found in the plot.py module "+
+                    f"Plot function {plot} was not found in the {self.simulation._plot} module "+
                     "Make sure the name has been spelled correctly or try to "+
                     "set the function directly to 'sim.config.inference.plot'.",
                     category=UserWarning
