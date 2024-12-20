@@ -106,6 +106,11 @@ def test_posterior_predictions_nuts():
         ["rabbits", "wolves"]
     )
 
+    np.testing.assert_equal(
+        list(idata.unconstrained_posterior.data_vars.keys()),
+        ["rabbits", "wolves"]
+    )
+
 
 def test_posterior_predictions_svi():
     sim = init_simulation_casestudy_api("test_scenario")
@@ -137,6 +142,10 @@ def test_posterior_predictions_svi():
         ["rabbits", "wolves"]
     )
 
+    np.testing.assert_equal(
+        list(idata.unconstrained_posterior.data_vars.keys()),
+        ["rabbits", "wolves"]
+    )
 
 def test_model_check():
     sim = init_lotka_volterra_case_study_hierarchical_from_settings("lotka_volterra_hierarchical_presimulated_v1")

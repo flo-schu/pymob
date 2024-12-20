@@ -1298,8 +1298,12 @@ class NumpyroBackend(InferenceBackend):
             model, posterior_samples=samples, key=key, n=None
         )
 
+        unconstrained_prior = [f"{p}_normal_base" for p in priors]
         return self.to_arviz_idata(
-            posterior={k: v for k, v in samples.items() if k in priors + data_variables},
+            posterior={
+                k: v for k, v in samples.items() 
+                if k in priors + unconstrained_prior + data_variables
+            },
             posterior_predictive=posterior_predictive,
             log_likelihood=log_likelihood,
             observed_data=obs,
