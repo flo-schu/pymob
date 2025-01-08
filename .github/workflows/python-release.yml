@@ -12,6 +12,7 @@ jobs:
     # uses: ./.github/workflows/python-test.yml
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v4
     - name: Download artifact
       id: download-artifact
       uses: dawidd6/action-download-artifact@v7
