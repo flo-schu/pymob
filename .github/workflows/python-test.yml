@@ -39,6 +39,7 @@ jobs:
           echo "Github head_ref ${{ github.head_ref }}"
           echo "GitHub ref_type: ${{ github.ref_type }}"
           echo "GitHub ref_name: ${{ github.ref_name }}"
+          echo "GitHub base branch of tag: ${{ github.event.base_ref }}"
           echo "GitHub sha: ${{ github.sha }}"
           echo "GitHub message: ${{ github.event.head_commit.message }}"
   
@@ -62,7 +63,7 @@ jobs:
     - name: Check if commit message contains "bump version"
       id: check_commit
       run: |
-        if [[ "${{ github.event.head_commit.message }}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+a[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+a[0-9]+$ ]]; then
+        if [[ "${{ github.event.head_commit.message }}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+[a-zA-Z]?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+$ ]]; then
           echo "skip=true" >> $GITHUB_ENV
         fi
 
@@ -98,10 +99,16 @@ jobs:
       if: env.skip != 'true'
       run: |
         mkdir -p test_results/ 
-        echo "TEST:OK" > test_results/${{ env.branch_name }}.txt
+        # locally store a file of test results for each test in the matrix
+        echo "TEST:OK" > test_results/${{ env.branch_name }}_${{ matrix.python-version }}.txt
+  
+  upload-test-results:
+    # creates one artifact 'test-results' for the entire test matrix with all files
+    runs-on: ubuntu-latest
+    steps:
     - name: Upload artifact
       if: env.skip != 'true'
       uses: actions/upload-artifact@v4
       with:
         name: test-results
-        path: test_results/
+        path: test_results/*.txt

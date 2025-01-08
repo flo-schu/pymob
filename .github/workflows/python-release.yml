@@ -9,7 +9,20 @@ on:
 
 jobs:
   test-package:
-    uses: ./.github/workflows/python-test.yml
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download artifact
+      id: download-artifact
+      uses: dawidd6/action-download-artifact@v7
+      with:
+        workflow: ./.github/workflows/python-test.yml
+        workflow_conclusion: success
+        branch: ${{ github.event.base_ref }}
+        name: test-results
+        path: test_results/
+    - name: Check test result for the branch
+      id: check_test
+      run: pymob/bash/validate_test_results.sh test_results ${{ github.event.base_ref }}
   build-package:
     needs: test-package
     uses: ./.github/workflows/python-build.yml
