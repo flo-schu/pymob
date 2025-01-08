@@ -119,16 +119,12 @@ jobs:
   upload-test-results:
     # creates one artifact 'test-results' for the entire test matrix with all files
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11"]
-
     needs: test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: test-results-${{ matrix.python-version }}
+          name: test-results-*
           path: test_results/
       - name: Upload artifact
         if: env.skip != 'true'
