@@ -1093,7 +1093,8 @@ class NumpyroBackend(InferenceBackend):
             prior_predictive=obs_predictions,
             observed_data=obs,
             log_likelihood=log_likelihood,
-            n_draws=n
+            n_draws=n,
+            n_chains=1
         )
     
 
@@ -1106,6 +1107,7 @@ class NumpyroBackend(InferenceBackend):
         posterior_predictive: Dict[str, NumericArray] = {},
         observed_data: Dict[str, NumericArray] = {},
         n_draws: Optional[int] = None,
+        n_chains: Optional[int] = None,
         **kwargs,
     ):
         """Create an Arviz idata object from samples.
@@ -1115,6 +1117,9 @@ class NumpyroBackend(InferenceBackend):
         # posterior_coords["chain"] = [0]
         if n_draws is not None:
             posterior_coords["draw"] = list(range(n_draws))
+
+        if n_chains is not None:
+            posterior_coords["chain"] = list(range(n_chains))
         data_structure = self.posterior_data_structure
 
         data_variables = self.config.data_structure.data_variables
