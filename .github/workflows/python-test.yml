@@ -14,8 +14,6 @@ on:
       - "main"  # exclude tests from pull requests to main
   push:
     branches: ["dev", "main"]
-    tags-ignore:
-      - "*"
   workflow_call:
 
 env:
