@@ -13,6 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Get Branch
+      run: |
+        branch=$(git branch -r --contains ${{ github.ref }} --format "%(refname:lstrip=3)")
+        echo "BRANCH=$branch" >> $GITHUB_ENV
     - name: Download artifact
       id: download-artifact
       uses: dawidd6/action-download-artifact@v7
@@ -24,7 +28,7 @@ jobs:
         path: test_results/
     - name: Check test result for the branch
       id: check_test
-      run: pymob/bash/validate_test_results.sh test_results ${{ github.event.base_ref }}
+      run: pymob/bash/validate_test_results.sh test_results "${{ env.BRANCH }}"
   build-package:
     needs: test-package
     uses: ./.github/workflows/python-build.yml
