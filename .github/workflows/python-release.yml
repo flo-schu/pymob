@@ -16,7 +16,7 @@ jobs:
       id: download-artifact
       uses: dawidd6/action-download-artifact@v7
       with:
-        workflow: ./.github/workflows/python-test.yml
+        workflow: python-test.yml
         workflow_conclusion: success
         branch: ${{ github.event.base_ref }}
         name: test-results
