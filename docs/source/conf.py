@@ -9,7 +9,7 @@
 project = "pymob"
 copyright = "2024, Florian Schunck"
 author = "Florian Schunck"
-release = "0.5.0a10"
+release = "0.5.0a11"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
