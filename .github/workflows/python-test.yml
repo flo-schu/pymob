@@ -26,6 +26,7 @@ jobs:
   print-context:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Print Environment Variables
         # see more contexts: https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
         run: |
