@@ -3,7 +3,7 @@ from . import sim
 from . import utils
 from . import solvers
 
-__version__ = "0.5.0a6"
+__version__ = "0.5.0a7"
 
 
 from .simulation import SimulationBase
