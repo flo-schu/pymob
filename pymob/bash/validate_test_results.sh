@@ -13,7 +13,7 @@ for file in "$dir"/*; do
       echo "File '$file' contains 'TEST:OK'"
     else
       echo "File '$file' does not contain 'TEST:OK'"
-      exit 0
+      exit 1
     fi
 
     # Check if the filename contains the specified word
@@ -22,7 +22,7 @@ for file in "$dir"/*; do
       echo "$dir/${branch}_*.txt"
     else
       echo "Test does not belong to '$branch' branch."
-      exit 0
+      exit 1
     fi
   fi
 done
