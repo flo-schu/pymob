@@ -7,7 +7,11 @@ on:
   # It is not really avoidable to run the tests twice on the commit.
   # if i want to make sure that only repos that have passed the test are
   # deployed.
+  # no more testing on push from dev, because I'm not going to push to a main or dev without
+  # an active PR
   pull_request:
+    branches-ignore: 
+      - "main"  # exclude tests from pull requests to main
   push:
     branches: ["dev", "main"]
   workflow_call:
