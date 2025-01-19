@@ -27,3 +27,4 @@ build
 # linked case studies
 bufferguts
 guts_base
+docs/source/*/case_studies

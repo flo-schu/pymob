@@ -721,22 +721,21 @@ class NumpyroBackend(InferenceBackend):
         The method is equivalent using the log_likelihood method, but returns
         only the likelihood of the data given the model parameters.
         
-        ```python
-        def log_likelihood(theta: dict):
-            theta = {f"{key}_normal_base": val for key, val in theta.items()}
-            loglik = numpyro.infer.util.log_likelihood(
-                model=seeded_model,
-                posterior_samples=theta, 
-                batch_ndims=0,
-                solver=sim.inferer.evaluator,
-                obs=data,
-                masks=masks,
-            )
-
-            return loglik
-
-        jax.vmap(log_likelihood)(theta)
-        ```
+        .. :code-block: python
+        
+           def log_likelihood(theta: dict):
+               theta = {f"{key}_normal_base": val for key, val in theta.items()}
+               loglik = numpyro.infer.util.log_likelihood(
+                   model=seeded_model,
+                   posterior_samples=theta, 
+                   batch_ndims=0,
+                   solver=sim.inferer.evaluator,
+                   obs=data,
+                   masks=masks,
+               )
+              return loglik
+           
+           jax.vmap(log_likelihood)(theta)
 
         Parameters
         ----------
@@ -1398,7 +1397,7 @@ class NumpyroBackend(InferenceBackend):
         """Combine chains if chains were computed in a fully parallelized manner
         (on different machines, jobs, etc.). 
 
-        In addition, the method drops all data variables and *_norm priors 
+        In addition, the method drops all data variables and '..._norm' priors 
         (i.e. helper priors with a normal base). This is done, in order to
         create slim data objects for storage.
 

@@ -97,6 +97,97 @@ def update_parameters_dict(config, x, parnames):
 
 
 class SimulationBase:
+    """
+    Construct a simulation directly to construct a new simulation instance, 
+    use it with a config file for modifying or playing with existing simulations
+    or use for subclassing.
+
+    Components
+    ----------
+
+    model : Callable
+        A python function that returns one or multiple numeric values or arrays
+        The number and dimensionality of the output must be specified in the
+        :class:`pymob.sim.config.Datastructure`, which takes 
+        :class:`pymob.sim.config.DataVariable` as input.
+    model_parameters : Dict['theta': Dict[str, float|Array], 'y0': xarray.Dataset, 'x_in': xarray.Dataset]
+        Model parameters is a dictionary containing 3 keys: 'theta' (parameters), 
+        'y0' (initial values), and 'x_in' (input that can be interpolated).
+        Only 'theta' is a mandatory component.
+        
+    
+    Direct use
+    ----------
+
+    In the direct use, {class}`pymob.simulation.SimulationBase` is instantiated
+    and the relevant model attributes are set. Each simulation needs these 
+    parameters
+    
+    >>> import xarray as xr
+    >>> from pymob import SimulationBase
+    >>> from pymob.examples import linear_model
+    >>> from pymob.sim.solvetools import solve_analytic_1d
+
+    Instantiate the model and assign the data. ALthough assigning data is
+    not mandatory, it makes setting up a model easier, because the coordinates,
+    and dimensions are simply taken from the observations dataset
+
+    >>> sim = SimulationBase()
+    >>> linreg, x, y, y_noise, parameters = linear_model(n=5)
+    >>> obs = xr.DataArray(y_noise, coords={"x": x}).to_dataset(name="y")
+    >>> sim.observations = obs
+    MinMaxScaler(variable=y, min=-4.654415807935214, max=5.905355866673117)
+
+    Parameterize the model    
+    
+    >>> sim.model = linreg
+    >>> sim.solver = solve_analytic_1d
+    >>> sim.config.model_parameters.a = Param(value=10, free=False)
+    >>> sim.config.model_parameters.b = Param(value=3, free=True , prior="normal(loc=0,scale=10)") # type:ignore
+    >>> sim.model_parameters["parameters"] = sim.config.model_parameters.value_dict
+
+    Run the model
+    
+    >>> sim.dispatch_constructor()
+    >>> evaluator = sim.dispatch(theta={"b":3})
+    >>> evaluator()
+    >>> evaluator.results
+    <xarray.Dataset>
+    Dimensions:  (x: 5)
+    Coordinates:
+      * x        (x) float64 -5.0 -2.5 0.0 2.5 5.0
+    Data variables:
+        y        (x) float64 -5.0 2.5 10.0 17.5 25.0
+
+    
+    Subclassing use
+    ---------------
+
+    Subclassing :class:`SimulationBase` makes sense if the Simulation is intended
+    to be used with configuration files
+
+    >>> class LotkaVolterraSimulation(SimulationBase):
+    ...     def initialize(self, input):
+    ...         self.observations = xr.load_dataset(os.path.join(self.data_path, self.config.case_study.observations))
+    ...         y0 = self.parse_input("y0", drop_dims=["time"])
+    ...         self.model_parameters["y0"] = y0
+    ...         self.model_parameters["parameters"] = self.config.model_parameters.value_dict
+    
+    .. :code-block: python
+
+       sim = LotkaVolterraSimulation(settings.cfg)
+       sim.setup()
+
+    :meth:`setup` calls initialize and a couple of other functions to set up the
+    simulation. Afterwards methods like :meth:`dispatch` can be used. The idea is
+    to automatize the regular setup steps for a simulation in the initialize 
+    method. The reason why :meth:`setup` is called explicitely and not implicitly
+    by the `__init__` method is to give the user the opportunity to change the 
+    configuration before initializing, such as the name of the scenario 
+    (`sim.config.case_study.scenario`), the results directory 
+    (`sim.config.case_study.output`) or any other configuration of the simulation
+
+    """
     SimulationPlot = SimulationPlot
     model: Optional[Callable] = None
     solver: Optional[Callable] = None
@@ -306,6 +397,12 @@ class SimulationBase:
         )
 
     def load_modules(self):
+        """Loads modules from cases studies. If the case study is a regular 
+        python package. It looks for the package associated with the Simulation 
+        class and imports the typical modules [data, mod, plot, prob, sim]
+
+        :meta private:
+        """
         # test if the case study is installed as a package
         package = self.__module__.split(".")[0]
         spec = importlib.util.find_spec(package)
@@ -362,6 +459,9 @@ class SimulationBase:
                 )
 
     def create_coordinates(self) -> Dict[str, np.ndarray]:
+        """
+        :meta private:
+        """
         coordinates = {}
         for dim in self.config.data_structure.dimensions:
             if dim in self.observations:

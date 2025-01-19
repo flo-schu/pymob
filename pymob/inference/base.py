@@ -119,7 +119,6 @@ class Distribution:
             func = func_env[f"{func_name}_{self.name}"]
             
             return func
-
     
     def construct(self, context: Iterable[Mapping], extra_kwargs: Dict = {}):
         _context = {arg: lookup_from(arg, context) for arg in self.undefined_args}

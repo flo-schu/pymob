@@ -8,6 +8,7 @@ from pymob.sim.config import Config, DataVariable, Modelparameters
 from pymob.sim.parameters import Param, RandomVariable, Expression, OptionRV
 from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
+from pymob.examples import linear_model
 
 rng = np.random.default_rng(1)
 
@@ -145,22 +146,6 @@ def init_guts_casestudy_variable_exposure(scenario="testing_guts_variable_exposu
     else:
         pytest.skip()
 
-
-def linear_model():
-    def model(x, a, b):
-        return a + x * b
-
-    parameters = dict(
-        a=0,
-        b=1,
-        sigma_y=1,
-    )
-
-    x = np.linspace(-5, 5, 50)
-    y = model(x=x, a=parameters["a"], b=parameters["b"])
-    y_noise = rng.normal(loc=y, scale=parameters["sigma_y"])
-
-    return model, x, y, y_noise, parameters
 
 def setup_solver(sim: SimulationBase, solver: type):
     sim.solver = solver

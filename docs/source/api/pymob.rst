@@ -1,19 +1,16 @@
 pymob package
 =============
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   pymob.inference
-   pymob.sim
-   pymob.solvers
-   pymob.utils
-
 Submodules
 ----------
+
+pymob.simulation module
+-----------------------
+
+.. autoclass:: pymob.simulation.SimulationBase
+   :members: 
+   :exclude-members: SimulationPlot
+   :show-inheritance: 
 
 pymob.infer module
 ------------------
@@ -39,14 +36,6 @@ pymob.simulate module
    :undoc-members:
    :show-inheritance:
 
-pymob.simulation module
------------------------
-
-.. automodule:: pymob.simulation
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Module contents
 ---------------
 
@@ -54,3 +43,16 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
+
+
+Index
+-----
+
+.. toctree::
+   :maxdepth: 4
+
+   pymob.inference
+   pymob.sim
+   pymob.solvers
+   pymob.utils
+   pymob.examples
