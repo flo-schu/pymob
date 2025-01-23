@@ -614,18 +614,24 @@ class InferenceBackend(ABC):
         """
         TODO: Should be outsourced to pymob.sim.plot
         """
+        var_names = [
+            k for k, v in self.config.model_parameters.free.items()
+            if v.prior.distribution != "deterministic"
+        ]
+
         if hasattr(self.idata, "posterior"):
             axes = az.plot_trace(
                 self.idata,
-                var_names=list(self.config.model_parameters.free.keys())
+                var_names=var_names
             )
             fig = plt.gcf()
             fig.tight_layout()
             fig.savefig(f"{self.simulation.output_path}/trace.png")
+            
             axes = az.plot_pair(
                 self.idata, 
                 divergences=True, 
-                var_names=list(self.config.model_parameters.free.keys())
+                var_names=var_names
             )
             fig = plt.gcf()
             fig.tight_layout()
