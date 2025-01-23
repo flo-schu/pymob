@@ -962,6 +962,8 @@ class Config(BaseModel):
                 category=UserWarning
             )
             _package = package.replace("-", "_").replace(" ", "_")
+        else:
+            _package = package
 
         spec = importlib.util.find_spec(_package)
         if spec is not None:
