@@ -949,7 +949,21 @@ class Config(BaseModel):
         # potential BUG: This is not safe. It is not guaranteed that the 
         # case study has the same name as the package. But it might be in the future
         package = self.case_study.name
-        spec = importlib.util.find_spec(package)
+
+        if "-" in package or " " in package:
+            warnings.warn(
+                f"Case-study contained {package} contained unallowed "+
+                "characters: ['-', ' ']. "+
+                "The characters will be replaced with underscores ('_') for "+
+                "importing the package modules. " +
+                "In the future, the name of the case study should be the same as " +
+                "as the package where the modules are located. This name must not "
+                "contain hyphens ('-') or whitespace characters (' '),",
+                category=UserWarning
+            )
+            _package = package.replace("-", "_").replace(" ", "_")
+
+        spec = importlib.util.find_spec(_package)
         if spec is not None:
             for module in self.case_study.modules:
                 try:
@@ -960,11 +974,11 @@ class Config(BaseModel):
                     # a module belonging to the same package, because if the
                     # object is used, it would resolve to the package of the
                     # higher level case-study
-                    m = importlib.import_module(f"{package}.{module}")
+                    m = importlib.import_module(f"{_package}.{module}")
                     self._modules.update({module: m})
                 except ModuleNotFoundError:
                     warnings.warn(
-                        f"Module {module}.py not found in {package}."
+                        f"Module {module}.py not found in {_package}."
                         f"Missing modules can lead to unexpected behavior. "
                         f"Does your case study have a {module}.py file? "
                         f"It should have the line `from PARENT_CASE_STUDY."
