@@ -371,7 +371,10 @@ class InferenceBackend(ABC):
         x = np.linspace(*bounds_x, n_grid_points)
         y = np.linspace(*bounds_y, n_grid_points)
 
-        grid = {p: v for p, v in zip(parameters, np.array(list(it.product(x, y))).T)}
+        grid = {
+            p: np.expand_dims(v, 1) for p, v 
+            in zip(parameters, np.array(list(it.product(x, y))).T)
+        }
         loglik = log_likelihood_func(grid)
 
         # loglikelihood must be transposed to work with meshgrid
@@ -389,7 +392,10 @@ class InferenceBackend(ABC):
             yv = np.linspace(*bounds_y, n_vector_points)
             Xv, Yv = np.meshgrid(xv, yv)
 
-            gridv = {p: v for p, v in zip(parameters, np.array(list(it.product(xv, yv))).T)}
+            gridv = {
+                p: np.expand_dims(v, 1) for p, v 
+                in zip(parameters, np.array(list(it.product(xv, yv))).T)
+            }
 
             grads = gradient_func(gridv)
 
@@ -618,6 +624,10 @@ class InferenceBackend(ABC):
             k for k, v in self.config.model_parameters.free.items()
             if v.prior.distribution != "deterministic"
         ]
+
+        if hasattr(self.idata, "sample_stats"):
+            if "diverging" in self.idata["sample_stats"]:
+                self.idata["sample_stats"]["diverging"] = self.idata["sample_stats"].diverging.astype(int)
 
         if hasattr(self.idata, "posterior"):
             axes = az.plot_trace(
