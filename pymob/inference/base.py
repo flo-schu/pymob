@@ -375,7 +375,14 @@ class InferenceBackend(ABC):
             p: np.expand_dims(v, 1) for p, v 
             in zip(parameters, np.array(list(it.product(x, y))).T)
         }
-        loglik = log_likelihood_func(grid)
+
+        loglik = []
+        import tqdm
+        for i in tqdm.tqdm(range(len(x) * len(y)), desc="Function evaluations"):
+            loglik_i = log_likelihood_func({k: v[i] for k, v in grid.items()})
+            loglik.append(loglik_i)
+
+        loglik = np.array(loglik)
 
         # loglikelihood must be transposed to work with meshgrid
         Z = loglik.reshape((n_grid_points, n_grid_points)).T
@@ -397,9 +404,15 @@ class InferenceBackend(ABC):
                 in zip(parameters, np.array(list(it.product(xv, yv))).T)
             }
 
-            grads = gradient_func(gridv)
+            u = []
+            v = []
+            for i in tqdm.tqdm(range(len(xv) * len(yv)), desc="Gradient evaluations"):
+                grads = gradient_func({k: v[i] for k, v in gridv.items()})
+                u.append(grads[par_x])
+                v.append(grads[par_y])
 
-            u, v = grads[par_x], grads[par_y]
+            u = np.array(u)
+            v = np.array(v)
 
             # gradients must be transposed to work with meshgrid
             U = u.reshape((n_vector_points, n_vector_points)).T
