@@ -13,7 +13,7 @@ from typing import Callable, Dict
 from multiprocessing.pool import ThreadPool, Pool
 import re
 from collections import OrderedDict
-
+import logging
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 import xarray as xr
@@ -205,6 +205,9 @@ class SimulationBase:
             self.config = config
         else:
             self.config = Config(config=config)
+
+        self.set_logger()
+
         self._observations: xr.Dataset = xr.Dataset()
         self._observations_copy: xr.Dataset = xr.Dataset()
         self._coordinates: Dict = {}
@@ -457,6 +460,24 @@ class SimulationBase:
                     f"Module {module}.py not found in {case_study}."
                     f"Missing modules can lead to unexpected behavior."
                 )
+
+    def set_logger(self):        
+        self.logger = logging.getLogger(f"{type(self).__qualname__}")
+        self.logger.setLevel(logging.DEBUG)
+
+        # add a file handler
+        handler = logging.FileHandler(f"{self.output_path}/log.txt", mode="w")
+        handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s: %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+
+        # add a stderr handler
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
 
     def create_coordinates(self) -> Dict[str, np.ndarray]:
         """
