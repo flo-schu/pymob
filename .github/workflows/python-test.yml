@@ -69,18 +69,19 @@ jobs:
         python-version: ["3.10", "3.11"]
 
     steps:
-    - name: Check if commit message contains "bump version"
-      id: check_commit
-      run: |
-        msg=$(git log -1 --pretty=format:"%s")
-        if [[ "${msg}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+[a-zA-Z]?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+$ ]]; then
-          echo "skip=true" >> $GITHUB_ENV
-        fi
-
     - uses: actions/checkout@v4
       if: env.skip != 'true'
       with:
         submodules: true
+
+    - name: Check if commit message contains "bump version"
+      id: check_commit
+      run: |
+        msg=$(git log -1 --pretty=format:"%s")
+        echo "Commit message ${msg}"
+        if [[ "${msg}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+[a-zA-Z]?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+$ ]]; then
+          echo "skip=true" >> $GITHUB_ENV
+        fi
 
     - name: Set up Python ${{ matrix.python-version }}
       if: env.skip != 'true'
