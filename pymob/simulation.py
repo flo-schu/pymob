@@ -206,8 +206,6 @@ class SimulationBase:
         else:
             self.config = Config(config=config)
 
-        self.set_logger()
-
         self._observations: xr.Dataset = xr.Dataset()
         self._observations_copy: xr.Dataset = xr.Dataset()
         self._coordinates: Dict = {}
@@ -254,6 +252,7 @@ class SimulationBase:
         
         self.config.create_directory(directory="results", force=True)
         self.config.create_directory(directory="scenario", force=True)
+        self.set_logger()
 
         # TODO: set up logger
         self.parameterize = partial(
