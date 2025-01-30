@@ -1018,6 +1018,13 @@ class NumpyroBackend(InferenceBackend):
                 # TODO: Use trace handler to obtain the different components
                 #       prior, likelihood and deterministic transforms to populate
                 #       missing components
+                if f"{data_var}_obs" not in predictions:
+                    raise KeyError(
+                        f"`{data_var}` was not found in the predictions, "+
+                        "but is marked as an observed data variable. Either "+
+                        f"set `sim.config.data_variables.{data_var}.observed = False` " +
+                        f"or generate predictions for '{data_var}' in the error-model."
+                    )
                 obs = predictions[f"{data_var}_obs"]
             else:
                 if self.error_model[data_var].obs_transform_func is not None:
