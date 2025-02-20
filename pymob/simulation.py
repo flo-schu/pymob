@@ -202,6 +202,8 @@ class SimulationBase:
             self.config = config
         else:
             self.config = Config(config=config)
+
+        self.config.case_study.pymob_version = pymob.__version__
         self._observations: xr.Dataset = xr.Dataset()
         self._observations_copy: xr.Dataset = xr.Dataset()
         self._coordinates: Dict = {}

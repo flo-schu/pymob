@@ -351,7 +351,7 @@ class Casestudy(PymobModel):
 
     name: str = "unnamed_case_study"
     version: Optional[str] = None
-    pymob_version: str = pymob.__version__
+    pymob_version: Optional[str] = None
     scenario: str = "unnamed_scenario"
     package: str = "case_studies"
     modules: OptionListStr = ["sim", "mod", "prob", "data", "plot"]

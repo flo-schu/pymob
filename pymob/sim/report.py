@@ -1,7 +1,6 @@
 import os
 from functools import wraps
 
-import pymob
 from pymob.sim.config import Config
 from pymob.inference.analysis import create_table, log
 
@@ -72,7 +71,7 @@ class Report:
         ), newlines=0)
 
         self._write("Using pymob=={v}".format(
-            v=pymob.__version__,
+            v=self.config.case_study.pymob_version,
         ))
 
     @reporting
