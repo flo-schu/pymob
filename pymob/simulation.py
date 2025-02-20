@@ -1,30 +1,26 @@
 import os
 import sys
 import copy
-import inspect
 import warnings
 import importlib
 from typing import Optional, List, Union, Literal, Any, Tuple, Sequence, Mapping
 from types import ModuleType
 import configparser
 from functools import partial
-import multiprocessing as mp
 from typing import Callable, Dict
-from multiprocessing.pool import ThreadPool, Pool
-import re
 from collections import OrderedDict
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
 import xarray as xr
 import dpath as dp
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from toopy import param, benchmark
+from sklearn.preprocessing import MinMaxScaler
+from toopy import benchmark
 
 import pymob
 from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
 from pymob.utils.errors import errormsg, import_optional_dependency
-from pymob.utils.store_file import scenario_file, parse_config_section
+from pymob.utils.store_file import parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
 from pymob.sim.config import Config, ParameterDict, DataVariable, Param, NumericArray
@@ -91,7 +87,7 @@ def update_parameters_dict(config, x, parnames):
         if key_exist != 1:
             raise KeyError(
                 f"prior parameter name: {par} was not found in config. " + 
-                f"make sure parameter name was spelled correctly"
+                "make sure parameter name was spelled correctly"
             )
     return config
 
@@ -515,9 +511,9 @@ class SimulationBase:
                 evaluator.results
 
         print(f"\nBenchmarking with {n} evaluations")
-        print(f"=================================")
+        print("=================================")
         run_bench()
-        print(f"=================================\n")
+        print("=================================\n")
         
     def infer_ode_states(self) -> int:
         if self.config.simulation.n_ode_states == -1:
@@ -531,7 +527,7 @@ class SimulationBase:
                     "source code. "
                     f"Setting 'n_ode_states={n_ode_states}."
                 )
-            except:
+            except:  # noqa: E722
                 warnings.warn(
                     "The number of ODE states was not specified in "
                     "the config file [simulation] > 'n_ode_states = <n>' "
@@ -639,7 +635,7 @@ class SimulationBase:
                 self.model = model
             else: 
                 raise ValueError(
-                    f"A model was not provided as a callable function nor was "
+                    "A model was not provided as a callable function nor was "
                     "it specified in 'config.simulation.model', please specify "
                     "Any of the two."
                 )
@@ -667,7 +663,7 @@ class SimulationBase:
                 self.solver = solver
             else: 
                 raise ValueError(
-                    f"A solver was not provided directly to 'sim.solver' nor was "
+                    "A solver was not provided directly to 'sim.solver' nor was "
                     "it specified in 'config.simulation.model', please specify "
                     "Any of the two."
                 )
@@ -678,7 +674,8 @@ class SimulationBase:
             # TODO: Handle similar to solver and model
             post_processing = getattr(self._mod, self.solver_post_processing)
         else:
-            post_processing = lambda results, time, interpolation: results
+            def post_processing(results, time, interpolation):
+                return results
 
         stochastic = self.config.simulation.modeltype
             
@@ -859,7 +856,7 @@ class SimulationBase:
                     else:
                         raise KeyError(
                             f"Pymob cannot find the key '{missing_dim}' in "+
-                            f"the simulation data structure: "+
+                            "the simulation data structure: "+
                             f"{self.config.data_structure.all.keys()}`. "
                             "Make sure all needed data variables are defined."
                         )
@@ -1019,7 +1016,7 @@ class SimulationBase:
             import ipywidgets as widgets
             from IPython.display import display, clear_output
         else:
-            raise ImportError(f"ipywidgets is not available and needs to be installed")
+            raise ImportError("ipywidgets is not available and needs to be installed")
 
         def interactive_output(func, controls):
             out = widgets.Output(layout={'border': '1px solid black'})
@@ -1673,7 +1670,7 @@ class SimulationBase:
             
             if coord is None:
                 raise KeyError(
-                    f"No coordinates have been defined for parameter dimension "+
+                    "No coordinates have been defined for parameter dimension "+
                     f"{dim}. Use `sim.coordinates['{dim}'] = [...]` to define "+
                     "the coordinates." 
                 )
@@ -1796,49 +1793,8 @@ class SimulationBase:
             posterior=self.inferer.idata.posterior,
             indices=self.indices
         )
-        # self.report_table_parameter_estimates()
 
         # TODO: This was taken from the pymob.infer.
         # Remove when the functions in plot have been added separately to
         # the report
         self.inferer.plot()
-
-    # def report_table_parameter_estimates(self):
-    #     if self.config.report.table_parameter_estimates_with_batch_dim_vars:
-    #         var_names = {
-    #             k: k for k, v in self.config.model_parameters.free.items()
-    #         }
-    #     else:
-    #         var_names = {
-    #             k: k for k, v in self.config.model_parameters.free.items()
-    #             if self.config.simulation.batch_dimension not in v.dims
-    #         }
-
-    #     var_names.update(self.config.report.table_parameter_estimates_override_names)
-
-    #     tab = create_table(
-    #         posterior=self.inferer.idata.posterior,
-    #         vars=var_names,
-    #         error_metric=self.config.report.table_parameter_estimates_error_metric,
-    #         nesting_dimension=self.indices.keys(),
-    #         parameters_as_rows=self.config.report.table_parameter_estimates_parameters_as_rows,
-    #     )
-
-    #     if self.config.report.table_parameter_estimates_format == "latex":
-    #         table_latex = tab.to_latex(
-    #             float_format="%.2f",
-    #             caption=(
-    #                 f"Parameter estimates of the {self.config.case_study.name}"+
-    #                 f"({self.config.case_study.scenario}) model."
-    #             ),
-    #             label=f"tab:parameters-{self.config.case_study.name}__{self.config.case_study.scenario}"
-    #         )
-    #         with open(f"{self.output_path}/report_table_parameter_estimates.tex", "w") as f:
-    #             f.writelines(table_latex)
-
-    #     elif self.config.report.table_parameter_estimates_format == "csv":
-    #         tab.to_csv(f"{self.output_path}/report_table_parameter_estimates.csv")
-
-
-    #     elif self.config.report.table_parameter_estimates_format == "tsv":
-    #         tab.to_csv(f"{self.output_path}/report_table_parameter_estimates.tsv", sep="\t")
