@@ -21,7 +21,7 @@ def cluster_chains(posterior, deviation="std"):
         raise ValueError("Deviation method not implemented.")    
 
     global cluster_id
-    cluster_id = 1
+    cluster_id = 0
     cluster = [cluster_id] * len(posterior.chain)
     unclustered_chains = posterior.chain.values
 
@@ -41,13 +41,20 @@ def cluster_chains(posterior, deviation="std"):
                 cluster[i] = cluster_id + 1
                 new_cluster.append(i)
 
-        cluster_id += 1
         if len(new_cluster) == 0:
             return
 
+        cluster_id += 1
         recurse_clusters(new_cluster)
     
     recurse_clusters(unclustered_chains)
+
+    if cluster_id > 0:
+        warnings.warn(
+            "The number of clusters in the InferenceData object was "+
+            f"{cluster_id + 1} > 1. This indicates that not all chains/restarts "
+            "Converged on the same estimate."
+        )
 
     return cluster
 
@@ -155,9 +162,11 @@ def bic(idata: az.InferenceData):
     return msg, bic
 
 
-def add_cluster_coordinates(idata, deviation="std"):
-    cluster = cluster_chains(idata.posterior, deviation=deviation)
-    idata = idata.assign_coords(cluster=("chain", cluster))
+def add_cluster_coordinates(idata: az.InferenceData, deviation="std") -> az.InferenceData:
+    """Clusters the chains in the posterior"""
+    if "posterior" in idata.groups():
+        cluster = cluster_chains(idata.posterior, deviation=deviation)
+        idata = idata.assign_coords(cluster=("chain", cluster))
     return idata
 
 
