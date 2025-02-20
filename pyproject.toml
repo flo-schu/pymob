@@ -92,3 +92,6 @@ push = true
 "docs/source/conf.py" = [
     'release = "{version}"'
 ]
+"case_studies/lotka_volterra_case_study/pyproject.toml" = [
+    '"pymob == {version}"'
+]

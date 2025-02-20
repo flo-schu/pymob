@@ -14,6 +14,7 @@ import jax.numpy as jnp
 
 def test_guts_constant_exposure():
     sim = init_guts_casestudy_constant_exposure()
+    sim.initialize_from_script()
 
     sim.use_jax_solver()
     sim.dispatch_constructor(rtol=1e-7, atol=1e-8)
@@ -31,6 +32,8 @@ def test_guts_constant_exposure():
 
 def test_guts_variable_exposure():
     sim = init_guts_casestudy_variable_exposure()
+    sim.load_modules()
+    sim.initialize_from_script()
 
     sim.use_jax_solver()
     sim.dispatch_constructor(rtol=1e-7, atol=1e-8)
@@ -51,6 +54,7 @@ def test_bufferguts_variable_exposure():
     # Can be fixed by replacing the bufferGUTS model with the improved
     # version from the jupyter notebook
     sim = init_bufferguts_casestudy()
+    sim.initialize_from_script()
 
     sim.use_jax_solver()
     sim.dispatch_constructor(rtol=1e-7, atol=1e-8, max_steps=1e6)

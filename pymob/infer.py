@@ -51,7 +51,7 @@ def main(case_study, scenario, package, output, random_seed, n_cores, inference_
         sim.inferer.load_results()
 
     sim.posterior_predictive_checks()
-    sim.inferer.plot()
+    sim.report()
 
     max_ram_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000
     print("RESOURCE USAGE")

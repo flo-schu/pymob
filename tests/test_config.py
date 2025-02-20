@@ -57,9 +57,15 @@ def test_simulation():
 
     # resetting the path is important in case other case studies were imported
     # in the same testing session
-    sim.config.import_casestudy_modules(reset_path=True)
-    sim.config.simulation.model = "lotka_volterra"
-
+    # sim.config.import_casestudy_modules(reset_path=True)
+    
+    def lotka_volterra(t, y, alpha, beta, gamma, delta):
+        prey, predator = y
+        dprey_dt = alpha * prey - beta * prey * predator
+        dpredator_dt = delta * prey * predator - gamma * predator
+        return dprey_dt, dpredator_dt
+    
+    sim.model = lotka_volterra
     sim.solver = solve_ivp_1d
     sim.setup()
     sim.config.save(

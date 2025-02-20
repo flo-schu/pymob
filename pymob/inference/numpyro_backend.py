@@ -334,7 +334,7 @@ class NumpyroBackend(InferenceBackend):
         #       and correspondingly, be parsed during parse_obs or so
         indices = self.indices
         error_model = self.error_model.copy()
-        extra = {"EPS": EPS}
+        extra = {"EPS": EPS, "jnp": jnp, "np": np}
         gaussian_base = self.gaussian_base_distribution
         data_variables_y0 = [
             f"{dv}_y0" for dv in self.config.data_structure.data_variables
@@ -627,11 +627,11 @@ class NumpyroBackend(InferenceBackend):
                 model, 
                 dense_mass=self.config.inference_numpyro.nuts_dense_mass, 
                 step_size=self.config.inference_numpyro.nuts_step_size,
-                adapt_mass_matrix=True,
-                adapt_step_size=True,
+                adapt_mass_matrix=self.config.inference_numpyro.nuts_adapt_mass_matrix,
+                adapt_step_size=self.config.inference_numpyro.nuts_adapt_step_size,
                 max_tree_depth=self.config.inference_numpyro.nuts_max_tree_depth,
                 target_accept_prob=self.config.inference_numpyro.nuts_target_accept_prob,
-                init_strategy=self.init_strategy
+                init_strategy=self.init_strategy,
             )
         else:
             raise NotImplementedError(
@@ -1232,6 +1232,13 @@ class NumpyroBackend(InferenceBackend):
                 }) 
                 idata[group_key].attrs.update({"pymob_version": pymob.__version__})
 
+        # this automatically adds clusters for multiple chains
+        # by default this is done by testing if the means of all parameters
+        # deviate by more than one standard deviation.
+        # The method does not take any decisions, it just labels the chains
+        # with a specific cluster.
+        idata = add_cluster_coordinates(idata, deviation="std")
+
         return idata
     
 
@@ -1393,11 +1400,25 @@ class NumpyroBackend(InferenceBackend):
         else:
             self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
 
-    def load_results(self, file="numpyro_posterior.nc"):
-        self.idata = az.from_netcdf(f"{self.simulation.output_path}/{file}")
+    def load_results(self, file="numpyro_posterior.nc", cluster: Optional[int] = None):
+        idata = az.from_netcdf(f"{self.simulation.output_path}/{file}")
+        if cluster is not None:
+            self.select_cluster(idata, cluster)
 
+        self.idata = idata
 
+    @staticmethod
+    def select_cluster(idata: az.InferenceData, cluster: int):
+        for g in idata.groups():
+            idata_group = idata[g].where(idata[g].cluster == cluster, drop=True)
+            del idata[g]
+            idata[g] = idata_group
 
+        warnings.warn(
+            f"FILTERING POSTERIOR: Selecting cluster {cluster} from the complete "
+            f"posterior. The cluster contains the chains: {idata_group.chain.values}."
+        )
+        return idata
 
     # This is a separate script!    
     def combine_chains(self, chain_location="chains", drop_extra_vars=[], cluster_deviation="std"):

@@ -22,6 +22,7 @@ from pydantic import (
 from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 
+import pymob
 from pymob.utils.store_file import scenario_file, converters
 from pymob.sim.parameters import Param, NumericArray, OptionRV
 # this loads at the import of the module
@@ -188,53 +189,55 @@ def string_to_dict(
     if isinstance(option, Dict):
         return option
     
-    else:
-        retdict = {}
-        for i in option.split(" "):
-            k, v = i.strip().split(sep="=", maxsplit=1)
-            parsed = False
-            if not parsed:
-                try:
-                    parsed_value = TypeAdapter(float).validate_json(v)
-                    parsed = True
-                except ValidationError:
-                    pass
-
-            if not parsed:
-                try:
-                    # v_ = np.array(ast.literal_eval(v))
-                    # _cfg = ConfigDict(arbitrary_types_allowed=True)
-                    parsed_value = TypeAdapter(NumericArray).validate_json(v)
-                    parsed = True
-                except ValueError:
-                    pass
-
-            if not parsed and v[0] == "(" and v[-1] == ")":
-                try:
-                    parsed_value = make_tuple(v)
-                    parsed = True
-                except ValueError:
-                    pass
-
-            # TODO: This expression seems to be wrong, but it causes no errors
-            if not parsed and  v[0]=="[" and v[-1]=="]":
-                try:
-                    v_ = v.strip("[]").split(",")
-                    # remove double quotes
-                    v_ = [re.sub(r'^"|"$', '', s) for s in v_]
-                    v_ = [re.sub(r"^'|'$", '', s) for s in v_]
-                    v_ = [v_i for v_i in v_ if v_i != ""]
-                    parsed_value = TypeAdapter(List[str]).validate_python(v_)
-                    parsed = True
-                except ValidationError:
-                    pass
-
-            if not parsed:
-                parsed_value = v
-
-            retdict.update({k:parsed_value})
-                
+    retdict = {}
+    if len(option) == 0:
         return retdict
+
+    for i in option.split(" "):
+        k, v = i.strip().split(sep="=", maxsplit=1)
+        parsed = False
+        if not parsed:
+            try:
+                parsed_value = TypeAdapter(float).validate_json(v)
+                parsed = True
+            except ValidationError:
+                pass
+
+        if not parsed:
+            try:
+                # v_ = np.array(ast.literal_eval(v))
+                # _cfg = ConfigDict(arbitrary_types_allowed=True)
+                parsed_value = TypeAdapter(NumericArray).validate_json(v)
+                parsed = True
+            except ValueError:
+                pass
+
+        if not parsed and v[0] == "(" and v[-1] == ")":
+            try:
+                parsed_value = make_tuple(v)
+                parsed = True
+            except ValueError:
+                pass
+
+        # TODO: This expression seems to be wrong, but it causes no errors
+        if not parsed and  v[0]=="[" and v[-1]=="]":
+            try:
+                v_ = v.strip("[]").split(",")
+                # remove double quotes
+                v_ = [re.sub(r'^"|"$', '', s) for s in v_]
+                v_ = [re.sub(r"^'|'$", '', s) for s in v_]
+                v_ = [v_i for v_i in v_ if v_i != ""]
+                parsed_value = TypeAdapter(List[str]).validate_python(v_)
+                parsed = True
+            except ValidationError:
+                pass
+
+        if not parsed:
+            parsed_value = v
+
+        retdict.update({k:parsed_value})
+            
+    return retdict
 
 
 def string_to_param(option:str|Param) -> Param:
@@ -349,6 +352,8 @@ class Casestudy(PymobModel):
     root: str = "."
 
     name: str = "unnamed_case_study"
+    version: Optional[str] = None
+    pymob_version: Optional[str] = None
     scenario: str = "unnamed_scenario"
     package: str = "case_studies"
     modules: OptionListStr = ["sim", "mod", "prob", "data", "plot"]
@@ -778,6 +783,8 @@ class Numpyro(PymobModel):
     nuts_max_tree_depth: Annotated[int, to_str] = 10
     nuts_target_accept_prob: Annotated[float, to_str] = 0.8
     nuts_dense_mass: Annotated[bool, to_str] = True
+    nuts_adapt_step_size: Annotated[bool, to_str] = True
+    nuts_adapt_mass_matrix: Annotated[bool, to_str] = True
 
     # sa parameters
     sa_adapt_state_size: Optional[int] = None
@@ -785,6 +792,19 @@ class Numpyro(PymobModel):
     # svi parameters
     svi_iterations: Annotated[int, to_str] = 10_000
     svi_learning_rate: Annotated[float, to_str] = 0.0001
+
+class Report(PymobModel):
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
+
+    table_parameter_estimates: Annotated[bool, to_str] = True
+    table_parameter_estimates_format: Literal["latex", "csv", "tsv"] = "csv"
+    table_parameter_estimates_error_metric: Literal["hdi", "sd"] = "sd"
+    table_parameter_estimates_parameters_as_rows: Annotated[bool, to_str] = True
+    table_parameter_estimates_with_batch_dim_vars: Annotated[bool, to_str] = False
+    table_parameter_estimates_override_names: OptionDictStr = {}
+
+    plot_trace: Annotated[bool, to_str] = True
+    plot_parameter_pairs: Annotated[bool, to_str] = True
 
 class Config(BaseModel):
     """Configuration manager for pymob."""
@@ -843,6 +863,7 @@ class Config(BaseModel):
     inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")
     inference_pymoo: Pymoo = Field(default=Pymoo(), alias="inference.pymoo")
     inference_numpyro: Numpyro = Field(default=Numpyro(), alias="inference.numpyro")
+    report: Report = Field(default=Report(), alias="report")
         
     @property
     def input_file_paths(self) -> list:
@@ -1008,6 +1029,8 @@ class Config(BaseModel):
         case_study = os.path.join(
             self.case_study.root, 
             self.case_study.package,
+            self.case_study.name,
+            # Account for package architecture 
             self.case_study.name
         )
         if case_study not in sys.path:
