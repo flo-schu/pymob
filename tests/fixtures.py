@@ -10,6 +10,8 @@ from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
 from pymob.examples import linear_model
 
+from lotka_volterra_case_study.sim import Simulation
+
 rng = np.random.default_rng(1)
 
 def init_simulation_casestudy_api(scenario="test_scenario"):
@@ -19,9 +21,7 @@ def init_simulation_casestudy_api(scenario="test_scenario"):
         pkg_dir="case_studies"
     )
     
-    from lotka_volterra_case_study.sim import Simulation
     sim = Simulation(config=config)
-    sim.config.import_casestudy_modules(reset_path=True)
     sim.setup()
     return sim
 
@@ -94,7 +94,7 @@ def init_bufferguts_leo_casestudy(scenario="testing"):
     the test is skipped on the remote.
     """
     config = Config()
-    config.case_study.name = "bufferguts"
+    config.case_study.name = "guts_base"
     config.case_study.scenario = scenario
     config.case_study.package = "../pollinERA/case_studies"
     config.case_study.simulation = "BuffergutsSimulation"
@@ -113,7 +113,7 @@ def init_guts_casestudy_constant_exposure(scenario="testing_guts_constant_exposu
     the test is skipped on the remote.
     """
     config = Config()
-    config.case_study.name = "bufferguts"
+    config.case_study.name = "guts_base"
     config.case_study.scenario = scenario
     config.case_study.package = "../pollinator-tktd/case_studies"
     config.case_study.simulation = "GutsSimulationConstantExposure"
@@ -133,7 +133,7 @@ def init_guts_casestudy_variable_exposure(scenario="testing_guts_variable_exposu
     the test is skipped on the remote.
     """
     config = Config()
-    config.case_study.name = "bufferguts"
+    config.case_study.name = "guts_base"
     config.case_study.scenario = scenario
     config.case_study.package = "../pollinator-tktd/case_studies"
     config.case_study.simulation = "GutsSimulationVariableExposure"

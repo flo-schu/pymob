@@ -217,6 +217,9 @@ def test_benchmark_jaxsolver():
 
 
 def test_rect_interpolation():
+    # TODO: Use another test for making sure, the interpolation works. This
+    # is not the right place. A mini Simulation using interpolated data would
+    # be great.
     sim: SimulationBase
     sim = init_bufferguts_casestudy(scenario="testing")
     sim.use_jax_solver() # type: ignore
@@ -293,6 +296,8 @@ def test_rect_interpolation():
         )
 
 def test_no_interpolation():
+    # TODO: Use another test for making sure, the interpolation works. This
+    # is not the right place
     sim: SimulationBase
     sim = init_bufferguts_casestudy(scenario="testing")
     sim.use_jax_solver() # type: ignore
