@@ -19,7 +19,7 @@ def init_simulation_casestudy_api(scenario="test_scenario"):
         pkg_dir="case_studies"
     )
     
-    from case_studies.lotka_volterra_case_study.sim import Simulation
+    from lotka_volterra_case_study.sim import Simulation
     sim = Simulation(config=config)
     sim.config.import_casestudy_modules(reset_path=True)
     sim.setup()
