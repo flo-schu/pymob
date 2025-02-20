@@ -1027,6 +1027,8 @@ class Config(BaseModel):
         case_study = os.path.join(
             self.case_study.root, 
             self.case_study.package,
+            self.case_study.name,
+            # Account for package architecture 
             self.case_study.name
         )
         if case_study not in sys.path:

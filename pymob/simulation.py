@@ -433,7 +433,7 @@ class SimulationBase:
                     )
             return
 
-
+        # This branch is for case studies that are not installed (I guess)
         # append relevant paths to sys
         package = os.path.join(
             self.config.case_study.root, 
@@ -446,7 +446,9 @@ class SimulationBase:
         case_study = os.path.join(
             self.config.case_study.root, 
             self.config.case_study.package,
-            self.config.case_study.name
+            self.config.case_study.name,
+            # Account for package architecture 
+            self.config.case_study.name,
         )
         if case_study not in sys.path:
             sys.path.insert(0, case_study)
