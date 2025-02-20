@@ -230,7 +230,7 @@ class SolverBase:
             raise AssertionError(
                 f"The {self.x_dim}-coordinate on the observations (sim.coordinates) "+
                 f"goes to a higher {self.x_dim} than the {self.x_dim}-coordinate "+
-                "of the model_parameters['x_in']. "+
+                f"of the model_parameters['x_in'] ({np.max(x)} > {np.max(x_xin)}). "+
                 "Make sure to run the simulation only until the provided x_in "+
                 "values, or extend the x_in values until the required time"
             )
