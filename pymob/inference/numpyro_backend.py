@@ -627,11 +627,11 @@ class NumpyroBackend(InferenceBackend):
                 model, 
                 dense_mass=self.config.inference_numpyro.nuts_dense_mass, 
                 step_size=self.config.inference_numpyro.nuts_step_size,
-                adapt_mass_matrix=True,
-                adapt_step_size=True,
+                adapt_mass_matrix=self.config.inference_numpyro.nuts_adapt_mass_matrix,
+                adapt_step_size=self.config.inference_numpyro.nuts_adapt_step_size,
                 max_tree_depth=self.config.inference_numpyro.nuts_max_tree_depth,
                 target_accept_prob=self.config.inference_numpyro.nuts_target_accept_prob,
-                init_strategy=self.init_strategy
+                init_strategy=self.init_strategy,
             )
         else:
             raise NotImplementedError(

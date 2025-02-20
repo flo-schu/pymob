@@ -778,6 +778,8 @@ class Numpyro(PymobModel):
     nuts_max_tree_depth: Annotated[int, to_str] = 10
     nuts_target_accept_prob: Annotated[float, to_str] = 0.8
     nuts_dense_mass: Annotated[bool, to_str] = True
+    nuts_adapt_step_size: Annotated[bool, to_str] = True
+    nuts_adapt_mass_matrix: Annotated[bool, to_str] = True
 
     # sa parameters
     sa_adapt_state_size: Optional[int] = None
