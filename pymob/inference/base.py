@@ -616,7 +616,7 @@ class InferenceBackend(ABC):
         """
         var_names = [
             k for k, v in self.config.model_parameters.free.items()
-            if v.prior.distribution != "deterministic"
+            if self.config.simulation.batch_dimension not in v.dims
         ]
 
         if hasattr(self.idata, "posterior"):

@@ -788,6 +788,19 @@ class Numpyro(PymobModel):
     svi_iterations: Annotated[int, to_str] = 10_000
     svi_learning_rate: Annotated[float, to_str] = 0.0001
 
+class Report(PymobModel):
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
+
+    table_parameter_estimates: Annotated[bool, to_str] = True
+    table_parameter_estimates_format: Literal["latex", "csv", "tsv"] = "csv"
+    table_parameter_estimates_error_metric: Literal["hdi", "sd"] = "sd"
+    table_parameter_estimates_parameters_as_rows: Annotated[bool, to_str] = True
+    table_parameter_estimates_with_batch_dim_vars: Annotated[bool, to_str] = False
+    table_parameter_estimates_override_names: OptionDictStr = {}
+
+    plot_trace: Annotated[bool, to_str] = True
+    plot_parameter_pairs: Annotated[bool, to_str] = True
+
 class Config(BaseModel):
     """Configuration manager for pymob."""
     model_config = {"validate_assignment" : True, "extra": "allow", "protected_namespaces": ()}
@@ -845,6 +858,7 @@ class Config(BaseModel):
     inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")
     inference_pymoo: Pymoo = Field(default=Pymoo(), alias="inference.pymoo")
     inference_numpyro: Numpyro = Field(default=Numpyro(), alias="inference.numpyro")
+    report: Report = Field(default=Report(), alias="report")
         
     @property
     def input_file_paths(self) -> list:

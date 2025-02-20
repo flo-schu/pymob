@@ -29,6 +29,7 @@ from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_data
 from pymob.sim.base import stack_variables
 from pymob.sim.config import Config, ParameterDict, DataVariable, Param, NumericArray
 from pymob.sim.plot import SimulationPlot
+from pymob.sim.report import Report
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -1783,3 +1784,61 @@ class SimulationBase:
 
         simplot.plot_data_variables()
         simplot.save("posterior_predictive.png")
+
+
+    def report(self):
+        """Creates a configurable report. To select which items to report and
+        to fine-tune the report settings, modify the options in `config.report`.
+        """
+        report = Report(config=self.config)
+
+        report.table_parameter_estimates(
+            posterior=self.inferer.idata.posterior,
+            indices=self.indices
+        )
+        # self.report_table_parameter_estimates()
+
+        # TODO: This was taken from the pymob.infer.
+        # Remove when the functions in plot have been added separately to
+        # the report
+        self.inferer.plot()
+
+    # def report_table_parameter_estimates(self):
+    #     if self.config.report.table_parameter_estimates_with_batch_dim_vars:
+    #         var_names = {
+    #             k: k for k, v in self.config.model_parameters.free.items()
+    #         }
+    #     else:
+    #         var_names = {
+    #             k: k for k, v in self.config.model_parameters.free.items()
+    #             if self.config.simulation.batch_dimension not in v.dims
+    #         }
+
+    #     var_names.update(self.config.report.table_parameter_estimates_override_names)
+
+    #     tab = create_table(
+    #         posterior=self.inferer.idata.posterior,
+    #         vars=var_names,
+    #         error_metric=self.config.report.table_parameter_estimates_error_metric,
+    #         nesting_dimension=self.indices.keys(),
+    #         parameters_as_rows=self.config.report.table_parameter_estimates_parameters_as_rows,
+    #     )
+
+    #     if self.config.report.table_parameter_estimates_format == "latex":
+    #         table_latex = tab.to_latex(
+    #             float_format="%.2f",
+    #             caption=(
+    #                 f"Parameter estimates of the {self.config.case_study.name}"+
+    #                 f"({self.config.case_study.scenario}) model."
+    #             ),
+    #             label=f"tab:parameters-{self.config.case_study.name}__{self.config.case_study.scenario}"
+    #         )
+    #         with open(f"{self.output_path}/report_table_parameter_estimates.tex", "w") as f:
+    #             f.writelines(table_latex)
+
+    #     elif self.config.report.table_parameter_estimates_format == "csv":
+    #         tab.to_csv(f"{self.output_path}/report_table_parameter_estimates.csv")
+
+
+    #     elif self.config.report.table_parameter_estimates_format == "tsv":
+    #         tab.to_csv(f"{self.output_path}/report_table_parameter_estimates.tsv", sep="\t")
