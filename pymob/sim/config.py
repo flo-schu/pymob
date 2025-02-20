@@ -189,53 +189,55 @@ def string_to_dict(
     if isinstance(option, Dict):
         return option
     
-    else:
-        retdict = {}
-        for i in option.split(" "):
-            k, v = i.strip().split(sep="=", maxsplit=1)
-            parsed = False
-            if not parsed:
-                try:
-                    parsed_value = TypeAdapter(float).validate_json(v)
-                    parsed = True
-                except ValidationError:
-                    pass
-
-            if not parsed:
-                try:
-                    # v_ = np.array(ast.literal_eval(v))
-                    # _cfg = ConfigDict(arbitrary_types_allowed=True)
-                    parsed_value = TypeAdapter(NumericArray).validate_json(v)
-                    parsed = True
-                except ValueError:
-                    pass
-
-            if not parsed and v[0] == "(" and v[-1] == ")":
-                try:
-                    parsed_value = make_tuple(v)
-                    parsed = True
-                except ValueError:
-                    pass
-
-            # TODO: This expression seems to be wrong, but it causes no errors
-            if not parsed and  v[0]=="[" and v[-1]=="]":
-                try:
-                    v_ = v.strip("[]").split(",")
-                    # remove double quotes
-                    v_ = [re.sub(r'^"|"$', '', s) for s in v_]
-                    v_ = [re.sub(r"^'|'$", '', s) for s in v_]
-                    v_ = [v_i for v_i in v_ if v_i != ""]
-                    parsed_value = TypeAdapter(List[str]).validate_python(v_)
-                    parsed = True
-                except ValidationError:
-                    pass
-
-            if not parsed:
-                parsed_value = v
-
-            retdict.update({k:parsed_value})
-                
+    retdict = {}
+    if len(option) == 0:
         return retdict
+
+    for i in option.split(" "):
+        k, v = i.strip().split(sep="=", maxsplit=1)
+        parsed = False
+        if not parsed:
+            try:
+                parsed_value = TypeAdapter(float).validate_json(v)
+                parsed = True
+            except ValidationError:
+                pass
+
+        if not parsed:
+            try:
+                # v_ = np.array(ast.literal_eval(v))
+                # _cfg = ConfigDict(arbitrary_types_allowed=True)
+                parsed_value = TypeAdapter(NumericArray).validate_json(v)
+                parsed = True
+            except ValueError:
+                pass
+
+        if not parsed and v[0] == "(" and v[-1] == ")":
+            try:
+                parsed_value = make_tuple(v)
+                parsed = True
+            except ValueError:
+                pass
+
+        # TODO: This expression seems to be wrong, but it causes no errors
+        if not parsed and  v[0]=="[" and v[-1]=="]":
+            try:
+                v_ = v.strip("[]").split(",")
+                # remove double quotes
+                v_ = [re.sub(r'^"|"$', '', s) for s in v_]
+                v_ = [re.sub(r"^'|'$", '', s) for s in v_]
+                v_ = [v_i for v_i in v_ if v_i != ""]
+                parsed_value = TypeAdapter(List[str]).validate_python(v_)
+                parsed = True
+            except ValidationError:
+                pass
+
+        if not parsed:
+            parsed_value = v
+
+        retdict.update({k:parsed_value})
+            
+    return retdict
 
 
 def string_to_param(option:str|Param) -> Param:
