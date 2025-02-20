@@ -191,6 +191,16 @@ class JaxSolver(SolverBase):
                     "dealing with this. Try pre-compute the interpolations. "+
                     "This should speed up the solver. "
                 )
+            
+            
+            if x_in[0].shape[0] != x_in[1].shape[0]:
+                raise ValueError(
+                    f"Mismatch in zero-th dimensions of x and y in interpolation"+
+                    "input 'x_in'. This often results of a problematic dimensional"+
+                    "order. Consider reordering the dimensions and reordering the"+
+                    "x dimension (e.g. time) after the batch dimension and before"+
+                    "any other dimension."
+                )
             interp = LinearInterpolation(ts=x_in[0], ys=x_in[1])
             args=(interp, *args)
             # jumps = x_in[0][self.coordinates_input_vars["x_in"][self.x_dim] < self.x[-1]]
@@ -246,4 +256,3 @@ class JaxSolver(SolverBase):
         res_dict = OrderedDict({v:val for v, val in zip(odestates, sol)})
 
         return self.post_processing(res_dict, jnp.array(self.x), interp, *ppargs)
-

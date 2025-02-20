@@ -110,8 +110,8 @@ class SimulationBase:
         The number and dimensionality of the output must be specified in the
         :class:`pymob.sim.config.Datastructure`, which takes 
         :class:`pymob.sim.config.DataVariable` as input.
-    model_parameters : Dict['theta': Dict[str, float|Array], 'y0': xarray.Dataset, 'x_in': xarray.Dataset]
-        Model parameters is a dictionary containing 3 keys: 'theta' (parameters), 
+    model_parameters : Dict['parameters': Dict[str, float|Array], 'y0': xarray.Dataset, 'x_in': xarray.Dataset]
+        Model parameters is a dictionary containing 3 keys: 'parameters' (parameters), 
         'y0' (initial values), and 'x_in' (input that can be interpolated).
         Only 'theta' is a mandatory component.
         
