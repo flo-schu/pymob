@@ -22,6 +22,7 @@ from pydantic import (
 from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 
+import pymob
 from pymob.utils.store_file import scenario_file, converters
 from pymob.sim.parameters import Param, NumericArray, OptionRV
 # this loads at the import of the module
@@ -349,6 +350,8 @@ class Casestudy(PymobModel):
     root: str = "."
 
     name: str = "unnamed_case_study"
+    version: Optional[str] = None
+    pymob_version: str = pymob.__version__
     scenario: str = "unnamed_scenario"
     package: str = "case_studies"
     modules: OptionListStr = ["sim", "mod", "prob", "data", "plot"]

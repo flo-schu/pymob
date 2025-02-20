@@ -389,8 +389,11 @@ class SimulationBase:
 
     def __repr__(self) -> str:
         return (
-            f"Simulation(case_study={self.config.case_study.name}, "
-            f"scenario={self.config.case_study.scenario})"
+            "Simulation(case_study={c}, scenario={s}, version={v})".format(
+                c=self.config.case_study.name, 
+                s=self.config.case_study.scenario,
+                v=self.config.case_study.version
+            )
         )
 
     def load_modules(self):
@@ -404,6 +407,8 @@ class SimulationBase:
         package = self.__module__.split(".")[0]
         spec = importlib.util.find_spec(package)
         if spec is not None and package != "pymob":
+            p = importlib.import_module(package)
+            self.config.case_study.version = p.__version__
             for module in MODULES:
                 try:
                     # TODO: Consider importing modules as a nested dictionary 

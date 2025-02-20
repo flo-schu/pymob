@@ -1,6 +1,7 @@
 import os
 from functools import wraps
 
+import pymob
 from pymob.sim.config import Config
 from pymob.inference.analysis import create_table, log
 
@@ -64,6 +65,15 @@ class Report:
             underline='=' * len(str(self))
         )
         self._write(msg, mode="w")
+
+        self._write("Using {c}=={v}".format(
+            c=self.config.case_study.name,
+            v=self.config.case_study.version,
+        ), newlines=0)
+
+        self._write("Using pymob=={v}".format(
+            v=pymob.__version__,
+        ))
 
     @reporting
     def table_parameter_estimates(self, posterior, indices):
