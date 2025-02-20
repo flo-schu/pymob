@@ -334,7 +334,7 @@ class NumpyroBackend(InferenceBackend):
         #       and correspondingly, be parsed during parse_obs or so
         indices = self.indices
         error_model = self.error_model.copy()
-        extra = {"EPS": EPS}
+        extra = {"EPS": EPS, "jnp": jnp, "np": np}
         gaussian_base = self.gaussian_base_distribution
         data_variables_y0 = [
             f"{dv}_y0" for dv in self.config.data_structure.data_variables
