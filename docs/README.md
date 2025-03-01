@@ -74,4 +74,5 @@ sphinx-apidoc  -o docs/source/api pymob && sphinx-build -M html docs/source/ doc
 ```
 
 
+TODO: Take up doctest, testing case-studies, converting testing notebooks to the test pipelines
 
