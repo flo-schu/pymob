@@ -9,3 +9,6 @@ sphinxcontrib-jsmath==1.0.1
 sphinxcontrib-qthelp==1.0.7
 sphinxcontrib-serializinghtml==1.1.10
 myst-nb
+
+# DEPRECATED
+# they can now be installed with pip install .[docs]

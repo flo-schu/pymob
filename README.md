@@ -1,7 +1,7 @@
 # Pymob
 
 ![testing](https://github.com/flo-schu/pymob/actions/workflows/python-test.yml/badge.svg)
-![build](https://github.com/flo-schu/pymob/actions/workflows/python-build.yml/badge.svg)
+![build](https://github.com/flo-schu/pymob/actions/workflows/python-release.yml/badge.svg)
 [![Documentation Status](https://readthedocs.org/projects/pymob/badge/?version=latest)](https://pymob.readthedocs.io/en/latest/?badge=latest)
 
 Pymob is a **Py**thon based **mo**del **b**uilding platform. It abstracts repetitive
