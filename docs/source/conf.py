@@ -23,6 +23,7 @@ extensions = [
     'sphinx.ext.autosummary',
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.napoleon",  # used for building numpy style documentation
+    # "sphinx_immaterial", # only needed for sphinx_immaterial theme
 ]
 
 # https://myst-parser.readthedocs.io/en/latest/configuration.html
@@ -43,6 +44,8 @@ source_suffix = {
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
+
+# html_theme = "sphinx_immaterial"
 html_theme = "pydata_sphinx_theme"
 html_static_path = ["_static"]
 html_context = {
