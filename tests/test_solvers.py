@@ -216,6 +216,9 @@ def test_benchmark_jaxsolver():
 
 
 def test_rect_interpolation():
+    # TODO: Use another test for making sure, the interpolation works. This
+    # is not the right place. A mini Simulation using interpolated data would
+    # be great.
     sim: SimulationBase
     
     # TODO: Use another test for making sure, the interpolation works. This
@@ -297,6 +300,8 @@ def test_rect_interpolation():
         )
 
 def test_no_interpolation():
+    # TODO: Use another test for making sure, the interpolation works. This
+    # is not the right place
     sim: SimulationBase
     # TODO: Use another test for making sure, the interpolation works. This
     # is not the right place. A mini Simulation using interpolated data would

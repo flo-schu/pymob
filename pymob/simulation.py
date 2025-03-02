@@ -1,34 +1,31 @@
 import os
 import sys
 import copy
-import inspect
 import warnings
 import importlib
 from typing import Optional, List, Union, Literal, Any, Tuple, Sequence, Mapping
 from types import ModuleType
 import configparser
 from functools import partial
-import multiprocessing as mp
 from typing import Callable, Dict
-from multiprocessing.pool import ThreadPool, Pool
-import re
 from collections import OrderedDict
 import logging
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
 import xarray as xr
 import dpath as dp
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from toopy import param, benchmark
+from sklearn.preprocessing import MinMaxScaler
+from toopy import benchmark
 
 import pymob
 from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
 from pymob.utils.errors import errormsg, import_optional_dependency
-from pymob.utils.store_file import scenario_file, parse_config_section
+from pymob.utils.store_file import parse_config_section
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
 from pymob.sim.config import Config, ParameterDict, DataVariable, Param, NumericArray
 from pymob.sim.plot import SimulationPlot
+from pymob.sim.report import Report
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -90,7 +87,7 @@ def update_parameters_dict(config, x, parnames):
         if key_exist != 1:
             raise KeyError(
                 f"prior parameter name: {par} was not found in config. " + 
-                f"make sure parameter name was spelled correctly"
+                "make sure parameter name was spelled correctly"
             )
     return config
 
@@ -205,6 +202,8 @@ class SimulationBase:
             self.config = config
         else:
             self.config = Config(config=config)
+
+        self.config.case_study.pymob_version = pymob.__version__
 
         self._observations: xr.Dataset = xr.Dataset()
         self._observations_copy: xr.Dataset = xr.Dataset()
@@ -394,8 +393,11 @@ class SimulationBase:
 
     def __repr__(self) -> str:
         return (
-            f"Simulation(case_study={self.config.case_study.name}, "
-            f"scenario={self.config.case_study.scenario})"
+            "Simulation(case_study={c}, scenario={s}, version={v})".format(
+                c=self.config.case_study.name, 
+                s=self.config.case_study.scenario,
+                v=self.config.case_study.version
+            )
         )
 
     def load_modules(self):
@@ -409,6 +411,8 @@ class SimulationBase:
         package = self.__module__.split(".")[0]
         spec = importlib.util.find_spec(package)
         if spec is not None and package != "pymob":
+            p = importlib.import_module(package)
+            self.config.case_study.version = p.__version__
             for module in MODULES:
                 try:
                     # TODO: Consider importing modules as a nested dictionary 
@@ -431,7 +435,7 @@ class SimulationBase:
                     )
             return
 
-
+        # This branch is for case studies that are not installed (I guess)
         # append relevant paths to sys
         package = os.path.join(
             self.config.case_study.root, 
@@ -444,7 +448,9 @@ class SimulationBase:
         case_study = os.path.join(
             self.config.case_study.root, 
             self.config.case_study.package,
-            self.config.case_study.name
+            self.config.case_study.name,
+            # Account for package architecture 
+            self.config.case_study.name,
         )
         if case_study not in sys.path:
             sys.path.insert(0, case_study)
@@ -534,9 +540,9 @@ class SimulationBase:
                 evaluator.results
 
         print(f"\nBenchmarking with {n} evaluations")
-        print(f"=================================")
+        print("=================================")
         run_bench()
-        print(f"=================================\n")
+        print("=================================\n")
         
     def infer_ode_states(self) -> int:
         if self.config.simulation.n_ode_states == -1:
@@ -550,7 +556,7 @@ class SimulationBase:
                     "source code. "
                     f"Setting 'n_ode_states={n_ode_states}."
                 )
-            except:
+            except:  # noqa: E722
                 warnings.warn(
                     "The number of ODE states was not specified in "
                     "the config file [simulation] > 'n_ode_states = <n>' "
@@ -658,7 +664,7 @@ class SimulationBase:
                 self.model = model
             else: 
                 raise ValueError(
-                    f"A model was not provided as a callable function nor was "
+                    "A model was not provided as a callable function nor was "
                     "it specified in 'config.simulation.model', please specify "
                     "Any of the two."
                 )
@@ -686,7 +692,7 @@ class SimulationBase:
                 self.solver = solver
             else: 
                 raise ValueError(
-                    f"A solver was not provided directly to 'sim.solver' nor was "
+                    "A solver was not provided directly to 'sim.solver' nor was "
                     "it specified in 'config.simulation.model', please specify "
                     "Any of the two."
                 )
@@ -697,7 +703,8 @@ class SimulationBase:
             # TODO: Handle similar to solver and model
             post_processing = getattr(self._mod, self.solver_post_processing)
         else:
-            post_processing = lambda results, time, interpolation: results
+            def post_processing(results, time, interpolation):
+                return results
 
         stochastic = self.config.simulation.modeltype
             
@@ -878,7 +885,7 @@ class SimulationBase:
                     else:
                         raise KeyError(
                             f"Pymob cannot find the key '{missing_dim}' in "+
-                            f"the simulation data structure: "+
+                            "the simulation data structure: "+
                             f"{self.config.data_structure.all.keys()}`. "
                             "Make sure all needed data variables are defined."
                         )
@@ -1038,7 +1045,7 @@ class SimulationBase:
             import ipywidgets as widgets
             from IPython.display import display, clear_output
         else:
-            raise ImportError(f"ipywidgets is not available and needs to be installed")
+            raise ImportError("ipywidgets is not available and needs to be installed")
 
         def interactive_output(func, controls):
             out = widgets.Output(layout={'border': '1px solid black'})
@@ -1692,7 +1699,7 @@ class SimulationBase:
             
             if coord is None:
                 raise KeyError(
-                    f"No coordinates have been defined for parameter dimension "+
+                    "No coordinates have been defined for parameter dimension "+
                     f"{dim}. Use `sim.coordinates['{dim}'] = [...]` to define "+
                     "the coordinates." 
                 )
@@ -1805,3 +1812,20 @@ class SimulationBase:
 
         simplot.plot_data_variables()
         simplot.save("posterior_predictive.png")
+
+
+    def report(self):
+        """Creates a configurable report. To select which items to report and
+        to fine-tune the report settings, modify the options in `config.report`.
+        """
+        report = Report(config=self.config)
+
+        report.table_parameter_estimates(
+            posterior=self.inferer.idata.posterior,
+            indices=self.indices
+        )
+
+        # TODO: This was taken from the pymob.infer.
+        # Remove when the functions in plot have been added separately to
+        # the report
+        self.inferer.plot()
