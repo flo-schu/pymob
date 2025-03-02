@@ -95,3 +95,8 @@ push = true
 "docs/source/conf.py" = [
     'release = "{version}"'
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow='mark test as slow.'"
+]
