@@ -33,3 +33,7 @@ python:
       path: .
       extra_requirements: 
         - docs
+        - numpyro
+        - pyabc
+        - pymoo
+        - interactive
