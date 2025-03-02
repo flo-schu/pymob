@@ -107,5 +107,6 @@ sim.set_inferer("numpyro")
 | `pymoo` | (Global) Multi-objective optimization | ✅ | plan |
 | `pyabc` | Approximate Bayes | ✅ | plan |
 | `scipy` | Local optimization (`minimize`) | dev | plan |
-| `pymc` | MCMC | plan | plan
-| `sbi` | Simulation Based Inference (in planning) | hold | hold
+| `pymc` | MCMC | plan | plan |
+| `sbi` | Simulation Based Inference (in planning) | hold | hold |
+| `interactive ` | interactive backend in jupyter notebookswith parameter sliders | ✅ | plan |

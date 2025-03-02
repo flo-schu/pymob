@@ -1761,7 +1761,7 @@ class SimulationBase:
     
         return results
 
-    def prior_predictive_checks(self):
+    def prior_predictive_checks(self, **plot_kwargs):
         """OVERWRITE IF NEEDED.
         Placeholder method. Minimally plots the prior predictions of a 
         simulation.
@@ -1782,12 +1782,13 @@ class SimulationBase:
             coordinates=self.dimension_coords,
             config=self.config,
             idata_groups=["prior_predictive"],
+            **plot_kwargs
         )   
 
         simplot.plot_data_variables()
         simplot.save("prior_predictive.png")
 
-    def posterior_predictive_checks(self):
+    def posterior_predictive_checks(self, **plot_kwargs):
         """OVERWRITE IF NEEDED.
         Placeholder method. Minimally plots the posterior predictions of a 
         simulation.
@@ -1799,6 +1800,7 @@ class SimulationBase:
             coordinates=self.dimension_coords,
             config=self.config,
             idata_groups=["posterior_predictive"],
+            **plot_kwargs
         )
 
         simplot.plot_data_variables()
