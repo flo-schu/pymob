@@ -97,6 +97,7 @@ jobs:
         python -m pip install flake8 pytest
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install .[pyabc,pymoo,interactive,numpyro]
+        pip install -e case_studies/lotka_volterra_case_study
 
     - name: Lint with flake8
       if: env.skip != 'true'
@@ -109,7 +110,7 @@ jobs:
     - name: Test with pytest
       if: env.skip != 'true'
       run: |
-        pytest
+        pytest tests/
 
     - name: Save test results
       if: env.skip != 'true'

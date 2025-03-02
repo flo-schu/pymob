@@ -14,19 +14,23 @@ For simplicity we will use the term parameter **inference**, because we interpre
 (inference-backends)=
 ## Supported inference backends
 
-* interactive (interactive backend in jupyter notebookswith parameter sliders)
-* numpyro (bayesian inference and stochastic variational inference)
-* pyabc (approximate bayesian inference)
-* pymoo (experimental! multi-objective optimization)
-* scipy (experimental! currently only used to generate artificial data for developing and testing models from the specified prior distributions and error models)
+| Backend | Supported Algorithms | Inference | Hierarchical Models |
+| :--- | --- | --- | --- |
+| `numpyro` | Markov Chain Monte Carlo (MCMC), Stochastic Variational Inference (SVI) | ✅ | ✅ |
+| `pymoo` | (Global) Multi-objective optimization | ✅ | plan |
+| `pyabc` | Approximate Bayes | ✅ | plan |
+| `scipy` | Local optimization (`minimize`) | dev | plan |
+| `pymc` | MCMC | plan | plan |
+| `sbi` | Simulation Based Inference (in planning) | hold | hold |
+| `interactive ` | interactive backend in jupyter notebookswith parameter sliders | ✅ | plan |
 
-## Why use `pymob.inference`?
+## Why use `pymob.inferer`?
 
 The goal of `pymob` is to reduce the overhead for exploring, parameterizing and comparing
 models so that the focus can remain on model development. Because after all, 
 we would like to use models to anwer questions.
 
-`pymob.inference` only enforces minimal conventions, which allows the interoperability between different frameworks. At the same time it allows you to take the models you have already written and just plug them into the framework and use it to do inference on it. 
+`pymob.inferer` only enforces minimal conventions, which allows the interoperability between different frameworks. At the same time it allows you to take the models you have already written and just plug them into the framework and use it to do inference on it. 
 
  + Observations/data have to be provided as one [`xarray.Dataset`](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html).
  + Simulations have to be wrapped inside a function, which converts the simulation output to a dictionary of results, so that results can be converted to [`xarray.Dataset`s](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html)

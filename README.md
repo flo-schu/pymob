@@ -38,6 +38,17 @@ E.g. `pip install pymob==0.3.0a5` which is the 5th alpha release of a project br
 ::warning:: It may be possible that different projects release on the same minor version. In this case the release notes (https://github.com/flo-schu/pymob/releases) should be reviewed to see which project it refers to.
 
 
+### Install a development version
+
+```bash
+git clone git@github.com:flo-schu/pymob.git
+conda create -n pymob python=3.11
+pip install -e pymob[dev]
+pre-commit install
+```
+
+Further inference backends may be installed with `pip install -e pymob[numpyro,pyabc,pymoo,interactive]`
+
 ## Documentation
 
 The documentation is available on https://pymob.readthedocs.io/en/latest/

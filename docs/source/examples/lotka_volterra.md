@@ -1,1 +1,0 @@
-# Lotka-Volterra model 

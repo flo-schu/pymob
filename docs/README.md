@@ -26,6 +26,10 @@ pytest --doctest-modules --disable-warnings \
     --ignore=inference/optimization.py
 cd ..
 ```
+### Testing inference
+
++ LONG INFERENCE -> CASE STUDY
++ SHORT INFERENCE -> pymob
 
 
 ### Using jupyter notebooks for the documentation
@@ -37,6 +41,7 @@ jupyter nbconvert --to markdown --execute docs/source/user_guide/*.ipynb
 ```
 
 ### Using jupyter notebooks for examples in the documentation
+
 
 Testing should be done on the case study level. Once testing passes it is relatively safe to assume that the notebooks also work. Then, we can follow a routine like such:
 
@@ -60,10 +65,10 @@ cd ../..
 jupyter nbconvert --to markdown --execute --output_dir docs/source/examples/CASE_STUDY case_studies/CASE_STUDY/scripts/example_1.ipynb
 
 # repeat last step for 2nd example, ...
-```
 
 
-These commands should be integrated in pre-release CI pipelines. This is because more sophisticated notebooks, will take quite some time to compile. This is usually unnecessary when making development releases or pre-releases. But when updating the standard release available at `pip install pymob` (e.g. 0.4.1), then the examples in the documentation 
+
+These commands should be integrated in pre-release CI pipelines. This is because more sophisticated notebooks, will take quite some time to compile. This is usually unnecessary when making development releases or pre-releases. But when updating the standard release available at `pip install pymob` (e.g. 0.4.1), then the examples in the documentation must be tested.
 
 ## Compile documentation
 
@@ -74,4 +79,5 @@ sphinx-apidoc  -o docs/source/api pymob && sphinx-build -M html docs/source/ doc
 ```
 
 
+TODO: Take up doctest, testing case-studies, converting testing notebooks to the test pipelines
 
