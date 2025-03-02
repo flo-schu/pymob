@@ -233,9 +233,22 @@ def test_vector_field():
         parameters=("alpha", "beta"),
         log_likelihood_func=jax.vmap(f),
         gradient_func=jax.vmap(gradient_f),
+        n_grid_points=3,
+        n_vector_points=2,
     )
     ax.plot(-2,2,ls="", marker="o", color="black")
     ax.figure.savefig(f"{sim.output_path}/test_loglikelihood_gradients.png")
+
+def test_vector_field_lotka_volterra():
+    sim = init_lotka_volterra_case_study_hierarchical_from_settings("lotka_volterra_hierarchical_presimulated_v1")
+    sim = init_simulation_casestudy_api()
+    sim.config.inference_numpyro.gaussian_base_distribution = True
+    sim.config.jaxsolver.throw_exception = False
+    sim.config.jaxsolver.max_steps = 10_000
+
+    sim.solver = JaxSolver
+    sim.dispatch_constructor()
+    sim.set_inferer(backend="numpyro")
 
     log_likelihood, grad_log_likelihood = sim.inferer.create_log_likelihood(
         seed=1, return_type="custom", check=False, 
@@ -249,6 +262,8 @@ def test_vector_field():
         parameters=("beta", "alpha"),
         log_likelihood_func=log_likelihood,
         gradient_func=grad_log_likelihood,
+        n_grid_points=3,
+        n_vector_points=2,
     )
 
     ax.figure.savefig(f"{sim.output_path}/loglikelihood_gradients.png")
