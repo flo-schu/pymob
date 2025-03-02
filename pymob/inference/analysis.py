@@ -1,8 +1,11 @@
 import warnings
+from typing import Literal, Union, List, Optional, Dict
 
 import numpy as np
 import xarray as xr
 import arviz as az
+import pandas as pd
+from arviz.sel_utils import xarray_var_iter
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 
@@ -20,7 +23,7 @@ def cluster_chains(posterior, deviation="std"):
         raise ValueError("Deviation method not implemented.")    
 
     global cluster_id
-    cluster_id = 1
+    cluster_id = 0
     cluster = [cluster_id] * len(posterior.chain)
     unclustered_chains = posterior.chain.values
 
@@ -40,13 +43,20 @@ def cluster_chains(posterior, deviation="std"):
                 cluster[i] = cluster_id + 1
                 new_cluster.append(i)
 
-        cluster_id += 1
         if len(new_cluster) == 0:
             return
 
+        cluster_id += 1
         recurse_clusters(new_cluster)
     
     recurse_clusters(unclustered_chains)
+
+    if cluster_id > 0:
+        warnings.warn(
+            "The number of clusters in the InferenceData object was "+
+            f"{cluster_id + 1} > 1. This indicates that not all chains/restarts "
+            "Converged on the same estimate."
+        )
 
     return cluster
 
@@ -154,9 +164,11 @@ def bic(idata: az.InferenceData):
     return msg, bic
 
 
-def add_cluster_coordinates(idata, deviation="std"):
-    cluster = cluster_chains(idata.posterior, deviation=deviation)
-    idata = idata.assign_coords(cluster=("chain", cluster))
+def add_cluster_coordinates(idata: az.InferenceData, deviation="std") -> az.InferenceData:
+    """Clusters the chains in the posterior"""
+    if "posterior" in idata.groups():
+        cluster = cluster_chains(idata.posterior, deviation=deviation)
+        idata = idata.assign_coords(cluster=("chain", cluster))
     return idata
 
 
@@ -190,47 +202,70 @@ def format_parameter(par, subscript_sep="_", superscript_sep="__", textwrap="\\t
     return formatted_string
 
 
-def create_table(posterior, error_metric="hdi", vars={}, nesting_dimension=None):
+def create_table(
+    posterior, 
+    error_metric: Literal["hdi","sd"] = "hdi", 
+    vars: Dict = {}, 
+    nesting_dimension: Optional[Union[List,str]] = None,
+    fmt: Literal["csv", "tsv", "latex"] = "csv",
+    parameters_as_rows: bool = True,
+) -> pd.DataFrame:
     """The function is not ready to deal with any nesting dimensionality
     and currently expects the 2-D case
     """
-    parameters = list(posterior.data_vars.keys())
-
-    tab = az.summary(posterior, fmt="xarray", kind="stats", stat_focus="mean", hdi_prob=0.94)
-    if len(vars) > 0:
-        tab = tab[vars.keys()]
+    tab = az.summary(
+        posterior, var_names=list(vars.keys()), 
+        fmt="xarray", kind="stats", stat_focus="mean", 
+        hdi_prob=0.94
+    )
 
     tab = tab.rename(vars)
 
+    if nesting_dimension is None:
+        stack_cols = ("metric",)
+    else:
+        if isinstance(nesting_dimension, str):
+            nesting_dimension = [nesting_dimension]
+        stack_cols = (*nesting_dimension, "metric")
+        
     if error_metric == "sd":
         arrays = []
-        for par in parameters:
+        for par in vars.values():
             par_formatted = tab.sel(metric=["mean", "sd"])[par]\
                 .round(3)\
                 .astype(str).str\
-                .join("metric", sep=" ±")
+                .join("metric", sep=" ± ")
             arrays.append(par_formatted)
 
-        formatted_tab = xr.combine_by_coords(arrays).to_dataframe().T
 
-        formatted_parameters = []
-        for idx in formatted_tab.index:
-            formatted_parameters.append(format_parameter(idx))
-
-
-        formatted_tab.index = formatted_parameters
-        return formatted_tab    
-    
+        table = xr.combine_by_coords(arrays)
+        table = table.assign_coords(metric="mean ± std").expand_dims("metric")
+        table = table.to_dataframe().T
 
     elif error_metric == "hdi":
         stacked_tab = tab.sel(metric=["mean", "hdi_3%", "hdi_97%"])\
             .assign_coords(metric=["mean", "hdi 3%", "hdi 97%"])\
-            .stack(col=(nesting_dimension, "metric"))\
+            .stack(col=stack_cols)\
             .round(2)
-        formatted_tab = stacked_tab.to_dataframe().T.drop(index=[nesting_dimension, "metric"])
+        table = stacked_tab.to_dataframe().T.drop(list(stack_cols))
 
-        return formatted_tab
-    
+    else:
+        raise NotImplementedError("Must use one of 'sd' or 'hdi'")
+
+
+    if fmt == "latex":
+        table.index = [format_parameter(i) for i in list(table.index)]
+        table = table.rename(
+            columns={"hdi 3%": "hdi 3\\%", "hdi 97%": "hdi 97\\%"}
+        )
+    else: 
+        pass
+
+    if parameters_as_rows:
+        return table
+    else:
+        return table.T
+
 
 def filter_not_converged_chains(idata, deviation=1.05):
     posterior = idata.posterior
@@ -299,25 +334,14 @@ def evaluate_posterior(sim, nesting_dimension, n_samples=10_000, vars_table={},
         error_metric="hdi",
         vars=vars_table,
         nesting_dimension=nesting_dimension,
+        fmt="latex",
     )
-    table = table.rename(columns={"hdi 3%": "hdi 3\\%", "hdi 97%": "hdi 97\\%"})
-    table = table.rename(columns={c: c.capitalize() for c in table.columns.levels[0]})
-    table.columns = table.columns.set_names(["Parameters", ""])
     table.index = [format_parameter(i) for i in list(table.index)]
-    table_latex = table.to_latex(
-        float_format="%.2f",
-        caption=(
-            "Parameter estimates and posterior highest densitiy intervals (HDI) "+
-            f"of the {sim.case_study}__{sim.scenario} model. The HDI "+
-            "contains 94\% of the probable parameter values given the data."
-        ),
-        label=f"tab:parameters-{sim.case_study}__{sim.scenario}"
-    )
 
     # bic 
     msg, _ = bic(idata)
     if save:
-        log(table_latex, out=f"{sim.output_path}/parameter_table.tex", mode="w")
+        log(table, out=f"{sim.output_path}/parameter_table.tex", mode="w")
         log(msg=msg, out=f"{sim.output_path}/bic.md", mode="w")
 
     if show:
@@ -408,3 +432,82 @@ def evaluate_posterior(sim, nesting_dimension, n_samples=10_000, vars_table={},
             plt.show()
         else:
             plt.close()
+
+
+
+def plot_pair(posterior, likelihood, parameters, axes=None):
+
+    likelihood_vars = list(likelihood.data_vars.keys())
+    N = len(likelihood_vars)
+
+    if axes is None:
+        fig, axes = plt.subplots(1, N, figsize=(3+(2*(N-1)), 3), sharey=True, sharex=True)
+    
+    if isinstance(likelihood, xr.DataArray):
+        if likelihood.name is None:
+            likelihood.name = "joint_likelihood"
+        likelihood = likelihood.to_dataset()
+    
+
+    par_a, par_b = parameters
+
+    post_a = posterior[par_a]
+    post_b = posterior[par_b]
+
+    # always put the smaller parameter on the x-axis
+    if post_a.ndim <= post_b.ndim:
+        post_x = post_a
+        post_y = post_b
+    else:
+        post_x = post_b.stack(sample=("chain", "draw"))
+        post_y = post_a.stack(sample=("chain", "draw"))
+
+    loglik = likelihood.stack(sample=("chain","draw"))
+    extra_dims_y = [d for d in post_y.dims if d not in post_x.dims]
+    norm = mpl.colors.Normalize(vmin=(likelihood).to_array().min(), vmax=(likelihood).to_array().max())
+    cmap = mpl.colormaps["plasma"]
+
+    for likvar, ax in zip(likelihood_vars, axes):
+        ll = loglik[likvar]
+        ax.set_title(likvar)
+        ax.set_xlabel(post_x.name)
+        ax.set_ylabel(post_y.name)
+        for dim in extra_dims_y:
+            for coord in post_y.coords[dim].values:
+                if dim in ll.dims:
+                    ll_coord = ll.sel({dim:coord})
+                else:
+                    ll_coord = ll
+
+                scatter = ax.scatter(
+                    post_x, 
+                    post_y.sel({dim:coord}), 
+                    c=ll_coord, 
+                    alpha=0.25,
+                    marker=f"${coord}$",
+                    s=40,
+                    cmap=cmap,
+                    norm=norm
+                )
+
+                # ax.annotate()
+        
+    cbar = fig.colorbar(
+        mappable=mpl.cm.ScalarMappable(norm=norm, cmap=cmap), 
+        # if the same axis is used it is plot next to
+        # the plot depending on the location option
+        # ax=ax,
+        # location="right",
+        orientation="vertical",
+
+        # if another axis is used, the fraction should be increased to 1.0
+        ax=ax,
+        fraction=0.1,
+        pad=0.05,
+        # aspect=20, # parameter is not so important. It thins the colorbar
+        label="negative log-likelihood"
+    )
+    fig.tight_layout()
+
+    # ax_colorbar = gs[:,N].subgridspec(1, 1).subplots()
+    return fig

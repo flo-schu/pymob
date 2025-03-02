@@ -15,7 +15,9 @@ quickstart
 :caption: Usage
 :maxdepth: 2
 
+framework_overview
 case_studies
 simulation
 parameter_inference
+diagnosing_problems
 ```

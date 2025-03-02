@@ -38,6 +38,17 @@ E.g. `pip install pymob==0.3.0a5` which is the 5th alpha release of a project br
 ::warning:: It may be possible that different projects release on the same minor version. In this case the release notes (https://github.com/flo-schu/pymob/releases) should be reviewed to see which project it refers to.
 
 
+### Install a development version
+
+```bash
+git clone git@github.com:flo-schu/pymob.git
+conda create -n pymob python=3.11
+pip install -e pymob[dev]
+pre-commit install
+```
+
+Further inference backends may be installed with `pip install -e pymob[numpyro,pyabc,pymoo,interactive]`
+
 ## Documentation
 
 The documentation is available on https://pymob.readthedocs.io/en/latest/
@@ -51,6 +62,6 @@ The future plans for pymob can be viewed in https://github.com/users/flo-schu/pr
 
 ## Getting started
 
-In 0.3.0 the use is still a bit bumpy. The easiest way is currently to copy the test_case_study and get started from there.
+In 0.3.0 the use is still a bit bumpy. The easiest way is currently to copy the lotka_volterra_case_study and get started from there.
 
 In 0.4.0 a new configuration backend based on `pydantic` will be added. This will considerably ease the use of `pymob` as the API will be supported with rich type hints and helpful error messages.
