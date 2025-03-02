@@ -10,6 +10,8 @@ from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
 from pymob.examples import linear_model
 
+from lotka_volterra_case_study.sim import Simulation
+
 rng = np.random.default_rng(1)
 
 def init_simulation_casestudy_api(scenario="test_scenario"):
@@ -19,9 +21,7 @@ def init_simulation_casestudy_api(scenario="test_scenario"):
         pkg_dir="case_studies"
     )
     
-    from case_studies.lotka_volterra_case_study.sim import Simulation
     sim = Simulation(config=config)
-    sim.config.import_casestudy_modules(reset_path=True)
     sim.setup()
     return sim
 
@@ -68,83 +68,6 @@ def init_lotkavolterra_simulation_replicated():
     
     return sim
 
-
-def init_bufferguts_casestudy(scenario="testing"):
-    """This is an external case study used for local testing. The test study
-    will eventually added also to the remote as an example, but until this happens
-    the test is skipped on the remote.
-    """
-    config = Config()
-    config.case_study.name = "bufferguts"
-    config.case_study.scenario = scenario
-    config.case_study.package = "../pollinator-tktd/case_studies"
-    config.case_study.simulation = "BuffergutsSimulation"
-    config.import_casestudy_modules(reset_path=True)
-
-    if "sim" in config._modules:       
-        Simulation = config.import_simulation_from_case_study()
-        sim = Simulation(config)
-        return sim
-    else:
-        pytest.skip()
-
-def init_bufferguts_leo_casestudy(scenario="testing"):
-    """This is an external case study used for local testing. The test study
-    will eventually added also to the remote as an example, but until this happens
-    the test is skipped on the remote.
-    """
-    config = Config()
-    config.case_study.name = "bufferguts"
-    config.case_study.scenario = scenario
-    config.case_study.package = "../pollinERA/case_studies"
-    config.case_study.simulation = "BuffergutsSimulation"
-    config.import_casestudy_modules(reset_path=True)
-
-    if "sim" in config._modules:       
-        Simulation = config.import_simulation_from_case_study()
-        sim = Simulation(config)
-        return sim
-    else:
-        pytest.skip()
-
-def init_guts_casestudy_constant_exposure(scenario="testing_guts_constant_exposure"):
-    """This is an external case study used for local testing. The test study
-    will eventually added also to the remote as an example, but until this happens
-    the test is skipped on the remote.
-    """
-    config = Config()
-    config.case_study.name = "bufferguts"
-    config.case_study.scenario = scenario
-    config.case_study.package = "../pollinator-tktd/case_studies"
-    config.case_study.simulation = "GutsSimulationConstantExposure"
-    config.import_casestudy_modules(reset_path=True)
-
-    if "sim" in config._modules:       
-        Simulation = config.import_simulation_from_case_study()
-        sim = Simulation(config)
-        return sim
-    else:
-        pytest.skip()
-
-
-def init_guts_casestudy_variable_exposure(scenario="testing_guts_variable_exposure"):
-    """This is an external case study used for local testing. The test study
-    will eventually added also to the remote as an example, but until this happens
-    the test is skipped on the remote.
-    """
-    config = Config()
-    config.case_study.name = "bufferguts"
-    config.case_study.scenario = scenario
-    config.case_study.package = "../pollinator-tktd/case_studies"
-    config.case_study.simulation = "GutsSimulationVariableExposure"
-    config.import_casestudy_modules(reset_path=True)
-
-    if "sim" in config._modules:       
-        Simulation = config.import_simulation_from_case_study()
-        sim = Simulation(config)
-        return sim
-    else:
-        pytest.skip()
 
 
 def setup_solver(sim: SimulationBase, solver: type):
