@@ -304,7 +304,6 @@ def test_no_interpolation():
     sim = None
     pytest.skip()
 
-    sim = init_bufferguts_casestudy(scenario="testing")
     sim.use_jax_solver() # type: ignore
     
     # x input is defined on the interval [0,179]
