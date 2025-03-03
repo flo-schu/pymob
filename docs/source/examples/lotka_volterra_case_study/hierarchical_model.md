@@ -16,20 +16,15 @@ from pymob.sim.parameters import Param
 from pymob.sim.config import Modelparameters
 from pymob.solvers.diffrax import JaxSolver
 from pymob.inference.analysis import plot_pair
+
+from lotka_volterra_case_study.sim import HierarchicalSimulation
 ```
 
 
 ```python
-# import case study and simulation
-
-config = Config()
+config = Config("../scenarios/test_hierarchical/settings.cfg")
 config.case_study.package = "../.."
-config.case_study.name = "lotka_volterra_case_study"
 config.case_study.scenario = "test_hierarchical"
-config.case_study.simulation = "HierarchicalSimulation"
-config.import_casestudy_modules(reset_path=True)
-
-from lotka_volterra_case_study.sim import HierarchicalSimulation
 
 sim = HierarchicalSimulation(config)
 sim.initialize_from_script()
@@ -237,13 +232,17 @@ except RuntimeError:
                  value 120  12 |
        wolves_obs dist 120  12 |
                  value 120  12 |
-    Likelihood is not well defined, there are zeros in the observations, while support excludes zeros. 
 
 
     /home/flo-schu/projects/pymob/pymob/inference/numpyro_backend.py:652: UserWarning: Site rabbits_obs: Out-of-support values provided to log prob method. The value argument should be within the support.
       mcmc.run(next(keys))
     /home/flo-schu/projects/pymob/pymob/inference/numpyro_backend.py:652: UserWarning: Site wolves_obs: Out-of-support values provided to log prob method. The value argument should be within the support.
       mcmc.run(next(keys))
+
+
+    Likelihood is not well defined, there are zeros in the observations, while support excludes zeros. 
+
+
     /home/flo-schu/projects/pymob/pymob/inference/numpyro_backend.py:934: UserWarning: Log-likelihoods ['rabbits_obs', 'wolves_obs'] contained NaN or inf values. The gradient based samplers will not be able to sample from this model. Make sure that all functions are numerically well behaved. Inspect the model with `jax.debug.print('{}',x)` https://jax.readthedocs.io/en/latest/notebooks/external_callbacks.html#exploring-debug-callback Or look at the functions step by step to find the position where jnp.grad(func)(x) evaluates to NaN
       warnings.warn(
 
@@ -296,7 +295,7 @@ scaled_residuals.wolves.plot()
 
 
 
-    <matplotlib.collections.QuadMesh at 0x7f31eaaa5910>
+    <matplotlib.collections.QuadMesh at 0x7fbaaeb69e10>
 
 
 
@@ -401,7 +400,7 @@ sim.config.inference_numpyro.init_strategy = "init_to_median"
 sim.dispatch_constructor()
 sim.set_inferer("numpyro")
 
-sample_nuts = False
+sample_nuts = True
 if sample_nuts:
     sim.config.inference_numpyro.kernel = "nuts"
     sim.inferer.run()
@@ -637,7 +636,7 @@ theta["beta"]
 
 
 ```python
-posterior = idata_nuts.posterior[["alpha", "beta"]].rename({"alpha_dim_0": "id"})
+posterior = idata_nuts.posterior[["alpha", "beta"]]
 loglik = idata_nuts.log_likelihood.mean(("time"))
 fig = plot_pair(posterior, loglik, parameters=["alpha", "beta"])
 fig.savefig(f"{sim.output_path}/posterior.png")
@@ -1728,28 +1727,6 @@ loglik, grad_loglik = sim.inferer.create_log_likelihood(return_type="joint-log-l
 
 
 ```python
-sim.config.model_parameters = parameters
-sim.config.inference_numpyro.kernel = "nuts"
-sim.config.inference_numpyro.nuts_max_tree_depth = 12
-sim.dispatch_constructor()
-sim.set_inferer("numpyro")
-
-if False:
-    sim.inferer.run()
-    idata_nuts_2 = sim.inferer.idata.copy()
-```
-
-    Jax 64 bit mode: False
-    Absolute tolerance: 1e-07
-
-
-    /home/flo-schu/miniconda3/envs/pymob/lib/python3.11/site-packages/pydantic/main.py:308: UserWarning: Pydantic serializer warnings:
-      Expected `int` but got `float` - serialized value may not be as expected
-      return self.__pydantic_serializer__.to_python(
-
-
-
-```python
 idata_svi_2.posterior.beta.mean(("chain", "draw"))
 ```
 
@@ -2153,7 +2130,7 @@ plt.tight_layout()
 
 
     
-![png](hierarchical_model_files/hierarchical_model_46_0.png)
+![png](hierarchical_model_files/hierarchical_model_45_0.png)
     
 
 
@@ -2165,8 +2142,8 @@ plt.tight_layout()
 
 ```python
 sim.config.case_study.scenario = "lotka_volterra_hierarchical_hyperpriors"
-sim.config.create_directory("scenario")
-sim.config.save()
+sim.config.create_directory("scenario", force=True)
+sim.config.save(force=True)
 ```
 
     /home/flo-schu/miniconda3/envs/pymob/lib/python3.11/site-packages/pydantic/main.py:308: UserWarning: Pydantic serializer warnings:
@@ -2176,3 +2153,5 @@ sim.config.save()
 
     Scenario directory exists at '/home/flo-schu/projects/pymob/case_studies/lotka_volterra_case_study/scenarios/lotka_volterra_hierarchical_hyperpriors'.
 
+
+Note that this configuration is not yet complete. It still requires a look at $y_0$ variation!
