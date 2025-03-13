@@ -7,9 +7,21 @@ Other available backends are listed in {ref}`inference-backends`
 
 ## Development
 
-Development versions can be installed with `pip install pymob[dev]`
+If you want to develop `pymob`, clone the repository and install pymob as an editable package
 
-Pymob is under active development. It is used and developed within multiple projects simultaneously and in order to maintain a consistent release history, the main work is done in project-branches which contain the most cutting-edge features. These can always checked out locally, but may not be working correctly. Instead, it is recommended to install alpha-versions. 
+```bash
+git clone git@github.com:flo-schu/pymob.git
+cd pymob
+conda create -n pymob python=3.11
+pip install -e .[dev,docs]
+pre-commit install
+```
+
+Further inference backends may be installed with `pip install -e .[numpyro,pyabc,pymoo,interactive]`
+
+## Pre-release versions
+
+Pymob is under active development. It is used and developed within multiple projects simultaneously and in order to maintain a consistent release history, the main work is done in project-branches which contain the most cutting-edge features. These can always checked out locally, but may not be working correctly. Instead, it is recommended to install or checkout alpha-versions. 
 
 E.g. `pip install pymob==0.3.0a5` which is the 5th alpha release of a project branch that was based on pymob v0.2.x.
 
