@@ -63,8 +63,8 @@ cd ../..
 
 # execute notebook convert and store in docs directiory this step depends on successful test run
 jupyter nbconvert --to markdown --execute --output_dir docs/source/examples/CASE_STUDY case_studies/CASE_STUDY/scripts/example_1.ipynb
-
 # repeat last step for 2nd example, ...
+```
 
 
 
