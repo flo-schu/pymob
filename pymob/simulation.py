@@ -185,6 +185,7 @@ class SimulationBase:
     (`sim.config.case_study.output`) or any other configuration of the simulation
 
     """
+    Report = Report
     SimulationPlot = SimulationPlot
     model: Optional[Callable] = None
     solver: Optional[Callable] = None
@@ -225,6 +226,8 @@ class SimulationBase:
             self.parameterize, 
             model_parameters=copy.deepcopy(dict(self.model_parameters))
         )
+
+        self._report: Optional[Report] = None
         # simulation
         # self.setup()
         
@@ -1818,9 +1821,9 @@ class SimulationBase:
         """Creates a configurable report. To select which items to report and
         to fine-tune the report settings, modify the options in `config.report`.
         """
-        report = Report(config=self.config)
+        self._report = self.Report(config=self.config)
 
-        report.table_parameter_estimates(
+        self._report.table_parameter_estimates(
             posterior=self.inferer.idata.posterior,
             indices=self.indices
         )
