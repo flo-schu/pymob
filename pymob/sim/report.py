@@ -9,7 +9,8 @@ def reporting(method):
     def _inner(self: "Report", *method_args, **method_kwargs):
         report_name = method.__name__
         head = f"## Report: {report_name.replace('_', ' ').capitalize()}"
-        if self.rc[report_name]:
+        # report unless the report is listed in the config file as skipped
+        if getattr(self.rc, report_name, True):
             try:
                 self._write(head + " ✅")
                 out = method(self, *method_args, **method_kwargs)
@@ -113,7 +114,7 @@ class Report:
 
         elif self.rc.table_parameter_estimates_format == "csv":
             out = f"{self.config.case_study.output_path}/report_table_parameter_estimates.csv"
-            tab.to_csv()
+            tab.to_csv(out)
 
 
         elif self.rc.table_parameter_estimates_format == "tsv":
