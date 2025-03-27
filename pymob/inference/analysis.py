@@ -87,6 +87,49 @@ def rename_extra_dims(df, extra_dim_suffix="_dim_0", new_dim="new_dim", new_coor
 
 
 
+def plot_trace(idata, var_names, output):
+    """
+    TODO: Should be outsourced to pymob.sim.plot
+    """
+
+    if hasattr(idata, "sample_stats"):
+        if "diverging" in idata["sample_stats"]:
+            idata["sample_stats"]["diverging"] = idata["sample_stats"].diverging.astype(int)
+
+    if hasattr(idata, "posterior"):
+        axes = az.plot_trace(
+            idata,
+            var_names=var_names
+        )
+        fig = plt.gcf()
+        fig.tight_layout()
+        fig.savefig(output)
+
+    return fig, output
+
+def plot_pairs(idata, var_names, output):
+    """
+    TODO: Should be outsourced to pymob.sim.plot
+    """
+
+    if hasattr(idata, "sample_stats"):
+        if "diverging" in idata["sample_stats"]:
+            idata["sample_stats"]["diverging"] = idata["sample_stats"].diverging.astype(int)
+
+    if hasattr(idata, "posterior"):
+        axes = az.plot_pair(
+            idata, 
+            divergences=True, 
+            var_names=var_names
+        )
+        fig = plt.gcf()
+        fig.tight_layout()
+        fig.savefig(output)
+
+    return fig, output
+
+
+
 # plot loghist
 def plot_posterior_samples(posterior, col_dim=None, log=True, hist_kwargs={}):
     if log:
@@ -153,8 +196,7 @@ def bic(idata: az.InferenceData):
 
     bic = float(k * np.log(n) - 2 * log_likelihood)
     msg = str(
-        "Bayesian Information Criterion (BIC)"
-        "\n===================================="
+        "Bayesian Information Criterion (BIC):"
         f"\nParameters: {int(k)}"
         f"\nData points: {int(n)}"
         f"\nLog-likelihood: {float(log_likelihood)}"
@@ -163,6 +205,38 @@ def bic(idata: az.InferenceData):
 
     return msg, bic
 
+def log_lik(x):
+    dims_sum = [d for d in x.dims if d not in ["chain", "draw"]]
+    return x.sum(dims_sum)
+
+def rmse(x_0: xr.DataArray, x: xr.DataArray):
+    n = x.count()
+    dims_sum = [d for d in x_0.dims if d not in ["chain", "draw"]]
+    return np.sqrt((1 / n * np.power(x - x_0, 2).sum(dims_sum)))
+
+def nrmse(x_0: xr.DataArray, x: xr.DataArray, mode: Literal["range", "mean", "iqr"]):
+    dims_sum = [d for d in x_0.dims if d not in ["chain", "draw"]]
+
+    if mode == "range":
+        return rmse(x_0, x) / (x.max(dims_sum) - x.min(dims_sum))
+    elif mode == "mean":
+        return rmse(x_0, x) / x.mean(dims_sum)
+    elif mode == "mean":
+        return rmse(x_0, x) / x.mean(dims_sum)
+    else:
+        raise NotImplementedError(
+            f"Mode {mode} not implemented. Use one of the following modes"
+        )
+
+        
+    # normalized_obs = idata.observed_data.survival.groupby("id").map(
+    #     lambda group: group / group.max(dim="time")
+    # )
+    # nrmse_draws = 1 / normalized_obs.mean()
+    # np.sqrt(1/normalized_obs.count() * ((normalized_obs-idata.posterior_model_fits.survival ** 2).sum(dim=["id","time"]))
+    # data_dict["nrmse_mean"].append(100 * float(nrmse_draws.mean().data))
+    # data_dict["nrmse_higher"].append(100 * float(az.hdi(nrmse_draws,hdi_prob=0.95).sel(hdi="higher").to_dataarray()[0].data))
+    # data_dict["nrmse_lower"].append(100*float(az.hdi(nrmse_draws,hdi_prob=0.95).sel(hdi="lower").to_dataarray()[0].data))
 
 def add_cluster_coordinates(idata: az.InferenceData, deviation="std") -> az.InferenceData:
     """Clusters the chains in the posterior"""
@@ -181,9 +255,11 @@ def format_parameter(par, subscript_sep="_", superscript_sep="__", textwrap="\\t
 
 
     def wrap_text(substr):
+
         if len(substr) == 1:
             substring_fmt = f"{substr}"
         else:
+            substr = substr.replace("_", ",")
             substring_fmt = textwrap.replace("{}", "{{{}}}").format(substr)
     
         return f"{{{substring_fmt}}}"

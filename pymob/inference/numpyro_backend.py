@@ -543,7 +543,7 @@ class NumpyroBackend(InferenceBackend):
         if render_model:
             try:
                 import graphviz
-                graph = numpyro.render_model(model, render_distributions=True)
+                graph = numpyro.render_model(model, render_distributions=False)
                 graph.render(
                     filename=f"{self.simulation.output_path}/probability_model",
                     view=False, cleanup=True, format="png",

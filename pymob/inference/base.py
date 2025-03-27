@@ -25,6 +25,7 @@ from pymob.simulation import SimulationBase
 from pymob.sim.parameters import Param, RandomVariable, Expression
 from pymob.sim.config import Datastructure
 from pymob.utils.config import lookup_from
+from pymob.inference.analysis import plot_pairs, plot_trace
 
 import logging
 
@@ -657,35 +658,15 @@ class InferenceBackend(ABC):
         return ax
 
     def plot_diagnostics(self):
-        """
-        TODO: Should be outsourced to pymob.sim.plot
-        """
         var_names = [
             k for k, v in self.config.model_parameters.free.items()
             if self.config.simulation.batch_dimension not in v.dims
         ]
 
-        if hasattr(self.idata, "sample_stats"):
-            if "diverging" in self.idata["sample_stats"]:
-                self.idata["sample_stats"]["diverging"] = self.idata["sample_stats"].diverging.astype(int)
+        out = self.simulation.output_path
+        _ = plot_trace(idata=self.idata, var_names=var_names, output=f"{out}/posterior_trace.png")
+        _ = plot_pairs(idata=self.idata, var_names=var_names, output=f"{out}/posterior_pairs.png")
 
-        if hasattr(self.idata, "posterior"):
-            axes = az.plot_trace(
-                self.idata,
-                var_names=var_names
-            )
-            fig = plt.gcf()
-            fig.tight_layout()
-            fig.savefig(f"{self.simulation.output_path}/trace.png")
-            
-            axes = az.plot_pair(
-                self.idata, 
-                divergences=True, 
-                var_names=var_names
-            )
-            fig = plt.gcf()
-            fig.tight_layout()
-            fig.savefig(f"{self.simulation.output_path}/pairs_posterior.png")
 
     def check_prior_for_nans(self, idata):
         nans = idata.prior.isnull().sum().to_array()
