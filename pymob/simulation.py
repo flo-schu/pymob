@@ -1821,14 +1821,26 @@ class SimulationBase:
         """Creates a configurable report. To select which items to report and
         to fine-tune the report settings, modify the options in `config.report`.
         """
-        self._report = self.Report(config=self.config)
+        self._report = self.Report(config=self.config, backend=type(self.inferer))
 
+        if self.solver_post_processing is not None:
+            post_processing = getattr(self._mod, self.solver_post_processing)
+        else:
+            post_processing = None
+        _ = self._report.model(self.model, post_processing)
+
+        _ = self._report.parameters(self.model_parameters)
+        
         self._report.table_parameter_estimates(
             posterior=self.inferer.idata.posterior,
             indices=self.indices
         )
 
-        # TODO: This was taken from the pymob.infer.
-        # Remove when the functions in plot have been added separately to
-        # the report
-        self.inferer.plot()
+        _ = self._report.goodness_of_fit(idata=self.inferer.idata)
+
+        _ = self._report.diagnostics(idata=self.inferer.idata)
+
+        # TODO: find a good way to integrate posterior predictive and prior predictive 
+        # into the report. I think their execution should be continued outside of the report,
+        # but they could be linked (as images) inside the report. This way, the report
+        # would just have to plot them if available.

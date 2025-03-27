@@ -795,12 +795,25 @@ class Numpyro(PymobModel):
 
 class Report(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
+    
+    model: Annotated[bool, to_str] = True
+    parameters: Annotated[bool, to_str] = True
+    parameters_format: Literal["xarray", "pandas"] = "pandas"
+    
+    diagnostics: Annotated[bool, to_str] = True
+    diagnostics_with_batch_dim_vars: Annotated[bool, to_str] = False
+    diagnostics_exclude_vars: OptionListStr = []
+    
+    goodness_of_fit: Annotated[bool, to_str] = True
+    goodness_of_fit_use_predictions: Annotated[bool, to_str] = True
+    goodness_of_fit_nrmse_mode: Literal["mean", "range", "iqr"] = "range"
 
     table_parameter_estimates: Annotated[bool, to_str] = True
     table_parameter_estimates_format: Literal["latex", "csv", "tsv"] = "csv"
     table_parameter_estimates_error_metric: Literal["hdi", "sd"] = "sd"
     table_parameter_estimates_parameters_as_rows: Annotated[bool, to_str] = True
     table_parameter_estimates_with_batch_dim_vars: Annotated[bool, to_str] = False
+    table_parameter_estimates_exclude_vars: OptionListStr = []
     table_parameter_estimates_override_names: OptionDictStr = {}
 
     plot_trace: Annotated[bool, to_str] = True
