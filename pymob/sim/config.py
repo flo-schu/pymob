@@ -796,6 +796,8 @@ class Numpyro(PymobModel):
 class Report(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
     
+    debug_report: Annotated[bool, to_str] = False
+
     model: Annotated[bool, to_str] = True
     parameters: Annotated[bool, to_str] = True
     parameters_format: Literal["xarray", "pandas"] = "pandas"

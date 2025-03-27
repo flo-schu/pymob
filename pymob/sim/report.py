@@ -29,7 +29,9 @@ def reporting(method):
                     )
                 return out
 
-            except:
+            except Exception as e:
+                if self.rc.debug_report:
+                    raise e
                 self._write(head + " ❌")
                 self._write("Report '{r}' was not executed successfully".format(
                     r=report_name
