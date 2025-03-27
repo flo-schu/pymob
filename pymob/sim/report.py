@@ -128,7 +128,8 @@ def _loglik_from_idata(
 
 def _bic_from_idata(
     idata: az.InferenceData, 
-    data_vars: Optional[List[str]] = None
+    free_params: List[str],
+    data_vars: Optional[List[str]] = None,
 ):
     """calculate the BIC for az.InferenceData. The function will average over
     all samples from the markov chain
@@ -136,8 +137,9 @@ def _bic_from_idata(
     
     # this may be computationally more efficient
     # log_likelihood = idata.log_likelihood.mean(("chain", "draw")).sum().to_array().sum()
+
     L = log_lik(idata.log_likelihood.to_array().sum("variable"))
-    k = idata.posterior.mean(("chain", "draw")).count().to_array().sum()
+    k = idata.posterior[free_params].mean(("chain", "draw")).count().to_array().sum()
     N = idata.observed_data.count()
     n = N.to_array().sum().values
     
@@ -334,6 +336,11 @@ class Report:
 
     @reporting
     def goodness_of_fit(self, idata):
+        free_params = [
+            k for k, v in self.config.model_parameters.free.items()
+            if self.config.simulation.batch_dimension not in v.dims
+        ]
+
         _nrmse = _nrmse_from_idata(
             idata=idata, 
             data_vars=self.config.data_structure.observed_data_variables, 
@@ -349,6 +356,7 @@ class Report:
 
         _bic = _bic_from_idata(
             idata=idata,
+            free_params=free_params,
             data_vars=self.config.data_structure.observed_data_variables, 
         )
 
