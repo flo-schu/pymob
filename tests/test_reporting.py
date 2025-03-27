@@ -41,6 +41,7 @@ def test_table_parameter_estimates(
     sim = sim_post_inference
 
     report = Report(config=sim.config, backend=type(sim.inferer))
+    report.rc.debug_report = True
     report.rc.table_parameter_estimates_format = parameter_estimates_format
     report.rc.table_parameter_estimates_error_metric = parameter_estimates_error_metric
     report.rc.table_parameter_estimates_parameters_as_rows = table_parameter_estimates_parameters_as_rows
