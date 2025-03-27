@@ -283,7 +283,7 @@ class Report:
         
         if self.backend.__name__ == "NumpyroBackend":
             self._write("### Probability model")
-            self._write("[Model graph](probability_model.png)")
+            self._write("![Directed acyclic graph (DAG) of the probability model](probability_model.png)")
 
     @reporting
     def parameters(self, model_parameters):
