@@ -702,12 +702,14 @@ class SimulationBase:
         else:
             solver = self.solver
         
-        if self.solver_post_processing is not None:
-            # TODO: Handle similar to solver and model
-            post_processing = getattr(self._mod, self.solver_post_processing)
+        if self.solver_post_processing is None:
+            if self.config.simulation.solver_post_processing is not None:
+                post_processing = getattr(self._mod, self.config.simulation.solver_post_processing)
+            else:
+                def post_processing(results, time, interpolation):
+                    return results
         else:
-            def post_processing(results, time, interpolation):
-                return results
+            post_processing = self.solver_post_processing
 
         stochastic = self.config.simulation.modeltype
             
@@ -1508,12 +1510,6 @@ class SimulationBase:
         self.config.simulation.n_ode_states = n_ode_state
 
     @property
-    def solver_post_processing(self):
-        # TODO: Remove when all method has been updated to the new config API
-        warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.simulation.solver_post_processing
-
-    @property
     def input_files(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
@@ -1823,10 +1819,13 @@ class SimulationBase:
         """
         self._report = self.Report(config=self.config, backend=type(self.inferer))
 
-        if self.solver_post_processing is not None:
-            post_processing = getattr(self._mod, self.solver_post_processing)
+        if self.solver_post_processing is None:
+            if self.config.simulation.solver_post_processing is not None:
+                post_processing = getattr(self._mod, self.solver_post_processing)
+            else:
+                post_processing = None
         else:
-            post_processing = None
+            post_processing = self.solver_post_processing
         _ = self._report.model(self.model, post_processing)
 
         _ = self._report.parameters(self.model_parameters)
