@@ -380,7 +380,18 @@ class Report:
             if self.rc.parameters_format == "xarray":
                 self._write(model_parameters["x_in"]._repr_html_())
             elif self.rc.parameters_format == "pandas":
-                self._write(model_parameters["x_in"].to_pandas().to_markdown())
+                # TODO: In future: Iterate over variables in x_in, then make a wide table
+                #       batch_dimension x x_dimension for each additional index coordinate
+                try:
+                    self._write(model_parameters["x_in"].to_pandas().to_markdown())
+                except ValueError:
+                    self._write(
+                        "$x_{in}$ is to complex to represent as dataframe. Using xarray "+
+                        "representation instead. Compile to html with pandoc to render "+
+                        "report"
+                    )
+                    self._write(model_parameters["x_in"]._repr_html_())
+
         else:
             self._write("No model input")
 
