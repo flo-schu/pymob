@@ -96,12 +96,15 @@ def get_return_arguments(func):
     return_statement = ode_model_source.split("\n")[-2]
 
     # extract arguments returned by ode_func
-    return_args = return_statement.split("return")[1]
+    return_args_str = return_statement.split("return")[1]
 
     # strip whitespace and separate by comma
-    return_args = return_args.replace(" ", "").split(",")
+    return_args = return_args_str.replace(" ", "").replace("(","").replace(")","").split(",")
 
-    return return_args
+    # this filters out trailing commas (e.g. return A,)
+    reduced_return_args = [ra for ra in return_args if len(ra) > 0]
+
+    return reduced_return_args
 
 def dX_dt2X(expr: str):
     expr = expr.split("_dt", 1)[0]
