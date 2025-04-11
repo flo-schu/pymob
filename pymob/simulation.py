@@ -189,6 +189,7 @@ class SimulationBase:
     SimulationPlot = SimulationPlot
     model: Optional[Callable] = None
     solver: Optional[Callable] = None
+    solver_post_processing: Optional[Callable] = None
     _mod: ModuleType
     _prob: ModuleType
     _data: ModuleType
@@ -1087,10 +1088,10 @@ class SimulationBase:
             sliders.update({key: s})
 
         def func(theta):
-            extra = self.config.inference.extra_vars
-            extra = [extra] if isinstance(extra, str) else extra
-            extra_vars = {v: self.observations[v] for v in extra}
-            evaluator = self.dispatch(theta=theta, **extra_vars)
+            # extra = self.config.inference.extra_vars
+            # extra = [extra] if isinstance(extra, str) else extra
+            # extra_vars = {v: self.observations[v] for v in extra}
+            evaluator = self.dispatch(theta=theta)
             evaluator()
             self.plot(results=evaluator.results)
 
