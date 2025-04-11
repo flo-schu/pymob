@@ -1850,6 +1850,9 @@ class SimulationBase:
 
         _ = self._report.diagnostics(idata=self.inferer.idata)
 
+
+        self._report.compile_report()
+
         # TODO: find a good way to integrate posterior predictive and prior predictive 
         # into the report. I think their execution should be continued outside of the report,
         # but they could be linked (as images) inside the report. This way, the report
