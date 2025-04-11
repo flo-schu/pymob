@@ -797,6 +797,7 @@ class Report(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
     
     debug_report: Annotated[bool, to_str] = False
+    pandoc_output_format: Literal["html", "latex-si", "latex", "pdf"] = "html"
 
     model: Annotated[bool, to_str] = True
     parameters: Annotated[bool, to_str] = True

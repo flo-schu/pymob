@@ -2,6 +2,8 @@ import os
 from functools import wraps
 from typing import List, Dict, Optional, Literal, Callable
 import inspect
+import subprocess
+import warnings
 
 import numpy as np
 import arviz as az
@@ -185,6 +187,90 @@ class Report:
 
     def _write(self, msg, mode="a", newlines=1):
         log(msg=msg, out=self.file, newlines=newlines, mode=mode)
+
+
+    def compile_report(self):
+        wd = os.getcwd()
+        os.makedirs(os.path.join(self.config.case_study.output_path, "reports"), exist_ok=True)
+        os.chdir(self.config.case_study.output_path)
+        
+        try:
+            if self.rc.pandoc_output_format == "html":
+                out = self._pandoc_to_html()
+            elif self.rc.pandoc_output_format == "latex-si":
+                out = self._pandoc_to_latex_si()
+            elif self.rc.pandoc_output_format == "latex":
+                out = self._pandoc_to_latex_standalone()
+            elif self.rc.pandoc_output_format == "pdf":
+                out = self._pandoc_to_pdf()
+                if out.returncode != 0:
+                    warnings.warn("Error compiling report to pdf. Do you have latex installed?")
+            else:
+                warnings.warn(
+                    "There was an error compiling the report from report.md to the desired output format! "+ 
+                    f"The `pandoc_output_format`: {self.rc.pandoc_output_format} "+
+                    "is not defined. Use one of: html, latex, latex-si, pdf. "+
+                    "E.g.: `config.report.pandoc_output_format = html`",
+                    category=UserWarning
+                )
+
+            if out.returncode != 0:
+                warnings.warn(
+                    "There was an error compiling the report from report.md to the desired output format! "+ 
+                    f"Process exited with return code {out.returncode} using the following arguments: "+
+                    f"{' '.join(out.args)}",
+                    category=UserWarning
+                )
+        except FileNotFoundError:
+            warnings.warn(
+                "There was an error compiling the report! "
+                "Pandoc seems not to be installed. Make sure to install pandoc on your "+
+                "system. Install with: `conda install -c conda-forge pandoc` "+
+                "(https://pandoc.org/installing.html)",
+                category=UserWarning
+            )
+
+        os.chdir(wd)
+
+    def _pandoc_to_html(self):
+        os.chdir("reports")
+        return subprocess.run([
+            "pandoc",        
+            "--resource-path=..",
+            f"--extract-media=media/{self.config.case_study.name}_{self.config.case_study.scenario}",
+            "--standalone",
+            f"--output={self.config.case_study.name}_{self.config.case_study.scenario}.html",
+            "../report.md"
+        ])
+
+    def _pandoc_to_latex_standalone(self):
+        os.chdir("reports")
+        return subprocess.run([
+            "pandoc",        
+            "--resource-path=..",
+            f"--extract-media=media/{self.config.case_study.name}_{self.config.case_study.scenario}",
+            "--standalone",
+            f"--output={self.config.case_study.name}_{self.config.case_study.scenario}.tex",
+            "../report.md"
+        ])
+
+    def _pandoc_to_latex_si(self):
+        return subprocess.run([
+            "pandoc",        
+            "--resource-path=.",
+            f"--extract-media=reports/media/{self.config.case_study.name}_{self.config.case_study.scenario}",
+            f"--output=reports/{self.config.case_study.name}_{self.config.case_study.scenario}.tex",
+            "report.md"
+        ])
+
+    def _pandoc_to_pdf(self):
+        return subprocess.run([
+            "pandoc",        
+            "--resource-path=.",
+            f"--output=reports/{self.config.case_study.name}_{self.config.case_study.scenario}.pdf",
+            "--pdf-engine=xelatex",
+            "report.md"
+        ])
 
     def preamble(self):
         # metadata block
