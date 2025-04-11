@@ -195,10 +195,10 @@ class JaxSolver(SolverBase):
             
             if x_in[0].shape[0] != x_in[1].shape[0]:
                 raise ValueError(
-                    f"Mismatch in zero-th dimensions of x and y in interpolation"+
-                    "input 'x_in'. This often results of a problematic dimensional"+
-                    "order. Consider reordering the dimensions and reordering the"+
-                    "x dimension (e.g. time) after the batch dimension and before"+
+                    "Mismatch in zero-th dimensions of x and y in interpolation "+
+                    "input 'x_in'. This often results of a problematic dimensional "+
+                    "order. Consider reordering the dimensions and reordering the "+
+                    "x dimension (e.g. time) after the batch dimension and before "+
                     "any other dimension."
                 )
             interp = LinearInterpolation(ts=x_in[0], ys=x_in[1])
