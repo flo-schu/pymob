@@ -428,14 +428,25 @@ class SimulationBase:
                     m = importlib.import_module(f"{package}.{module}")
                     setattr(self, f"_{module}", m)
                 except ModuleNotFoundError:
-                    warnings.warn(
-                        f"Module {module}.py not found in {package}."
-                        f"Missing modules can lead to unexpected behavior. "
-                        f"Does your case study have a {module}.py file? "
-                        f"It should have the line `from PARENT_CASE_STUDY."
-                        f"{module} import *` to import all objects from "
-                        "the parent case study."
-                    )
+
+                    # look in the base classes if modules cannot be imported from top-level
+                    # module
+                    base_classes = type(self).__bases__
+                    assert len(base_classes) == 1
+                    try:
+                        parent_package = base_classes[0].__module__.split(".")[0]
+                        m = importlib.import_module(f"{parent_package}.{module}")
+                        setattr(self, f"_{module}", m)
+
+                    except ModuleNotFoundError:
+                        warnings.warn(
+                            f"Module {module}.py not found in {package} or in {parent_package}. "
+                            f"Missing modules can lead to unexpected behavior. "
+                            f"Does your case study of the parent class have a {module}.py file? "
+                            f"It should have the line `from PARENT_CASE_STUDY. "
+                            f"{module} import *` to import all objects from "
+                            "the parent case study."
+                        )
             return
 
         # This branch is for case studies that are not installed (I guess)
