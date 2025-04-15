@@ -401,7 +401,15 @@ class Report:
             if self.rc.parameters_format == "xarray":
                 self._write(model_parameters["y0"]._repr_html_())
             elif self.rc.parameters_format == "pandas":
-                self._write(model_parameters["y0"].to_pandas().to_markdown())
+                try:
+                    self._write(model_parameters["y0"].to_pandas().to_markdown())
+                except ValueError:
+                    self._write(
+                        "$y_{0}$ is to complex to represent as dataframe. Using xarray "+
+                        "representation instead. Compile to html with pandoc to render "+
+                        "report"
+                    )
+                    self._write(model_parameters["y0"]._repr_html_())
         else:
             self._write("No starting values")
 
