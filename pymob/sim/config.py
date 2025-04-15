@@ -813,6 +813,7 @@ class Report(PymobModel):
 
     table_parameter_estimates: Annotated[bool, to_str] = True
     table_parameter_estimates_format: Literal["latex", "csv", "tsv"] = "csv"
+    table_parameter_estimates_significant_figures: int = 3
     table_parameter_estimates_error_metric: Literal["hdi", "sd"] = "sd"
     table_parameter_estimates_parameters_as_rows: Annotated[bool, to_str] = True
     table_parameter_estimates_with_batch_dim_vars: Annotated[bool, to_str] = False
