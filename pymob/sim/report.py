@@ -178,6 +178,11 @@ class Report:
         self.preamble()
 
         self.status = {}
+        self._label = "--".join([
+            "{placeholder}", 
+            self.config.case_study.name.replace('_','-'),
+            self.config.case_study.scenario.replace('_','-')
+        ])
 
     def __repr__(self):
         return "Report(case_study={c}, scenario={s})".format(
@@ -329,20 +334,33 @@ class Report:
             posterior=posterior,
             vars=var_names,
             error_metric=self.rc.table_parameter_estimates_error_metric,
+            significant_figures=self.rc.table_parameter_estimates_significant_figures,
             nesting_dimension=indices.keys(),
             parameters_as_rows=self.rc.table_parameter_estimates_parameters_as_rows,
         )
 
         self._write(tab.reset_index().to_markdown())
 
+        # rewrite table in the desired output format
+        tab = create_table(
+            posterior=posterior,
+            vars=var_names,
+            error_metric=self.rc.table_parameter_estimates_error_metric,
+            significant_figures=self.rc.table_parameter_estimates_significant_figures,
+            fmt=self.rc.table_parameter_estimates_format,
+            nesting_dimension=indices.keys(),
+            parameters_as_rows=self.rc.table_parameter_estimates_parameters_as_rows,
+        )
+
         if self.rc.table_parameter_estimates_format == "latex":
             table_latex = tab.to_latex(
-                float_format="%.2f",
+                float_format=f"%.{self.rc.table_parameter_estimates_significant_figures}g",
+                escape=False,
                 caption=(
-                    f"Parameter estimates of the {self.config.case_study.name}"+
-                    f"({self.config.case_study.scenario}) model."
+                    f"Parameter estimates of the {self.config.case_study.name.replace('_','-')}"+
+                    f"({self.config.case_study.scenario.replace('_','-')}) model."
                 ),
-                label=f"tab:parameters-{self.config.case_study.name}__{self.config.case_study.scenario}"
+                label=self._label.format(placeholder="tab:parameters")
             )
 
             out = f"{self.config.case_study.output_path}/report_table_parameter_estimates.tex"
