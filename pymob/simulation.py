@@ -1833,7 +1833,7 @@ class SimulationBase:
 
         if self.solver_post_processing is None:
             if self.config.simulation.solver_post_processing is not None:
-                post_processing = getattr(self._mod, self.solver_post_processing)
+                post_processing = getattr(self._mod, self.config.simulation.solver_post_processing)
             else:
                 post_processing = None
         else:
