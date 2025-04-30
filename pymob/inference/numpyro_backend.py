@@ -1351,6 +1351,9 @@ class NumpyroBackend(InferenceBackend):
         if n is not None:
             key = jax.random.PRNGKey(seed)
 
+            # use the minimum of the desired and available samples
+            n = min(n, n_samples)
+
             n_draws = int(n / posterior.sizes["chain"])
             # the same selection of draws will be applied to all chains. This
             # any other form will result in an array, where a lot of nans 
