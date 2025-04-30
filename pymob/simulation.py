@@ -1851,6 +1851,7 @@ class SimulationBase:
 
         _ = self._report.diagnostics(idata=self.inferer.idata)
 
+        _ = self._report.additional_reports(sim=self)
 
         self._report.compile_report()
 
