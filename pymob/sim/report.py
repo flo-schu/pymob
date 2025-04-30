@@ -174,7 +174,7 @@ class Report:
         self.backend = backend
         self.rc = config.report
         self.file = os.path.join(self.config.case_study.output_path, "report.md")
-        
+
         self.preamble()
 
         self.status = {}
@@ -330,7 +330,7 @@ class Report:
                 if k not in self.rc.table_parameter_estimates_exclude_vars
             }
 
-        tab = create_table(
+        tab_report = create_table(
             posterior=posterior,
             vars=var_names,
             error_metric=self.rc.table_parameter_estimates_error_metric,
@@ -338,8 +338,6 @@ class Report:
             nesting_dimension=indices.keys(),
             parameters_as_rows=self.rc.table_parameter_estimates_parameters_as_rows,
         )
-
-        self._write(tab.reset_index().to_markdown())
 
         # rewrite table in the desired output format
         tab = create_table(
@@ -352,28 +350,45 @@ class Report:
             parameters_as_rows=self.rc.table_parameter_estimates_parameters_as_rows,
         )
 
+        self._write_table(tab=tab, tab_report=tab_report, label_insert="Parameter estimates")
+
+
+    def _write_table(
+        self, 
+        tab: pd.DataFrame, 
+        tab_report: Optional[pd.DataFrame] = None, 
+        label_insert: Optional[str] = ""
+    ):
+        if tab_report is None:
+            tab_report = tab
+            
+        self._write(tab_report.reset_index().to_markdown())
+
+        safe_string_insert = label_insert.lower().replace(" ", "_").replace("$", "")
         if self.rc.table_parameter_estimates_format == "latex":
             table_latex = tab.to_latex(
+                multicolumn_format="c",
+                position="htb",
                 float_format=f"%.{self.rc.table_parameter_estimates_significant_figures}g",
                 escape=False,
                 caption=(
-                    f"Parameter estimates of the {self.config.case_study.name.replace('_','-')}"+
+                    f"{label_insert} of the {self.config.case_study.name.replace('_','-')}"+
                     f"({self.config.case_study.scenario.replace('_','-')}) model."
                 ),
-                label=self._label.format(placeholder="tab:parameters")
+                label=self._label.format(placeholder=f"tab:{safe_string_insert}")
             )
 
-            out = f"{self.config.case_study.output_path}/report_table_parameter_estimates.tex"
+            out = f"{self.config.case_study.output_path}/report_table_{safe_string_insert}.tex"
             with open(out, "w") as f:
                 f.writelines(table_latex)
 
         elif self.rc.table_parameter_estimates_format == "csv":
-            out = f"{self.config.case_study.output_path}/report_table_parameter_estimates.csv"
+            out = f"{self.config.case_study.output_path}/report_table_{safe_string_insert}.csv"
             tab.to_csv(out)
 
 
         elif self.rc.table_parameter_estimates_format == "tsv":
-            out = f"{self.config.case_study.output_path}/report_table_parameter_estimates.tsv"
+            out = f"{self.config.case_study.output_path}/report_table_{safe_string_insert}.tsv"
             tab.to_csv(out, sep="\t")
 
         return out
@@ -542,3 +557,6 @@ class Report:
         self._write(f"![{msg}](posterior_trace.png)")
 
         return out_pairs, out_trace
+
+    def additional_reports(self, sim):
+        pass

@@ -260,7 +260,7 @@ def format_parameter(par, subscript_sep="_", superscript_sep="__", textwrap="\\t
         if len(substr) == 1:
             substring_fmt = f"{substr}"
         else:
-            substr = substr.replace("_", ",")
+            substr = substr.replace("_", " ")
             substring_fmt = textwrap.replace("{}", "{{{}}}").format(substr)
     
         return f"{{{substring_fmt}}}"
@@ -281,6 +281,8 @@ def format_parameter(par, subscript_sep="_", superscript_sep="__", textwrap="\\t
 def round_to_sigfig(num, sig_fig=3):
     """Rounds a number to a specified number of significant figures."""
     if num == 0:
+        return num
+    if np.isnan(num):
         return num
     return round(num, sig_fig - int(np.floor(np.log10(abs(num)))) - 1)
 
@@ -312,6 +314,14 @@ def create_table(
             nesting_dimension = [nesting_dimension]
         stack_cols = (*nesting_dimension, "metric")
         
+    stack_cols = [s for s in stack_cols if s in tab.coords]
+
+
+    tab = tab.apply(np.vectorize(
+        partial(round_to_sigfig, sig_fig=significant_figures)
+    ))
+
+
     if error_metric == "sd":
         arrays = []
         for par in vars.values():
@@ -336,17 +346,13 @@ def create_table(
 
 
     if fmt == "latex":
-        table.columns.names = [c.replace('_','\\_') for c in table.columns.names]
+        table.columns.names = [c.replace('_',' ') for c in table.columns.names]
         table.index = [format_parameter(i) for i in list(table.index)]
         table = table.rename(
             columns={"hdi 3%": "hdi 3\\%", "hdi 97%": "hdi 97\\%"}
         )
     else: 
         pass
-
-    # table = table.apply(np.vectorize(
-    #     partial(round_to_sigfig, sig_fig=significant_figures)
-    # ))
 
     if parameters_as_rows:
         return table
