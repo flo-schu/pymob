@@ -69,6 +69,7 @@ class PymobModel(BaseModel):
 
 class ModelParameterDict(TypedDict):
     parameters: Dict[str, float|str|int]
+    # parametersNN: Dict[str, eqx.Module]
     y0: xr.Dataset
     x_in: xr.Dataset
 
@@ -337,6 +338,8 @@ OptionParam = Annotated[
     BeforeValidator(string_to_param), 
     serialize_param_to_string
 ]
+
+# OptionParamNN
 
 
 # OptionListFloat = Annotated[
@@ -634,6 +637,23 @@ class Multiprocessing(PymobModel):
             return cpu_set
         
 class Modelparameters(PymobModel):
+
+    # Zwei Möglichkeiten:
+
+    # 1. Analoge Klasse ModelparametersNN, die die neuronalen Netzwerke abfrühstückt und sehr
+    # ähnlich zu dieser aufgebaut ist -> bessere Trennung, wahrscheinlich einfacher für den
+    # ConfigParser (und auch an vielen anderen Stellen), aber dafür hat das ModelparameterDict
+    # dann einen Eintrag mehr, was bestimmt an der ein oder anderen Stelle berücksichtigt
+    # werden muss.
+
+    # 2. NNs hier integrieren und über diese Klasse einmal drüberarbeiten, damit z.B. die Values 
+    # nur für "normale" Parameter ausgegeben werden dürfen, also dass allgemein alle Funktionen 
+    # nur für die Art von Parameter ausgeführt wird, für die sie sinnvoll sind. Im Gegenzug kann 
+    # man dann natürlich neue Funktionen für die NN-Parameter definieren.
+
+    # Ich tendiere stark zu Variante 1 und habe auch überall sonst meine Anmerkungen so
+    # geschrieben, als ob es die Klasse ModelparametersNN schon gäbe.
+
     __pydantic_extra__: Dict[str,OptionParam]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
@@ -857,6 +877,7 @@ class Config(BaseModel):
     jaxsolver: Jaxsolver = Field(default=Jaxsolver(), alias="jax-solver")
     inference: Inference = Field(default=Inference())
     model_parameters: Modelparameters = Field(default=Modelparameters(), alias="model-parameters") #type: ignore
+    # model_parametersNN: ModelparametersNN = Field(default=ModelparametersNN(), alias="model-parameters-NN")
     error_model: Errormodel = Field(default=Errormodel(), alias="error-model") # type: ignore
     multiprocessing: Multiprocessing = Field(default=Multiprocessing())
     inference_pyabc: Pyabc = Field(default=Pyabc(), alias="inference.pyabc")

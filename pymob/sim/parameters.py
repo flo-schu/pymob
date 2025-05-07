@@ -325,6 +325,48 @@ class Param(BaseModel):
                 arr.attrs[key] = value
 
         return arr
+    
+
+class ParamNN (BaseModel):
+
+    """This class serves as a Basic model for declaring 
+    neural networks as parameters.
+
+    Parameters
+    ----------
+
+    type : String
+        The type of the neural network. Can be a linear network (input
+        "linear"), a multilayer perceptron (input "MLP" or "mlp"),
+        a convolutional neural network (input "CNN" or "cnn") or a recurrent
+        neural network (input "RNN" or "rnn").
+
+    structure: Dict
+        A dictionary that defines the structure of the neural network. The
+        necessary keys and arguments depend on the type of neural network.
+
+    weights: list[float]
+        A list of all the weights present in the neural network.
+
+    bias: list[float]
+        A list of all the bias present in the neural network. Can be an empty
+        list if no bias are needed.
+    """
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True, 
+        validate_assignment=True, 
+        extra="forbid"
+    )
+    name: Optional[str] = None
+    type: str
+    structure: Dict = {"in_size": 2, "out_size": 2, "width_size": 64, "depth": 3, "activation": "softplus"}
+    weights: list = np.zeros(8448)
+    bias: list = np.zeros(194)
+    hyper: bool = False
+    free: bool = True
+
+    # Hier noch eine Funktion, die überprüft, ob die Länge der weights und bias zu den Angaben im Structure-Dict passen
 
 
 scipy_to_scipy = {
