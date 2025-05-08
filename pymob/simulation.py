@@ -37,6 +37,9 @@ def is_iterable(x):
     except TypeError:
         return False
 
+# Kann sein. dass man dann bei jedem Aufruf von flatten_parameter_dict einmal
+# exclude_params=["parametersNN"] dazu schreiben muss. Davon abgesehen müsste hier
+# glaube ich gar nichts geändert werden.
 
 def flatten_parameter_dict(model_parameter_dict, exclude_params=[]):
     """Takes a dictionary of key value pairs where the values may be
@@ -211,6 +214,7 @@ class SimulationBase:
         self._coordinates: Dict = {}
         self._scaler = {}
 
+        # self._model_parameters: Dict[Literal["parameters","parametersNN","y0","x_in"],Any]
         self._model_parameters: Dict[Literal["parameters","y0","x_in"],Any] =\
             ParameterDict(parameters={}, callback=self._on_params_updated)
         # self.observations = None
@@ -263,6 +267,7 @@ class SimulationBase:
         )
         self.dispatch_constructor()
 
+    # 
     @property
     def model_parameters(self) -> Dict[Literal["parameters","y0","x_in"],Any]:
         return self._model_parameters
@@ -752,6 +757,7 @@ class SimulationBase:
     def dispatch(
             self, 
             theta: Mapping[str, float|NumericArray|Sequence[float]] = {}, 
+            # nn: Mapping[str, eqx.Module] = {},
             y0: Mapping[str, float|NumericArray|Sequence[float]] = {}, 
             x_in: Mapping[str, float|NumericArray|Sequence[float]] = {}, 
         ):
@@ -1028,7 +1034,7 @@ class SimulationBase:
 
 
     def evaluate(self, theta):
-        """Wrapper around run to modify paramters of the model.
+        """Wrapper around run to modify parameters of the model.
         """
         self.model_parameters = self.parameterize(theta) #type: ignore
         return self.run()
@@ -1305,6 +1311,8 @@ class SimulationBase:
                 "Parameter inference."
             )
 
+    # Hier dann vielleicht auch noch die Option hinzufügen, dem neuronalen Netzwerk
+    # selbst irgendwelche Gewichte hinzuzufügen.
     @staticmethod
     def parameterize(free_parameters: Dict[str,float|str|int], model_parameters: Dict) -> Dict:
         """
