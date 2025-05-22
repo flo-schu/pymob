@@ -29,6 +29,7 @@ dependencies=[
   "frozendict ~= 2.3.10",
   "numpydantic ~= 1.3.0",
   "nptyping ~= 2.5",
+  "optax ~= 0.2.4",
 ]
 license = {file = "LICENSE"}
 classifiers = [
