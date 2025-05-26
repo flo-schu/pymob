@@ -27,7 +27,7 @@ class Func(eqx.Module):
 
     def __call__(self, t, y, *args):
         prey, predator = y
-        alpha, beta, gamma = self.theta_true #jax.lax.stop_gradient(self.theta_true)
+        alpha, beta, gamma = jax.lax.stop_gradient(self.theta_true)
         dprey_dt_ode = alpha * prey - beta * prey * predator
         dpredator_dt_ode = gamma * prey * predator
         dpredator_dt_nn = self.mlp(y)
@@ -134,14 +134,6 @@ def main(
             max_temp = jnp.max(leaf)
             max = jnp.where(max_temp > max, max_temp, max)
         return max
-    
-    def filter_theta(element):
-        model_flat, model_tree = jax.tree_util.tree_flatten(element)
-        bool_flat = [False] + [True] * (len(model_flat) - 1)
-        return jax.tree_util.tree_unflatten(model_tree, bool_flat)
-
-    def custom_filter(element):
-        return eqx.filter(eqx.filter(model, eqx.is_inexact_array), filter_theta(model))
 
     @eqx.filter_value_and_grad
     def grad_loss(model, ti, yi):
@@ -151,14 +143,14 @@ def main(
     @eqx.filter_jit
     def make_step(ti, yi, model, opt_state):
         loss, grads = grad_loss(model, ti, yi)
-        updates, opt_state = optim.update(custom_filter(grads), opt_state, custom_filter(model))
+        updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_inexact_array))
         max_update_temp = update_max(updates)
         model = eqx.apply_updates(model, updates)
         return loss, model, opt_state, max_update_temp
 
     for lr, steps, length in zip(lr_strategy, steps_strategy, length_strategy):
         optim = optax.adabelief(lr)
-        opt_state = optim.init(custom_filter(model))
+        opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
         _ts = ts[: int(length_size * length)]
         _ys = ys[:, : int(length_size * length)]
         for step, (yi,) in zip(
