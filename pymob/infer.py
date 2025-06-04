@@ -1,7 +1,6 @@
 import os
 import sys
 import click
-import resource
 
 from pymob.utils import help
 from pymob.utils.store_file import prepare_casestudy, import_package
@@ -53,10 +52,11 @@ def main(case_study, scenario, package, output, random_seed, n_cores, inference_
     sim.posterior_predictive_checks()
     sim.report()
 
-    max_ram_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000
-    print("RESOURCE USAGE")
-    print("==============")
-    print(f"Max RSS: {max_ram_mb} M")
+    # TODO: Migrate to platform independent psutil
+    # max_ram_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000
+    # print("RESOURCE USAGE")
+    # print("==============")
+    # print(f"Max RSS: {max_ram_mb} M")
 
 
 if __name__ == "__main__":
