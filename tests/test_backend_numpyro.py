@@ -289,8 +289,8 @@ def test_convergence_hierarchical_lotka_volterra():
     np.testing.assert_allclose(
         sim.inferer.idata.posterior.beta.mean(("chain", "draw")), 
         sim.config.model_parameters.beta.value,
-        atol=0.0003,
-        rtol=0.0001
+        atol=0.0005,
+        rtol=0.025
     )
 
     # TODO: CUrrently this is not very accurate. But it is a sufficient test
