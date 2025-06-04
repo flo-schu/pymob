@@ -8,7 +8,7 @@ from pymob.solvers.diffrax import JaxSolver
 from pymob.inference.numpyro_backend import NumpyroBackend
 from pymob.sim.config import Param
 
-from fixtures import (
+from tests.fixtures import (
     init_simulation_casestudy_api, 
     init_lotka_volterra_case_study_hierarchical_from_settings,
 )
@@ -379,4 +379,3 @@ def test_commandline_api_infer():
 
 if __name__ == "__main__":
     pass
-    test_convergence_hierarchical_lotka_volterra()
