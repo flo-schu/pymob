@@ -51,9 +51,10 @@ jobs:
           echo "GitHub base branch of tag: ${{ github.event.base_ref }}"
           echo "GitHub sha: ${{ github.sha }}"
           echo "GitHub message: ${{ github.event.head_commit.message }}"
-  
-  test:
-    name: 🧪 Unit Tests
+    
+  decide-to-test:
+    name: Test decision
+    needs: print-context
 
     # The below test does not work. The problem is that bumpver makes a commit
     # (that is tested) and then uploads the tag, which also triggers a test.
@@ -61,6 +62,24 @@ jobs:
     # is bump x.x.x -> x.x.y; but this does not work because pull request
     # apparently does not track the commit message
     # if: ${{ ! ( github.event.head_commit.message == '' && github.event_name == 'pull_request' ) }} 
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check if commit message contains "bump version"
+      id: check_commit
+      run: |
+        msg=$(git log -1 --pretty=format:"%s")
+        echo "Commit message ${msg}"
+        if [[ "${msg}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+$ ]]; then
+          echo "skip=true" >> $GITHUB_ENV
+        fi
+
+  test:
+    name: 🧪 Unit Tests
+    needs: decide-to-test
 
     strategy:
       fail-fast: false
