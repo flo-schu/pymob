@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Modelling platform for Python"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies=[
   "arviz >=0.20, <1.0.0",
   "click >=8.1.3, <9.0.0",
