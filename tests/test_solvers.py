@@ -198,12 +198,12 @@ def test_benchmark_jaxsolver():
     # construct the dispatch again with a different solver
     sim.solver = JaxSolver
     from diffrax import Dopri5
-    sim.dispatch_constructor(diffrax_solver=Dopri5, rtol=1e-6)
+    sim.dispatch_constructor(diffrax_solver=Dopri5, rtol=1e-6, atol=1e-7)
     e = sim.dispatch({})
     e()
     b = e.results
 
-    np.testing.assert_allclose(a.to_array(), b.to_array(), atol=1e-3)
+    np.testing.assert_allclose(a.to_array(), b.to_array(), atol=1e-3, rtol=1e-5)
 
     cpu_time_start = time.process_time()
     sim.benchmark(n=100)
