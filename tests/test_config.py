@@ -7,6 +7,7 @@ from pymob.sim.config import (
     DataVariable, Datastructure, configure,
     Param, RandomVariable, Expression
 )
+from pymob.utils.store_file import import_package, normalize_path
 from pymob.solvers.scipy import solve_ivp_1d
 from sympy import Function
 import xarray as xr
@@ -82,7 +83,7 @@ def test_load_generated_settings():
     assert sim.config.case_study.scenario == "test_scenario_scripting_api"
     assert sim.config.case_study.package == "case_studies"
     assert sim.config.case_study.data == None
-    assert Path(sim.config.case_study.data_path) == Path("case_studies/lotka_volterra_case_study/data")
+    assert normalize_path(sim.config.case_study.data_path) == normalize_path("case_studies\\lotka_volterra_case_study\\data")
     assert sim.config.case_study.output == None
     assert Path(sim.config.case_study.output_path) == \
         Path("case_studies/lotka_volterra_case_study/results/test_scenario_scripting_api")
