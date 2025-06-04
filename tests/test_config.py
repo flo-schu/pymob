@@ -5,7 +5,6 @@ import tempfile
 from pymob.simulation import SimulationBase, Config
 from pymob.sim.config import DataVariable, Datastructure, configure
 from pymob.sim.parameters import Param, RandomVariable, Expression
-from pymob.utils.store_file import import_package, normalize_path
 from pymob.solvers.scipy import solve_ivp_1d
 from sympy import Function
 import xarray as xr
