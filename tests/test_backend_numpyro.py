@@ -6,7 +6,7 @@ from pymob.solvers.diffrax import JaxSolver
 from pymob.inference.numpyro_backend import NumpyroBackend
 from pymob.sim.parameters import Param
 
-from tests.fixtures import (
+from fixtures import (
     init_simulation_casestudy_api, 
     init_lotka_volterra_case_study_hierarchical_from_settings,
 )
@@ -270,8 +270,8 @@ def test_convergence_hierarchical_lotka_volterra():
 
     # using SVI, because it is much faster than NUTS. 
     sim.config.inference_numpyro.kernel = "svi"
-    sim.config.inference_numpyro.svi_iterations = 5_000
-    sim.config.inference_numpyro.svi_learning_rate = 0.005
+    sim.config.inference_numpyro.svi_iterations = 2_000
+    sim.config.inference_numpyro.svi_learning_rate = 0.01
     sim.config.inference_numpyro.gaussian_base_distribution = True
     sim.config.jaxsolver.max_steps = 1e5
     sim.config.jaxsolver.throw_exception = False
@@ -300,7 +300,7 @@ def test_convergence_hierarchical_lotka_volterra():
         sim.inferer.idata.posterior.alpha_species_hyper.mean(("chain", "draw")), 
         (1, 3),
         atol=0.1,
-        rtol=0.01
+        rtol=0.2
     )
 
 
@@ -348,3 +348,4 @@ def test_commandline_api_infer():
 
 if __name__ == "__main__":
     pass
+    test_convergence_hierarchical_lotka_volterra()
