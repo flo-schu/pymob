@@ -82,8 +82,8 @@ def test_load_generated_settings():
     assert sim.config.case_study.data == None
     assert normalize_path(sim.config.case_study.data_path) == normalize_path("case_studies\\lotka_volterra_case_study\\data")
     assert sim.config.case_study.output == None
-    assert sim.config.case_study.output_path == \
-        "case_studies/lotka_volterra_case_study/results/test_scenario_scripting_api"
+    assert normalize_path(sim.config.case_study.output_path) == \
+        normalize_path("case_studies/lotka_volterra_case_study/results/test_scenario_scripting_api")
 
 def test_load_interpolated_settings():
     sim = SimulationBase(f"{scenario}/interp_settings.cfg")
