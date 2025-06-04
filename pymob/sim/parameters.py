@@ -12,8 +12,8 @@ from pydantic.functional_validators import BeforeValidator
 from numpydantic import NDArray, Shape
 
 NumericArray = Union[
-    NDArray[Shape["*, ..."], float],  # type:ignore
-    NDArray[Shape["*, ..."], int],    # type:ignore
+    NDArray[Shape["*, ..."], float],  # noqa: F722
+    NDArray[Shape["*, ..."], int],  # noqa: F722
 ] 
 
 class Expression:
