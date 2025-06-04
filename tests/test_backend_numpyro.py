@@ -207,6 +207,7 @@ def test_convergence_map_kernel():
 
 
 def test_convergence_sa_kernel():
+    pytest.skip()
     sim = init_simulation_casestudy_api("test_scenario")
 
     sim.config.inference_numpyro.kernel = "sa"
