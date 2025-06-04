@@ -1,5 +1,6 @@
 import warnings
 from typing import Literal, Union, List, Optional, Dict
+from functools import partial
 
 import numpy as np
 import xarray as xr
@@ -259,7 +260,7 @@ def format_parameter(par, subscript_sep="_", superscript_sep="__", textwrap="\\t
         if len(substr) == 1:
             substring_fmt = f"{substr}"
         else:
-            substr = substr.replace("_", ",")
+            substr = substr.replace("_", " ")
             substring_fmt = textwrap.replace("{}", "{{{}}}").format(substr)
     
         return f"{{{substring_fmt}}}"
@@ -277,6 +278,14 @@ def format_parameter(par, subscript_sep="_", superscript_sep="__", textwrap="\\t
 
     return formatted_string
 
+def round_to_sigfig(num, sig_fig=3):
+    """Rounds a number to a specified number of significant figures."""
+    if num == 0:
+        return num
+    if np.isnan(num):
+        return num
+    return round(num, sig_fig - int(np.floor(np.log10(abs(num)))) - 1)
+
 
 def create_table(
     posterior, 
@@ -284,6 +293,7 @@ def create_table(
     vars: Dict = {}, 
     nesting_dimension: Optional[Union[List,str]] = None,
     fmt: Literal["csv", "tsv", "latex"] = "csv",
+    significant_figures: int = 3,
     parameters_as_rows: bool = True,
 ) -> pd.DataFrame:
     """The function is not ready to deal with any nesting dimensionality
@@ -304,11 +314,18 @@ def create_table(
             nesting_dimension = [nesting_dimension]
         stack_cols = (*nesting_dimension, "metric")
         
+    stack_cols = [s for s in stack_cols if s in tab.coords]
+
+
+    tab = tab.apply(np.vectorize(
+        partial(round_to_sigfig, sig_fig=significant_figures)
+    ))
+
+
     if error_metric == "sd":
         arrays = []
         for par in vars.values():
             par_formatted = tab.sel(metric=["mean", "sd"])[par]\
-                .round(3)\
                 .astype(str).str\
                 .join("metric", sep=" ± ")
             arrays.append(par_formatted)
@@ -321,8 +338,7 @@ def create_table(
     elif error_metric == "hdi":
         stacked_tab = tab.sel(metric=["mean", "hdi_3%", "hdi_97%"])\
             .assign_coords(metric=["mean", "hdi 3%", "hdi 97%"])\
-            .stack(col=stack_cols)\
-            .round(2)
+            .stack(col=stack_cols)
         table = stacked_tab.to_dataframe().T.drop(list(stack_cols))
 
     else:
@@ -330,6 +346,7 @@ def create_table(
 
 
     if fmt == "latex":
+        table.columns.names = [c.replace('_',' ') for c in table.columns.names]
         table.index = [format_parameter(i) for i in list(table.index)]
         table = table.rename(
             columns={"hdi 3%": "hdi 3\\%", "hdi 97%": "hdi 97\\%"}

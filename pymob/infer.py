@@ -22,8 +22,8 @@ from pymob.sim.config import Config
 @click.option("-n", "--n_cores", type=int, default=None, 
               help="The number of cores to be used for multiprocessing")
 @click.option("--inference_backend", type=str, default="pymoo")
-@click.option("--only_ppc", type=bool, default=False)
-def main(case_study, scenario, package, output, random_seed, n_cores, inference_backend, only_ppc):
+@click.option("--only-report", type=bool, is_flag=True, default=False)
+def main(case_study, scenario, package, output, random_seed, n_cores, inference_backend, only_report):
     
     cfg = os.path.join(package, case_study, "scenarios", scenario, "settings.cfg")
     config = Config(cfg)
@@ -43,7 +43,7 @@ def main(case_study, scenario, package, output, random_seed, n_cores, inference_
     sim.config.save(os.path.join(sim.output_path, "settings.cfg"), force=True)
 
     sim.set_inferer(backend=inference_backend)
-    if not only_ppc:
+    if not only_report:
         sim.prior_predictive_checks()
         sim.inferer.run()
         sim.inferer.store_results()

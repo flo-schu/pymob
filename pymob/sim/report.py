@@ -2,6 +2,8 @@ import os
 from functools import wraps
 from typing import List, Dict, Optional, Literal, Callable
 import inspect
+import subprocess
+import warnings
 
 import numpy as np
 import arviz as az
@@ -172,10 +174,15 @@ class Report:
         self.backend = backend
         self.rc = config.report
         self.file = os.path.join(self.config.case_study.output_path, "report.md")
-        
+
         self.preamble()
 
         self.status = {}
+        self._label = "--".join([
+            "{placeholder}", 
+            self.config.case_study.name.replace('_','-'),
+            self.config.case_study.scenario.replace('_','-')
+        ])
 
     def __repr__(self):
         return "Report(case_study={c}, scenario={s})".format(
@@ -185,6 +192,90 @@ class Report:
 
     def _write(self, msg, mode="a", newlines=1):
         log(msg=msg, out=self.file, newlines=newlines, mode=mode)
+
+
+    def compile_report(self):
+        wd = os.getcwd()
+        os.makedirs(os.path.join(self.config.case_study.output_path, "reports"), exist_ok=True)
+        os.chdir(self.config.case_study.output_path)
+        
+        try:
+            if self.rc.pandoc_output_format == "html":
+                out = self._pandoc_to_html()
+            elif self.rc.pandoc_output_format == "latex-si":
+                out = self._pandoc_to_latex_si()
+            elif self.rc.pandoc_output_format == "latex":
+                out = self._pandoc_to_latex_standalone()
+            elif self.rc.pandoc_output_format == "pdf":
+                out = self._pandoc_to_pdf()
+                if out.returncode != 0:
+                    warnings.warn("Error compiling report to pdf. Do you have latex installed?")
+            else:
+                warnings.warn(
+                    "There was an error compiling the report from report.md to the desired output format! "+ 
+                    f"The `pandoc_output_format`: {self.rc.pandoc_output_format} "+
+                    "is not defined. Use one of: html, latex, latex-si, pdf. "+
+                    "E.g.: `config.report.pandoc_output_format = html`",
+                    category=UserWarning
+                )
+
+            if out.returncode != 0:
+                warnings.warn(
+                    "There was an error compiling the report from report.md to the desired output format! "+ 
+                    f"Process exited with return code {out.returncode} using the following arguments: "+
+                    f"{' '.join(out.args)}",
+                    category=UserWarning
+                )
+        except FileNotFoundError:
+            warnings.warn(
+                "There was an error compiling the report! "
+                "Pandoc seems not to be installed. Make sure to install pandoc on your "+
+                "system. Install with: `conda install -c conda-forge pandoc` "+
+                "(https://pandoc.org/installing.html)",
+                category=UserWarning
+            )
+
+        os.chdir(wd)
+
+    def _pandoc_to_html(self):
+        os.chdir("reports")
+        return subprocess.run([
+            "pandoc",        
+            "--resource-path=..",
+            f"--extract-media=media/{self.config.case_study.name}_{self.config.case_study.scenario}",
+            "--standalone",
+            f"--output={self.config.case_study.name}_{self.config.case_study.scenario}.html",
+            "../report.md"
+        ])
+
+    def _pandoc_to_latex_standalone(self):
+        os.chdir("reports")
+        return subprocess.run([
+            "pandoc",        
+            "--resource-path=..",
+            f"--extract-media=media/{self.config.case_study.name}_{self.config.case_study.scenario}",
+            "--standalone",
+            f"--output={self.config.case_study.name}_{self.config.case_study.scenario}.tex",
+            "../report.md"
+        ])
+
+    def _pandoc_to_latex_si(self):
+        return subprocess.run([
+            "pandoc",        
+            "--resource-path=.",
+            f"--extract-media=reports/media/{self.config.case_study.name}_{self.config.case_study.scenario}",
+            f"--output=reports/{self.config.case_study.name}_{self.config.case_study.scenario}.tex",
+            "report.md"
+        ])
+
+    def _pandoc_to_pdf(self):
+        return subprocess.run([
+            "pandoc",        
+            "--resource-path=.",
+            f"--output=reports/{self.config.case_study.name}_{self.config.case_study.scenario}.pdf",
+            "--pdf-engine=xelatex",
+            "report.md"
+        ])
 
     def preamble(self):
         # metadata block
@@ -239,37 +330,65 @@ class Report:
                 if k not in self.rc.table_parameter_estimates_exclude_vars
             }
 
-        tab = create_table(
+        tab_report = create_table(
             posterior=posterior,
             vars=var_names,
             error_metric=self.rc.table_parameter_estimates_error_metric,
+            significant_figures=self.rc.table_parameter_estimates_significant_figures,
             nesting_dimension=indices.keys(),
             parameters_as_rows=self.rc.table_parameter_estimates_parameters_as_rows,
         )
 
-        self._write(tab.reset_index().to_markdown())
+        # rewrite table in the desired output format
+        tab = create_table(
+            posterior=posterior,
+            vars=var_names,
+            error_metric=self.rc.table_parameter_estimates_error_metric,
+            significant_figures=self.rc.table_parameter_estimates_significant_figures,
+            fmt=self.rc.table_parameter_estimates_format,
+            nesting_dimension=indices.keys(),
+            parameters_as_rows=self.rc.table_parameter_estimates_parameters_as_rows,
+        )
 
+        self._write_table(tab=tab, tab_report=tab_report, label_insert="Parameter estimates")
+
+
+    def _write_table(
+        self, 
+        tab: pd.DataFrame, 
+        tab_report: Optional[pd.DataFrame] = None, 
+        label_insert: Optional[str] = ""
+    ):
+        if tab_report is None:
+            tab_report = tab
+            
+        self._write(tab_report.reset_index().to_markdown())
+
+        safe_string_insert = label_insert.lower().replace(" ", "_").replace("$", "")
         if self.rc.table_parameter_estimates_format == "latex":
             table_latex = tab.to_latex(
-                float_format="%.2f",
+                multicolumn_format="c",
+                position="htb",
+                float_format=f"%.{self.rc.table_parameter_estimates_significant_figures}g",
+                escape=False,
                 caption=(
-                    f"Parameter estimates of the {self.config.case_study.name}"+
-                    f"({self.config.case_study.scenario}) model."
+                    f"{label_insert} of the {self.config.case_study.name.replace('_','-')}"+
+                    f"({self.config.case_study.scenario.replace('_','-')}) model."
                 ),
-                label=f"tab:parameters-{self.config.case_study.name}__{self.config.case_study.scenario}"
+                label=self._label.format(placeholder=f"tab:{safe_string_insert}")
             )
 
-            out = f"{self.config.case_study.output_path}/report_table_parameter_estimates.tex"
+            out = f"{self.config.case_study.output_path}/report_table_{safe_string_insert}.tex"
             with open(out, "w") as f:
                 f.writelines(table_latex)
 
         elif self.rc.table_parameter_estimates_format == "csv":
-            out = f"{self.config.case_study.output_path}/report_table_parameter_estimates.csv"
+            out = f"{self.config.case_study.output_path}/report_table_{safe_string_insert}.csv"
             tab.to_csv(out)
 
 
         elif self.rc.table_parameter_estimates_format == "tsv":
-            out = f"{self.config.case_study.output_path}/report_table_parameter_estimates.tsv"
+            out = f"{self.config.case_study.output_path}/report_table_{safe_string_insert}.tsv"
             tab.to_csv(out, sep="\t")
 
         return out
@@ -294,7 +413,18 @@ class Report:
             if self.rc.parameters_format == "xarray":
                 self._write(model_parameters["x_in"]._repr_html_())
             elif self.rc.parameters_format == "pandas":
-                self._write(model_parameters["x_in"].to_pandas().to_markdown())
+                # TODO: In future: Iterate over variables in x_in, then make a wide table
+                #       batch_dimension x x_dimension for each additional index coordinate
+                try:
+                    self._write(model_parameters["x_in"].to_pandas().to_markdown())
+                except ValueError:
+                    self._write(
+                        "$x_{in}$ is to complex to represent as dataframe. Using xarray "+
+                        "representation instead. Compile to html with pandoc to render "+
+                        "report"
+                    )
+                    self._write(model_parameters["x_in"]._repr_html_())
+
         else:
             self._write("No model input")
 
@@ -304,7 +434,15 @@ class Report:
             if self.rc.parameters_format == "xarray":
                 self._write(model_parameters["y0"]._repr_html_())
             elif self.rc.parameters_format == "pandas":
-                self._write(model_parameters["y0"].to_pandas().to_markdown())
+                try:
+                    self._write(model_parameters["y0"].to_pandas().to_markdown())
+                except ValueError:
+                    self._write(
+                        "$y_{0}$ is to complex to represent as dataframe. Using xarray "+
+                        "representation instead. Compile to html with pandoc to render "+
+                        "report"
+                    )
+                    self._write(model_parameters["y0"]._repr_html_())
         else:
             self._write("No starting values")
 
@@ -419,3 +557,6 @@ class Report:
         self._write(f"![{msg}](posterior_trace.png)")
 
         return out_pairs, out_trace
+
+    def additional_reports(self, sim):
+        pass
