@@ -4,6 +4,8 @@ import os
 import json
 import numpy as np
 import sys
+import re
+from pathlib import Path
 import xarray as xr
 from glob import glob
 from importlib import import_module
@@ -393,3 +395,11 @@ def go_to_case_studies(case_study_dir="case_studies", stop_inside_case_studies=T
             )
         
     print(f"Found case study directory in: {os.getcwd()}")
+
+
+
+def normalize_path(path):
+    # Replace all slashes/backslashes with the OS separator
+    clean_path = re.sub(r"[\\/]+", os.sep, path)
+    # Optionally, remove redundant separators and up-level references
+    return Path(clean_path)
