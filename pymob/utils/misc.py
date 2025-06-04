@@ -8,7 +8,8 @@
 #
 # ------------------------------------------------------------------------------
 from typing import List
-from datetime import timedelta
+import time
+from datetime import timedelta, datetime
 import itertools as it
 import socket
 import numpy as np
@@ -169,6 +170,52 @@ def to_xarray_dataset(rawdata):
     dataset = dataset.assign_attrs(**rawdata["meta"])
     return dataset
 
+
+def benchmark(func):
+    def decorated_func():
+        exec_time = datetime.now()
+        timefmt = "%Y-%m-%d_%H-%M-%S"
+        exec_time = exec_time.strftime(timefmt)
+
+        benchmark_test = {
+            "time": exec_time,
+        }
+
+        print(
+            f"Starting Benchmark("
+            f"time={datetime.strptime(benchmark_test['time'], timefmt)}, "
+            ")"
+        )
+
+        # Execute benchmark
+        cpu_time_start = time.process_time()
+        wall_time_start = time.time()
+
+        func()
+
+        cpu_time_stop = time.process_time()
+        wall_time_stop = time.time()
+
+        # record result of Benchmark
+        cpu_time = cpu_time_stop - cpu_time_start
+        wall_time = wall_time_stop - wall_time_start
+
+        result = {
+            "walltime_s": wall_time,
+            "cputime_s": cpu_time,
+        }
+
+        # Update Benchmarking results table
+        benchmark_test.update(result)
+
+        print(
+            f"Finished Benchmark("
+            f"runtime={result['walltime_s']}s, "
+            f"cputime={result['cputime_s']}s, "
+        )
+        return benchmark_test
+    
+    return decorated_func
 
 
 DAYFMT = ticker.FuncFormatter(dayTicks)
