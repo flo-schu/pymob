@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 from click.testing import CliRunner
 import tempfile
 from pymob.simulation import SimulationBase, Config
@@ -80,10 +81,10 @@ def test_load_generated_settings():
     assert sim.config.case_study.scenario == "test_scenario_scripting_api"
     assert sim.config.case_study.package == "case_studies"
     assert sim.config.case_study.data == None
-    assert normalize_path(sim.config.case_study.data_path) == normalize_path("case_studies\\lotka_volterra_case_study\\data")
+    assert Path(sim.config.case_study.data_path) == Path("case_studies/lotka_volterra_case_study/data")
     assert sim.config.case_study.output == None
-    assert normalize_path(sim.config.case_study.output_path) == \
-        normalize_path("case_studies/lotka_volterra_case_study/results/test_scenario_scripting_api")
+    assert Path(sim.config.case_study.output_path) == \
+        Path("case_studies/lotka_volterra_case_study/results/test_scenario_scripting_api")
 
 def test_load_interpolated_settings():
     sim = SimulationBase(f"{scenario}/interp_settings.cfg")
