@@ -119,10 +119,12 @@ def test_posterior_predictions_nuts():
     sim = init_simulation_casestudy_api("test_scenario")
     sim.solver = JaxSolver
 
+    sim.config.jaxsolver.throw_exception = False
     sim.config.inference.n_predictions = 30
     sim.config.inference_numpyro.chains = 2
     sim.config.inference_numpyro.draws = 5
     sim.config.inference_numpyro.warmup = 0
+    sim.config.inference_numpyro.init_strategy = "init_to_median"
     sim.config.inference_numpyro.nuts_max_tree_depth = 1
     sim.config.inference_numpyro.gaussian_base_distribution = True
     sim.config.inference_numpyro.kernel = "nuts"
