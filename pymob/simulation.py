@@ -23,7 +23,7 @@ from sklearn.preprocessing import MinMaxScaler
 import pymob
 from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
 from pymob.utils.errors import errormsg, import_optional_dependency, PymobError
-from pymob.utils.store_file import parse_config_section, is_number
+from pymob.utils.store_file import parse_config_section
 from pymob.utils.misc import benchmark
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
