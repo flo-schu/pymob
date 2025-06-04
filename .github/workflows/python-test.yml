@@ -72,7 +72,7 @@ jobs:
       id: check_commit
       run: |
         msg=$(git log -1 --pretty=format:"%s")
-        echo "Commit message ${msg}"
+        echo "Commit message: ${msg}"
         if [[ "${msg}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+$ ]]; then
           echo "skip=true" >> $GITHUB_ENV
         fi
@@ -80,6 +80,7 @@ jobs:
   test:
     name: 🧪 Unit Tests
     needs: decide-to-test
+    if: github.env.skip != 'true'
 
     strategy:
       fail-fast: false
@@ -91,14 +92,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-      if: env.skip != 'true'
       with:
         submodules: true
 
     - name: Check if commit message contains "bump version"
       id: check_commit
+      # use log -2 to exclude the merge commit from the pull request
       run: |
-        msg=$(git log -1 --pretty=format:"%s")
+        msg=$(git log -2 --pretty=format:"%s")
         echo "Commit message ${msg}"
         if [[ "${msg}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+$ ]]; then
           echo "skip=true" >> $GITHUB_ENV
