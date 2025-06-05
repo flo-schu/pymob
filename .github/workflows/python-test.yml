@@ -38,9 +38,20 @@ jobs:
         id: commit-message-github-api
         if: github.event_name != 'push'
         run: |
-          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits" | \
-          jq -r '.[].commit.message' > pr-commits.txt
+          per_page=100
+          page=1
+          : > pr-commits.txt  # truncate or create output file
+
+          while :; do
+            url="${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits?per_page=${per_page}&page=${page}"
+            response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$url")
+            count=$(echo "$response" | jq 'length')
+            [ "$count" -eq 0 ] && break
+            echo "$response" | jq -r '.[].commit.message | split("\n")[0]' >> pr-commits.txt
+            [ "$count" -lt "$per_page" ] && break
+            page=$((page + 1))
+          done
+          cat pr-commits.txt
           commit_msg=$(cat pr-commits.txt | tail -n 1)
           echo "latest_commit message from parent branch: '$commit_msg"
           echo "latest_commit=$commit_msg" >> $GITHUB_OUTPUT
