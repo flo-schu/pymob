@@ -11,11 +11,12 @@ on:
   # an active PR
   pull_request:
     types: [opened, reopened, synchronize]
+  workflow_call:
     
 env:
   # How to get the name of the branch (see: https://stackoverflow.com/a/71158878)
   branch_name: ${{ github.head_ref || github.ref_name }} 
-  test_infrastructure_only: "true"
+  full-test: false
 
 jobs:
   decide-to-test:
@@ -29,12 +30,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        if: github.event_name != 'workflow_call'
         with:
           fetch-depth: 0   
 
 
       - name: List PR commit messages
         id: commit-message-github-api
+        if: github.event_name != 'workflow_call'
         run: |
           curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits" | \
@@ -45,6 +48,7 @@ jobs:
       
       - name: Get commit message from git log
         id: commit-message-git-log
+        if: github.event_name != 'workflow_call'
         run: |
           msg=$(git log -n 1 --skip 1 --pretty=format:"%s")
           echo "latest_commit=$msg" >> $GITHUB_OUTPUT
@@ -53,6 +57,7 @@ jobs:
       # this catches the commit which is made by the bumpver commit on the PR
       - name: Check if commit message contains "bump version"
         id: check_commit
+        if: github.event_name != 'workflow_call'
         run: |
           msg_gl="${{ steps.commit-message-github-api.outputs.latest_commit }}"
           msg_ga="${{ steps.commit-message-git-log.outputs.latest_commit }}"
@@ -66,6 +71,7 @@ jobs:
 
       - uses: dorny/paths-filter@v3
         id: changes
+        if: github.event_name != 'workflow_call'
         with:
           filters: |
             src:
@@ -76,10 +82,11 @@ jobs:
               - "pyproject.toml"
               - "scripts/*.sh"
 
+
   test:
     name: 🧪 Unit Tests
     needs: decide-to-test
-    if:  ${{ needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' }}
+    if:  ${{ needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' || github.event_name == 'workflow_call' }}
 
     strategy:
       fail-fast: false
@@ -95,14 +102,14 @@ jobs:
         submodules: true
 
     - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
-      if: env.test_infrastructure_only  != 'true'
+      if: env.full-test && github.event_name != 'workflow_call'
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip' # caching pip dependencies
 
     - name: Install dependencies
-      if: env.test_infrastructure_only  != 'true'
+      if: env.full-test && github.event_name != 'workflow_call'
       run: |
         python -m pip install --upgrade pip
         python -m pip install flake8 pytest
@@ -110,7 +117,7 @@ jobs:
         pip install -e case_studies/lotka_volterra_case_study
 
     - name: Lint with flake8
-      if: env.test_infrastructure_only  != 'true'
+      if: env.full-test && github.event_name != 'workflow_call'
       run: |
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -118,7 +125,7 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
     - name: Test with pytest
-      if: env.test_infrastructure_only != 'true'
+      if: env.full-test && github.event_name != 'workflow_call'
       run: |
         pytest tests/
 
