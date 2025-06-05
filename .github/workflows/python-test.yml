@@ -15,8 +15,7 @@ on:
 env:
   # How to get the name of the branch (see: https://stackoverflow.com/a/71158878)
   branch_name: ${{ github.head_ref || github.ref_name }} 
-  COMMIT_MSG: ${{ github.event.head_commit.message }}
-  skip: "false"
+  test_infrastructure_only: "true"
 
 jobs:
   decide-to-test:
@@ -92,16 +91,19 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      if: ${{ env.test_infrastructure_only  == 'true' }}
       with:
         submodules: true
 
     - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
+      if: ${{ env.test_infrastructure_only  == 'true' }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip' # caching pip dependencies
 
     - name: Install dependencies
+      if: ${{ env.test_infrastructure_only  == 'true' }}
       run: |
         python -m pip install --upgrade pip
         python -m pip install flake8 pytest
@@ -109,6 +111,7 @@ jobs:
         pip install -e case_studies/lotka_volterra_case_study
 
     - name: Lint with flake8
+      if: ${{ env.test_infrastructure_only  == 'true' }}
       run: |
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -116,23 +119,25 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
     - name: Test with pytest
+      if: ${{ env.test_infrastructure_only  == 'true' }}
       run: |
         pytest tests/
 
     - name: Save test results (ubuntu,mac)
-      if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
+      # if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
+      shell: bash
       run: |
         mkdir -p test_results/ 
         # locally store a file of test results for each test in the matrix
         echo "TEST:OK" > test_results/${{ env.branch_name }}_${{ matrix.os }}_${{ matrix.python-version }}.txt
 
-    - name: Save test results (windows)
-      if: matrix.os == 'windows-latest'
-      shell: powershell
-      run: |
-        mkdir test_results/ 
-        # locally store a file of test results for each test in the matrix
-        echo "TEST:OK" > "test_results\$env:BRANCH_NAME_$($env:OS)_$($env:PYTHON_VERSION).txt"
+    # - name: Save test results (windows)
+    #   if: matrix.os == 'windows-latest'
+    #   shell: powershell
+    #   run: |
+    #     mkdir test_results/ 
+    #     # locally store a file of test results for each test in the matrix
+    #     echo "TEST:OK" > "test_results\${{ matrix.os }}_${{ matrix.python-version }}.txt"
             
     - name: Upload artifact
       uses: actions/upload-artifact@v4
