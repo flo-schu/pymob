@@ -35,7 +35,7 @@ jobs:
       - name: Check if commit message contains "bump version"
         id: check_commit
         run: |
-          # msg=$(git log -n 1 --skip 1 --pretty=format:"%s")
+          msg=$(git log -n 1 --skip 1 --pretty=format:"%s")
           echo "Commit message: ${msg}"
           if [[ "${msg}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]+?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]+?[0-9]+$ ]]; then
             echo "tagged_commit=true" >> "$GITHUB_OUTPUT"
