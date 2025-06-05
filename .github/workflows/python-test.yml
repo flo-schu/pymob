@@ -11,7 +11,6 @@ on:
   # an active PR
   pull_request:
     types: [opened, reopened, synchronize]
-  workflow_call:
     
 env:
   # How to get the name of the branch (see: https://stackoverflow.com/a/71158878)
@@ -86,7 +85,6 @@ jobs:
   test:
     name: 🧪 Unit Tests
     needs: decide-to-test
-    if:  ${{ needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' || github.event_name == 'push' }}
 
     strategy:
       fail-fast: false
@@ -98,18 +96,19 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      if: env.full-test == true && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
       with:
         submodules: true
 
     - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
-      if: env.full-test == true && github.event_name != 'push'
+      if: env.full-test == true && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip' # caching pip dependencies
 
     - name: Install dependencies
-      if: env.full-test == true && github.event_name != 'push'
+      if: env.full-test == true && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
       run: |
         python -m pip install --upgrade pip
         python -m pip install flake8 pytest
@@ -117,7 +116,7 @@ jobs:
         pip install -e case_studies/lotka_volterra_case_study
 
     - name: Lint with flake8
-      if: env.full-test == true && github.event_name != 'push'
+      if: env.full-test == true && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
       run: |
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -125,7 +124,7 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
     - name: Test with pytest
-      if: env.full-test == true && github.event_name != 'push'
+      if: env.full-test == true && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
       run: |
         pytest tests/
 

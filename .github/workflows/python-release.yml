@@ -8,11 +8,7 @@ on:
       - "*"
 
 jobs:
-  run-reduced-tests:
-    uses: ./.github/workflows/python-test.yml
-
   build-package:
-    needs: run-reduced-tests
     uses: ./.github/workflows/python-build.yml
 
   publish-package:
