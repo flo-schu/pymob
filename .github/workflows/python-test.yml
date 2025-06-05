@@ -25,32 +25,41 @@ jobs:
     outputs:
       changes: ${{ steps.changes.outputs.src }}
       tagged_commit: ${{ steps.check_commit.outputs.tagged_commit }}
-      commit_message: ${{ steps.pr-last-commit-message.outputs.tagged_commit }}
+      commit_message_github_api: ${{ steps.commit-message-github-api.outputs.latest_commit }}
+      commit_message_git_log: ${{ steps.commit-message-git-log.outputs.latest_commit }}
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   
 
-      # this method is currently redundant, but I'm keeping it, because this may be more reliable than 
-      # the following method
+
       - name: List PR commit messages
-        id: pr-last-commit-message
+        id: commit-message-github-api
         run: |
           curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits" | \
           jq -r '.[].commit.message' > pr-commits.txt
-          commit_msg=$(cat pr-commits.txt | head -n 1)
+          commit_msg=$(cat pr-commits.txt | tail -n 1)
           echo "latest_commit message from parent branch: '$commit_msg"
           echo "latest_commit=$commit_msg" >> $GITHUB_OUTPUT
+      
+      - name: Get commit message from git log
+        id: commit-message-git-log
+        run: |
+          msg=$(git log -n 1 --skip 1 --pretty=format:"%s")
+          echo "latest_commit=$msg" >> $GITHUB_OUTPUT
+
 
       # this catches the commit which is made by the bumpver commit on the PR
       - name: Check if commit message contains "bump version"
         id: check_commit
         run: |
-          msg=$(git log -n 1 --skip 1 --pretty=format:"%s")
-          echo "Commit message: ${msg}"
-          if [[ "${msg}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]+?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]+?[0-9]+$ ]]; then
+          msg_gl="${{ steps.commit-message-github-api.outputs.latest_commit }}"
+          msg_ga="${{ steps.commit-message-git-log.outputs.latest_commit }}"
+          echo "Commit message github API: $msg_ga"
+          echo "Commit message git log: $msg_gl"
+          if [[ "${msg_ga}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]+?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]+?[0-9]+$ ]]; then
             echo "tagged_commit=true" >> "$GITHUB_OUTPUT"
           else
             echo "tagged_commit=false" >> "$GITHUB_OUTPUT"
