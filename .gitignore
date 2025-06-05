@@ -23,6 +23,7 @@ config/settings.json
 docs/build
 build
 
+.env
 
 # linked case studies
 bufferguts

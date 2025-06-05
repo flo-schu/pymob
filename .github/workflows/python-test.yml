@@ -19,12 +19,28 @@ env:
   skip: "false"
 
 jobs:
-  changes:
-    name: "Check for changes"
+  decide-to-test:
+    name: "Test decision"
     runs-on: ubuntu-latest
     outputs:
       changes: ${{ steps.changes.outputs.src }}
+      tagged_commit: ${{ steps.check_commit.outputs.tagged_commit }}
+
     steps:
+      - uses: actions/checkout@v4
+            
+      # this catches the commit which is made by the bumpver commit on the PR
+      - name: Check if commit message contains "bump version"
+        id: check_commit
+        run: |
+          msg=$(git log -n 1 --skip 0 --pretty=format:"%s")
+          echo "Commit message: ${msg}"
+          if [[ "${msg}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]+?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]+?[0-9]+$ ]]; then
+            echo "tagged_commit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tagged_commit=false" >> "$GITHUB_OUTPUT"
+          fi
+          
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -43,8 +59,8 @@ jobs:
 
   test:
     name: 🧪 Unit Tests
-    needs: changes
-    if: ${{ needs.changes.outputs.changes == 'true' }}
+    needs: decide-to-test
+    if:  ${{ needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' }}
 
     strategy:
       fail-fast: false
