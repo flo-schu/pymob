@@ -1,0 +1,14 @@
+{
+  "pull_request": {
+    "number": 149,
+    "head": {
+      "ref": "worklfow-improvements"
+    },
+    "base": {
+      "ref": "dev"
+    }
+  },
+  "repository": {
+    "full_name": "flo-schu/pymob"
+  }
+}

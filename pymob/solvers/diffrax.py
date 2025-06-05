@@ -9,7 +9,7 @@ import jax.numpy as jnp
 from jax import Array
 import jax
 import diffrax
-from diffrax.solver.base import _MetaAbstractSolver
+from diffrax._solver.base import _MetaAbstractSolver
 from diffrax import (
     diffeqsolve, 
     Dopri5, 
@@ -18,6 +18,7 @@ from diffrax import (
     ODETerm, 
     SaveAt, 
     PIDController, 
+    ClipStepSizeController,
     RecursiveCheckpointAdjoint,
     LinearInterpolation,
 )
@@ -195,10 +196,10 @@ class JaxSolver(SolverBase):
             
             if x_in[0].shape[0] != x_in[1].shape[0]:
                 raise ValueError(
-                    f"Mismatch in zero-th dimensions of x and y in interpolation"+
-                    "input 'x_in'. This often results of a problematic dimensional"+
-                    "order. Consider reordering the dimensions and reordering the"+
-                    "x dimension (e.g. time) after the batch dimension and before"+
+                    "Mismatch in zero-th dimensions of x and y in interpolation "+
+                    "input 'x_in'. This often results of a problematic dimensional "+
+                    "order. Consider reordering the dimensions and reordering the "+
+                    "x dimension (e.g. time) after the batch dimension and before "+
                     "any other dimension."
                 )
             interp = LinearInterpolation(ts=x_in[0], ys=x_in[1])
@@ -207,7 +208,7 @@ class JaxSolver(SolverBase):
             jumps = jnp.array(self.x_in_jumps, dtype=float)
         else:
             interp = None
-            args=args
+            args = args
             jumps = None
 
         term = ODETerm(f)
@@ -221,9 +222,13 @@ class JaxSolver(SolverBase):
         stepsize_controller = PIDController(
             rtol=self.rtol, atol=self.atol,
             pcoeff=self.pcoeff, icoeff=self.icoeff, dcoeff=self.dcoeff, 
-            jump_ts=jumps,
         )
-        
+
+        if jumps is not None:
+            stepsize_controller = ClipStepSizeController(stepsize_controller, jump_ts=jumps)
+        else:
+            pass
+
         sol = diffeqsolve(
             terms=term, 
             solver=solver, 

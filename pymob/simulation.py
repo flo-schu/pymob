@@ -15,12 +15,12 @@ from numpy.typing import NDArray
 import xarray as xr
 import dpath as dp
 from sklearn.preprocessing import MinMaxScaler
-from toopy import benchmark
 
 import pymob
 from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
 from pymob.utils.errors import errormsg, import_optional_dependency
 from pymob.utils.store_file import parse_config_section
+from pymob.utils.misc import benchmark
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
 from pymob.sim.config import Config, ParameterDict, DataVariable, Param, NumericArray
@@ -189,6 +189,7 @@ class SimulationBase:
     SimulationPlot = SimulationPlot
     model: Optional[Callable] = None
     solver: Optional[Callable] = None
+    solver_post_processing: Optional[Callable] = None
     _mod: ModuleType
     _prob: ModuleType
     _data: ModuleType
@@ -428,14 +429,25 @@ class SimulationBase:
                     m = importlib.import_module(f"{package}.{module}")
                     setattr(self, f"_{module}", m)
                 except ModuleNotFoundError:
-                    warnings.warn(
-                        f"Module {module}.py not found in {package}."
-                        f"Missing modules can lead to unexpected behavior. "
-                        f"Does your case study have a {module}.py file? "
-                        f"It should have the line `from PARENT_CASE_STUDY."
-                        f"{module} import *` to import all objects from "
-                        "the parent case study."
-                    )
+
+                    # look in the base classes if modules cannot be imported from top-level
+                    # module
+                    base_classes = type(self).__bases__
+                    assert len(base_classes) == 1
+                    try:
+                        parent_package = base_classes[0].__module__.split(".")[0]
+                        m = importlib.import_module(f"{parent_package}.{module}")
+                        setattr(self, f"_{module}", m)
+
+                    except ModuleNotFoundError:
+                        warnings.warn(
+                            f"Module {module}.py not found in {package} or in {parent_package}. "
+                            f"Missing modules can lead to unexpected behavior. "
+                            f"Does your case study of the parent class have a {module}.py file? "
+                            f"It should have the line `from PARENT_CASE_STUDY. "
+                            f"{module} import *` to import all objects from "
+                            "the parent case study."
+                        )
             return
 
         # This branch is for case studies that are not installed (I guess)
@@ -702,12 +714,14 @@ class SimulationBase:
         else:
             solver = self.solver
         
-        if self.solver_post_processing is not None:
-            # TODO: Handle similar to solver and model
-            post_processing = getattr(self._mod, self.solver_post_processing)
+        if self.solver_post_processing is None:
+            if self.config.simulation.solver_post_processing is not None:
+                post_processing = getattr(self._mod, self.config.simulation.solver_post_processing)
+            else:
+                def post_processing(results, time, interpolation):
+                    return results
         else:
-            def post_processing(results, time, interpolation):
-                return results
+            post_processing = self.solver_post_processing
 
         stochastic = self.config.simulation.modeltype
             
@@ -1074,10 +1088,10 @@ class SimulationBase:
             sliders.update({key: s})
 
         def func(theta):
-            extra = self.config.inference.extra_vars
-            extra = [extra] if isinstance(extra, str) else extra
-            extra_vars = {v: self.observations[v] for v in extra}
-            evaluator = self.dispatch(theta=theta, **extra_vars)
+            # extra = self.config.inference.extra_vars
+            # extra = [extra] if isinstance(extra, str) else extra
+            # extra_vars = {v: self.observations[v] for v in extra}
+            evaluator = self.dispatch(theta=theta)
             evaluator()
             self.plot(results=evaluator.results)
 
@@ -1508,12 +1522,6 @@ class SimulationBase:
         self.config.simulation.n_ode_states = n_ode_state
 
     @property
-    def solver_post_processing(self):
-        # TODO: Remove when all method has been updated to the new config API
-        warnings.warn(config_deprecation, DeprecationWarning)
-        return self.config.simulation.solver_post_processing
-
-    @property
     def input_files(self):
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
@@ -1823,10 +1831,13 @@ class SimulationBase:
         """
         self._report = self.Report(config=self.config, backend=type(self.inferer))
 
-        if self.solver_post_processing is not None:
-            post_processing = getattr(self._mod, self.solver_post_processing)
+        if self.solver_post_processing is None:
+            if self.config.simulation.solver_post_processing is not None:
+                post_processing = getattr(self._mod, self.config.simulation.solver_post_processing)
+            else:
+                post_processing = None
         else:
-            post_processing = None
+            post_processing = self.solver_post_processing
         _ = self._report.model(self.model, post_processing)
 
         _ = self._report.parameters(self.model_parameters)
@@ -1839,6 +1850,10 @@ class SimulationBase:
         _ = self._report.goodness_of_fit(idata=self.inferer.idata)
 
         _ = self._report.diagnostics(idata=self.inferer.idata)
+
+        _ = self._report.additional_reports(sim=self)
+
+        self._report.compile_report()
 
         # TODO: find a good way to integrate posterior predictive and prior predictive 
         # into the report. I think their execution should be continued outside of the report,

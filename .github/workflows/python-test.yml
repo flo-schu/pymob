@@ -10,97 +10,124 @@ on:
   # no more testing on push from dev, because I'm not going to push to a main or dev without
   # an active PR
   pull_request:
-    branches-ignore: 
-      - "main"  # exclude tests from pull requests to main
-  push:
-    branches: ["dev", "main"]
-  workflow_call:
-
+    types: [opened, reopened, synchronize]
+    
 env:
   # How to get the name of the branch (see: https://stackoverflow.com/a/71158878)
   branch_name: ${{ github.head_ref || github.ref_name }} 
-  COMMIT_MSG: ${{ github.event.head_commit.message }}
-  skip: "false"
+  full-test: 'true'
 
 jobs:
-  print-context:
+  decide-to-test:
+    name: "Test decision"
     runs-on: ubuntu-latest
+    outputs:
+      changes: ${{ steps.changes.outputs.src }}
+      tagged_commit: ${{ steps.check_commit.outputs.tagged_commit }}
+      commit_message_github_api: ${{ steps.commit-message-github-api.outputs.latest_commit }}
+      commit_message_git_log: ${{ steps.commit-message-git-log.outputs.latest_commit }}
+
     steps:
       - uses: actions/checkout@v4
+        if: github.event_name != 'push'
         with:
-          fetch-depth: 0
-      - name: Print Environment Variables
-        # see more contexts: https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
+          fetch-depth: 0   
+
+
+      - name: List PR commit messages
+        id: commit-message-github-api
+        if: github.event_name != 'push'
         run: |
-          echo "Branch name ${{ env.branch_name }}"
-          echo "GitHub actor: ${{ github.actor }}"
-          echo "GitHub workflow: ${{ github.workflow }}"
-          echo "GitHub action: ${{ github.action }}"
-          echo "GitHub run_ID: ${{ github.run_id }}"
-          echo "GitHub event_name: ${{ github.event_name }}"
-          echo "GitHub ref: ${{ github.ref }}"
-          echo "Github head_ref ${{ github.head_ref }}"
-          echo "GitHub ref_type: ${{ github.ref_type }}"
-          echo "GitHub ref_name: ${{ github.ref_name }}"
-          commit=$(git rev-parse HEAD)
-          echo "Commit ID of HEAD: ${commit}"
-          msg=$(git log -1 --pretty=format:"%s")
-          echo "Last Commit message: ${msg}"
-          branch=$(git branch -r --contains $commit --format "%(refname:lstrip=3)")
-          echo "scripted branch: ${branch}"
-          echo "GitHub base branch of tag: ${{ github.event.base_ref }}"
-          echo "GitHub sha: ${{ github.sha }}"
-          echo "GitHub message: ${{ github.event.head_commit.message }}"
-  
+          per_page=100
+          page=1
+          : > pr-commits.txt  # truncate or create output file
+
+          while :; do
+            url="${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits?per_page=${per_page}&page=${page}"
+            response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$url")
+            count=$(echo "$response" | jq 'length')
+            [ "$count" -eq 0 ] && break
+            echo "$response" | jq -r '.[].commit.message | split("\n")[0]' >> pr-commits.txt
+            [ "$count" -lt "$per_page" ] && break
+            page=$((page + 1))
+          done
+          cat pr-commits.txt
+          commit_msg=$(cat pr-commits.txt | tail -n 1)
+          echo "latest_commit message from parent branch: '$commit_msg"
+          echo "latest_commit=$commit_msg" >> $GITHUB_OUTPUT
+      
+      - name: Get commit message from git log
+        id: commit-message-git-log
+        if: github.event_name != 'push'
+        run: |
+          msg=$(git log -n 1 --skip 1 --pretty=format:"%s")
+          echo "latest_commit=$msg" >> $GITHUB_OUTPUT
+
+
+      # this catches the commit which is made by the bumpver commit on the PR
+      - name: Check if commit message contains "bump version"
+        id: check_commit
+        if: github.event_name != 'push'
+        run: |
+          msg_ga="${{ steps.commit-message-github-api.outputs.latest_commit }}"
+          msg_gl="${{ steps.commit-message-git-log.outputs.latest_commit }}"
+          echo "Commit message github API: $msg_ga"
+          echo "Commit message git log: $msg_gl"
+          if [[ "${msg_ga}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]+?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]+?[0-9]+$ ]]; then
+            echo "tagged_commit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tagged_commit=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        if: github.event_name != 'push'
+        with:
+          filters: |
+            src:
+              - ".github/workflows/python-test.yml"
+              - "pymob/**/*.py"
+              - "tests/**/*.py"
+              - "*.py"
+              - "pyproject.toml"
+              - "scripts/*.sh"
+
+
   test:
     name: 🧪 Unit Tests
+    needs: decide-to-test
 
-    # The below test does not work. The problem is that bumpver makes a commit
-    # (that is tested) and then uploads the tag, which also triggers a test.
-    # The only thing that would help me is to test whether the commit message
-    # is bump x.x.x -> x.x.y; but this does not work because pull request
-    # apparently does not track the commit message
-    # if: ${{ ! ( github.event.head_commit.message == '' && github.event_name == 'pull_request' ) }} 
-
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.11", "3.12", "3.13"]
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+    
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v4
-      if: env.skip != 'true'
+      if: env.full-test == 'true' && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
       with:
         submodules: true
 
-    - name: Check if commit message contains "bump version"
-      id: check_commit
-      run: |
-        msg=$(git log -1 --pretty=format:"%s")
-        echo "Commit message ${msg}"
-        if [[ "${msg}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+$ ]]; then
-          echo "skip=true" >> $GITHUB_ENV
-        fi
-
-    - name: Set up Python ${{ matrix.python-version }}
-      if: env.skip != 'true'
+    - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
+      if: env.full-test == 'true' && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip' # caching pip dependencies
 
     - name: Install dependencies
-      if: env.skip != 'true'
+      if: env.full-test == 'true' && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
       run: |
         python -m pip install --upgrade pip
         python -m pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install .[pyabc,pymoo,interactive,numpyro]
         pip install -e case_studies/lotka_volterra_case_study
 
     - name: Lint with flake8
-      if: env.skip != 'true'
+      if: env.full-test == 'true' && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
       run: |
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -108,22 +135,30 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
     - name: Test with pytest
-      if: env.skip != 'true'
+      if: env.full-test == 'true' && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
       run: |
         pytest tests/
 
-    - name: Save test results
-      if: env.skip != 'true'
+    - name: Save test results (ubuntu,mac)
+      # if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
+      shell: bash
       run: |
         mkdir -p test_results/ 
         # locally store a file of test results for each test in the matrix
-        echo "TEST:OK" > test_results/${{ env.branch_name }}_${{ matrix.python-version }}.txt
-    
+        echo "TEST:OK" > test_results/${{ env.branch_name }}_${{ matrix.os }}_${{ matrix.python-version }}.txt
+
+    # - name: Save test results (windows)
+    #   if: matrix.os == 'windows-latest'
+    #   shell: powershell
+    #   run: |
+    #     mkdir test_results/ 
+    #     # locally store a file of test results for each test in the matrix
+    #     echo "TEST:OK" > "test_results\${{ matrix.os }}_${{ matrix.python-version }}.txt"
+            
     - name: Upload artifact
-      if: env.skip != 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: test-results-${{ matrix.python-version }}
+        name: test-results-${{ matrix.os }}-${{ matrix.python-version }}
         path: test_results/*.txt
         
   upload-test-results:
@@ -132,15 +167,12 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
-        if: env.skip != 'true'
       - uses: actions/download-artifact@v4
-        if: env.skip != 'true'
         with:
           pattern: test-results-*
           path: test_results/
           merge-multiple: true
       - name: Upload artifact
-        if: env.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: test-results
