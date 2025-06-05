@@ -11,6 +11,10 @@ jobs:
   test-package:
     # uses: ./.github/workflows/python-test.yml
     runs-on: ubuntu-latest
+
+    env:
+      BRANCH: 
+
     steps:
     - uses: actions/checkout@v4
       with:
@@ -32,9 +36,11 @@ jobs:
     - name: Check test result for the branch
       id: check_test
       run: pymob/bash/validate_test_results.sh test_results "${{ env.BRANCH }}"
+
   build-package:
     needs: test-package
     uses: ./.github/workflows/python-build.yml
+
   publish-package:
     name: Publish Python 🐍 distribution 📦 to PyPI
 

@@ -10,12 +10,8 @@ on:
   # no more testing on push from dev, because I'm not going to push to a main or dev without
   # an active PR
   pull_request:
-    branches-ignore: 
-      - "main"  # exclude tests from pull requests to main
-  push:
-    branches: ["dev", "main"]
-  workflow_call:
-
+    types: [opened, reopened, synchronize]
+    
 env:
   # How to get the name of the branch (see: https://stackoverflow.com/a/71158878)
   branch_name: ${{ github.head_ref || github.ref_name }} 
@@ -23,65 +19,32 @@ env:
   skip: "false"
 
 jobs:
-  print-context:
+  changes:
+    name: "Check for changes"
     runs-on: ubuntu-latest
+    outputs:
+      changes: ${{ steps.changes.outputs.src }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Print Environment Variables
-        # see more contexts: https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
-        run: |
-          echo "Branch name ${{ env.branch_name }}"
-          echo "GitHub actor: ${{ github.actor }}"
-          echo "GitHub workflow: ${{ github.workflow }}"
-          echo "GitHub action: ${{ github.action }}"
-          echo "GitHub run_ID: ${{ github.run_id }}"
-          echo "GitHub event_name: ${{ github.event_name }}"
-          echo "GitHub ref: ${{ github.ref }}"
-          echo "Github head_ref ${{ github.head_ref }}"
-          echo "GitHub ref_type: ${{ github.ref_type }}"
-          echo "GitHub ref_name: ${{ github.ref_name }}"
-          commit=$(git rev-parse HEAD)
-          echo "Commit ID of HEAD: ${commit}"
-          msg=$(git log -1 --pretty=format:"%s")
-          echo "Last Commit message: ${msg}"
-          branch=$(git branch -r --contains $commit --format "%(refname:lstrip=3)")
-          echo "scripted branch: ${branch}"
-          echo "GitHub base branch of tag: ${{ github.event.base_ref }}"
-          echo "GitHub sha: ${{ github.sha }}"
-          echo "GitHub message: ${{ github.event.head_commit.message }}"
-    
-  decide-to-test:
-    name: Test decision
-    needs: print-context
 
-    # The below test does not work. The problem is that bumpver makes a commit
-    # (that is tested) and then uploads the tag, which also triggers a test.
-    # The only thing that would help me is to test whether the commit message
-    # is bump x.x.x -> x.x.y; but this does not work because pull request
-    # apparently does not track the commit message
-    # if: ${{ ! ( github.event.head_commit.message == '' && github.event_name == 'pull_request' ) }} 
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Check if commit message contains "bump version"
-      id: check_commit
-      run: |
-        git log
-        msg=$(git log -2 --pretty=format:"%s")
-        echo "Commit message: ${msg}"
-        if [[ "${msg}" =~ ^bump\ version\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+\ -\>\ [0-9]+\.[0-9]+\.[0-9]+?[a-zA-Z]?[0-9]+$ ]]; then
-          echo "skip=true" >> $GITHUB_ENV
-        fi
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            src:
+              - ".github/workflows/python-test.yml"
+              - "pymob/**/*.py"
+              - "tests/**/*.py"
+              - "*.py"
+              - "pyproject.toml"
+              - "scripts/*.sh"
 
   test:
     name: 🧪 Unit Tests
-    needs: decide-to-test
-    if: github.env.skip != 'true'
+    needs: changes
+    if: ${{ needs.changes.outputs.changes == 'true' }}
 
     strategy:
       fail-fast: false
@@ -147,15 +110,12 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
-        if: env.skip != 'true'
       - uses: actions/download-artifact@v4
-        if: env.skip != 'true'
         with:
           pattern: test-results-*
           path: test_results/
           merge-multiple: true
       - name: Upload artifact
-        if: env.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: test-results
