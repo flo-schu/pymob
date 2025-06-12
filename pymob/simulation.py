@@ -600,6 +600,13 @@ class SimulationBase:
         )
 
     def subset_by_batch_dimension(self, data):
+        """
+        FIXME
+        Subset by batch dimension, seems to be a method that is not appropriate for
+        dispatch; and rather for the dispatch constructor
+        The feature of pymob was not used and is currently deactivated in sim.dispatch()
+        A better use of the method would be the use during the call to dispatch_constructor
+        """
         batch_dim = self.config.simulation.batch_dimension
         if batch_dim not in self.coordinates:
             return data
@@ -797,8 +804,7 @@ class SimulationBase:
         model_parameters = self.parameterize(dict(theta)) #type: ignore
         # can be initialized
         if "y0" in model_parameters:
-            y0_ = self.subset_by_batch_dimension(model_parameters["y0"])
-            y0_ = self.validate_model_input(y0_)
+            y0_ = self.validate_model_input(model_parameters["y0"])
             
             # update keys passed to y0
             y0_.update(y0)
@@ -807,8 +813,7 @@ class SimulationBase:
             model_parameters["y0"] = OrderedDict({})
         
         if "x_in" in model_parameters:
-            x_in_ = self.subset_by_batch_dimension(model_parameters["x_in"])
-            x_in_ = self.validate_model_input(x_in_)
+            x_in_ = self.validate_model_input(model_parameters["x_in"])
 
             # update keys passed to x_in
             x_in_.update(x_in)
