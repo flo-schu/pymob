@@ -300,8 +300,8 @@ class SimulationBase:
             if k not in self.config.data_structure.data_variables:
                 datavar = DataVariable(
                     dimensions=[str(d) for d in v.dims],
-                    min=float(v.min()),
-                    max=float(v.max()),
+                    min=float(v.values.min()),
+                    max=float(v.values.max()),
                 )
                 setattr(self.config.data_structure, k, datavar)
                 warnings.warn(
@@ -313,9 +313,9 @@ class SimulationBase:
             else:
                 datavar: DataVariable = getattr(self.config.data_structure, k)
                 if np.isnan(datavar.min):
-                    datavar.min = float(v.min())
+                    datavar.min = float(v.values.min())
                 if np.isnan(datavar.max):
-                    datavar.max = float(v.max())
+                    datavar.max = float(v.values.max())
 
                 if set(datavar.dimensions) != set(v.dims):
                     raise KeyError(
