@@ -620,6 +620,7 @@ class SimulationBase:
 
     @property
     def coordinates_input_vars(self) -> Dict[str, Dict[str, Dict[str, NDArray]]]:
+        """TODO: Error source. dataset coordinates are unordered."""
         input_vars = ["x_in", "y0"]
 
         # This is a function that could replace the below, to return always
