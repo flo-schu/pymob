@@ -11,6 +11,7 @@ on:
   # an active PR
   pull_request:
     types: [opened, reopened, synchronize]
+  workflow_call:
     
 env:
   # How to get the name of the branch (see: https://stackoverflow.com/a/71158878)
