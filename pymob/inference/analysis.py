@@ -386,7 +386,7 @@ def filter_not_converged_chains(idata, deviation=1.05):
 
 
 def log(msg, out, newlines=1, mode="a"):
-    with open(out, mode) as f:
+    with open(out, mode, encoding="utf-8") as f:
         print(msg, file=f, end="\n")
         for _ in range(newlines):
             print("", file=f, end="\n")

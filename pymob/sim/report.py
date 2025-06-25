@@ -20,7 +20,7 @@ def reporting(method):
         # report unless the report is listed in the config file as skipped
         if getattr(self.rc, report_name, True):
             try:
-                self._write(head + " ✅")
+                self._write(head + " ✓")
                 out = method(self, *method_args, **method_kwargs)
                 self.status.update({report_name: True})
                 if out is not None:
@@ -34,13 +34,13 @@ def reporting(method):
             except Exception as e:
                 if self.rc.debug_report:
                     raise e
-                self._write(head + " ❌")
+                self._write(head + " ✕")
                 self._write("Report '{r}' was not executed successfully".format(
                     r=report_name
                 ))
                 self.status.update({report_name: False})
         else:
-            self._write(head + " ⏩")
+            self._write(head + " ⏭")
             self._write("Report '{r}' was skipped".format(
                 r=report_name
             ))
