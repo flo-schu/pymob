@@ -1,10 +1,10 @@
-# Pymob quickstart
+# Pymob in minutes - the basics
 
-This quickstart provides an introduction to the basic Pymob workflow and its key functionalities.  
+This guide provides a streamlined introduction to the basic Pymob workflow and its key functionalities.  
 We will explore a simple linear regression model that we want to fit to a noisy dataset.  
 Pymob supports the modeling process by providing several tools for *data structuring*, *parameter estimation* and *visualization of results*.  
   
-If you are looking for a more detailed introduction, [click here]().  
+If you are looking for a more detailed introduction, [click here](https://pymob.readthedocs.io/en/stable/user_guide/introduction.html).  
 If you want to learn how to work with ODE models, check out [this tutorial]().
 
 ## Pymob components 🧩
@@ -21,29 +21,29 @@ We will then assign it to the Simulation object by accessing the `.model` attrib
 
 3. __Observations:__   
 Our observation data must be structured as an [xarray.Dataset](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html).  
-We assign it to the `.observations` attribute of our Simulation object.   
+We assign it to the `~pymob.sim.config.Casestudy.observations ` attribute of our Simulation object.   
 Calling `sim.config.data_structure` will give us further information about the layout of our data.  
 
 4. __Solver:__  
 A [solver](https://pymob.readthedocs.io/en/stable/api/pymob.solvers.html) is required to solve the model.   
-In our simple case, we will use the `solve_analytic_1d` solver from the `pymob.solver.analytic` module.  
+In our simple case, we will use the `solve_analytic_1d` solver from the `~pymob.solver.analytic` module.  
 We assign it to our Simulation object using the {attr}`pymob.simulation.solver` attribute.   
 Since our model already provides an analytical solution, this solver basically does nothing. It is still needed to fulfill Pymob's requirement for a solver component.   
-For more complex models (e.g. ODEs), the `JaxSolver` from the `pymob.solver.diffrax` module is a more powerful option.   
+For more complex models (e.g. ODEs), the `JaxSolver` from the `~pymob.solver.diffrax` module is a more powerful option.   
 Users can also implement custom solvers as a subclass of {class}`pymob.solver.SolverBase`.   
   
 5. __Inferer:__  
 The inferer handels the parameter estimation.  
 Pymob supports [various backends](https://pymob.readthedocs.io/en/stable/user_guide/framework_overview.html). In this example, we will work with *NumPyro*.  
-We assign the inferer to our Simulation object via the {attr}`pymob.simulation.inferer` attribute and configure the desired kernel (e.g. *nuts*).  
+We assign the inferer to our Simulation object via the {attr}`~pymob.simulation.inferer` attribute and configure the desired kernel (e.g. *nuts*).  
 But before inference, we need to parameterize our model using the *Param* class.   
 Each parameter can be marked either as free or fixed, depending on whether it should be variable during the optimization procedure.   
-The parameters are stored in the {attr}`pymob.simulation.SimulationBase.model_parameters` dictionary, which holds model input values.
+The parameters are stored in the {attr}`~pymob.simulation.SimulationBase.model_parameters` dictionary, which holds model input values.
 By default, it takes the keys: `parameters`, `y0` and `x_in`. 
 
 6. __Evaluator:__  
-The Evaluator is an instance to manage model evaluations.
-It sets up tasks, coordinates parallel runs of the simulation and keeps track of the results from each simulation or parameter inference process.  
+The Evaluator is an instance to manage model evaluations. It sets up tasks, coordinates parallel runs of the simulation and keeps track of the results from each simulation or parameter inference process.   
+Evaluators store the raw output from a simulation and can generate an xarray object from it that corresponds to the data-structure of the observations with the ~pymob.sim.evaluator.Evaluator.results` property. This automatically aligns the simulations results with the observations, for simple computation of loss functions.  
 
 7. __Config:__  
 The simulation settings will be saved in a `.cfg` configuration file.  
@@ -551,7 +551,7 @@ Dimensions:  (t: 100)
 Coordinates:
   * t        (t) float64 800B 0.0 0.101 0.202 0.303 ... 9.697 9.798 9.899 10.0
 Data variables:
-    y        (t) float64 800B -0.5149 -0.7114 -1.253 3.426 ... 29.12 31.78 32.77</pre><div class='xr-wrap' style='display:none'><div class='xr-header'><div class='xr-obj-type'>xarray.Dataset</div></div><ul class='xr-sections'><li class='xr-section-item'><input id='section-cb22c682-387e-497e-a297-695495b750ff' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-cb22c682-387e-497e-a297-695495b750ff' class='xr-section-summary'  title='Expand/collapse section'>Dimensions:</label><div class='xr-section-inline-details'><ul class='xr-dim-list'><li><span class='xr-has-index'>t</span>: 100</li></ul></div><div class='xr-section-details'></div></li><li class='xr-section-item'><input id='section-0514a1e4-a436-4f2c-a31f-fbcdb00dc73f' class='xr-section-summary-in' type='checkbox'  checked><label for='section-0514a1e4-a436-4f2c-a31f-fbcdb00dc73f' class='xr-section-summary' >Coordinates: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>t</span></div><div class='xr-var-dims'>(t)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>0.0 0.101 0.202 ... 9.899 10.0</div><input id='attrs-0281450d-db12-43b7-b078-b02f2e95a9c1' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-0281450d-db12-43b7-b078-b02f2e95a9c1' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-91e61dfe-0c60-4ed0-8c88-dbfd85f4f586' class='xr-var-data-in' type='checkbox'><label for='data-91e61dfe-0c60-4ed0-8c88-dbfd85f4f586' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 0.      ,  0.10101 ,  0.20202 ,  0.30303 ,  0.40404 ,  0.505051,
+    y        (t) float64 800B 2.313 3.534 1.349 2.437 ... 31.34 32.63 32.2 29.24</pre><div class='xr-wrap' style='display:none'><div class='xr-header'><div class='xr-obj-type'>xarray.Dataset</div></div><ul class='xr-sections'><li class='xr-section-item'><input id='section-33e5c0c5-7b93-4c38-8ed4-024270a3232d' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-33e5c0c5-7b93-4c38-8ed4-024270a3232d' class='xr-section-summary'  title='Expand/collapse section'>Dimensions:</label><div class='xr-section-inline-details'><ul class='xr-dim-list'><li><span class='xr-has-index'>t</span>: 100</li></ul></div><div class='xr-section-details'></div></li><li class='xr-section-item'><input id='section-bb5d2338-b720-4f3c-b96f-2736a3ffe7be' class='xr-section-summary-in' type='checkbox'  checked><label for='section-bb5d2338-b720-4f3c-b96f-2736a3ffe7be' class='xr-section-summary' >Coordinates: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>t</span></div><div class='xr-var-dims'>(t)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>0.0 0.101 0.202 ... 9.899 10.0</div><input id='attrs-dc9c427f-013f-46c5-b504-23723fcbf3c6' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-dc9c427f-013f-46c5-b504-23723fcbf3c6' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-1f2ba592-2ada-4ccc-830a-d9beb5322ec8' class='xr-var-data-in' type='checkbox'><label for='data-1f2ba592-2ada-4ccc-830a-d9beb5322ec8' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 0.      ,  0.10101 ,  0.20202 ,  0.30303 ,  0.40404 ,  0.505051,
         0.606061,  0.707071,  0.808081,  0.909091,  1.010101,  1.111111,
         1.212121,  1.313131,  1.414141,  1.515152,  1.616162,  1.717172,
         1.818182,  1.919192,  2.020202,  2.121212,  2.222222,  2.323232,
@@ -567,26 +567,26 @@ Data variables:
         7.878788,  7.979798,  8.080808,  8.181818,  8.282828,  8.383838,
         8.484848,  8.585859,  8.686869,  8.787879,  8.888889,  8.989899,
         9.090909,  9.191919,  9.292929,  9.393939,  9.494949,  9.59596 ,
-        9.69697 ,  9.79798 ,  9.89899 , 10.      ])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-7b6d7b8a-3a33-4ac2-92c6-72dd22cffdeb' class='xr-section-summary-in' type='checkbox'  checked><label for='section-7b6d7b8a-3a33-4ac2-92c6-72dd22cffdeb' class='xr-section-summary' >Data variables: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span>y</span></div><div class='xr-var-dims'>(t)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>-0.5149 -0.7114 ... 31.78 32.77</div><input id='attrs-f45ad545-a6de-4cb9-aa08-db81961682eb' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-f45ad545-a6de-4cb9-aa08-db81961682eb' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-66163812-f915-4a3e-b4fa-2a4be5796afb' class='xr-var-data-in' type='checkbox'><label for='data-66163812-f915-4a3e-b4fa-2a4be5796afb' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([-0.51485544, -0.71136009, -1.25293135,  3.42554816,  3.02802318,
-        2.28996175,  1.30369905,  1.12342635,  4.696483  ,  3.55592901,
-        6.07850176,  5.65225376,  6.30163965,  6.21062672,  7.48114549,
-       10.4209593 ,  4.30685901,  3.34331655, 11.06410455,  8.0075721 ,
-        7.62191623,  5.771721  ,  8.9993412 ,  8.25634047, 10.1705519 ,
-        5.7614147 ,  7.63852438, 11.69554624,  9.2803849 ,  8.74384082,
-        4.70197652,  9.55192526,  8.01544118, 11.25992123, 10.25462628,
-       13.39701217, 13.07742985, 14.18054669, 14.94229116, 12.36204004,
-       11.47591127, 14.14875177, 12.76613791, 13.68796203, 15.8061059 ,
-       12.87511648, 13.97928359, 15.32178202, 16.82801938, 14.50979942,
-       14.93651816, 16.60607159, 18.55546995, 13.24463006, 18.3729172 ,
-       14.16656354, 17.32953375, 21.29800181, 16.82317851, 19.04953345,
-       19.77974641, 20.66126185, 19.86304768, 18.24686502, 17.73073581,
-       21.52896061, 22.41719182, 20.40032284, 24.38217873, 23.72367109,
-       22.01080873, 24.19549703, 21.77467738, 21.14727555, 24.36605289,
-       24.81749318, 21.43139972, 25.37209188, 23.56605562, 25.6332203 ,
-       26.54650393, 25.38526454, 25.54376272, 25.05455707, 24.78854931,
-       25.10641378, 29.38972575, 26.33082303, 27.44406156, 27.87010378,
-       26.88792478, 27.54458101, 30.97867305, 26.06115315, 26.74526954,
-       28.48091395, 31.67196315, 29.12184748, 31.77992649, 32.77431831])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-4ded40ce-d19b-49e4-b2f5-6f6a3f4610af' class='xr-section-summary-in' type='checkbox'  ><label for='section-4ded40ce-d19b-49e4-b2f5-6f6a3f4610af' class='xr-section-summary' >Indexes: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-index-name'><div>t</div></div><div class='xr-index-preview'>PandasIndex</div><input type='checkbox' disabled/><label></label><input id='index-513a7ad3-ffd7-4709-afae-634504bfc914' class='xr-index-data-in' type='checkbox'/><label for='index-513a7ad3-ffd7-4709-afae-634504bfc914' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([                0.0, 0.10101010101010101, 0.20202020202020202,
+        9.69697 ,  9.79798 ,  9.89899 , 10.      ])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-9a0dc0ba-cfd4-4b53-9ea4-9851b667c217' class='xr-section-summary-in' type='checkbox'  checked><label for='section-9a0dc0ba-cfd4-4b53-9ea4-9851b667c217' class='xr-section-summary' >Data variables: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span>y</span></div><div class='xr-var-dims'>(t)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>2.313 3.534 1.349 ... 32.2 29.24</div><input id='attrs-23a2e428-887a-451e-9211-3a1e8e051fdd' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-23a2e428-887a-451e-9211-3a1e8e051fdd' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-116d2e00-93d8-4039-b1f1-64e232315d88' class='xr-var-data-in' type='checkbox'><label for='data-116d2e00-93d8-4039-b1f1-64e232315d88' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 2.31344255,  3.53433593,  1.34908632,  2.43689987,  0.52129732,
+        3.37612748,  1.90897385,  6.29056489,  3.25194086,  3.37744078,
+        9.0193145 ,  5.8191261 ,  5.38044197,  7.66364914,  6.60103552,
+        6.19300329,  5.27990676,  7.52361384,  7.10757993,  6.0356579 ,
+        7.2188985 ,  5.85003633,  6.17868995,  9.50163557,  7.92126308,
+        7.98138724,  8.48669928,  7.88744995, 12.14526444,  9.34691599,
+        8.85736082,  6.8697178 ,  8.28332729, 10.89691933, 14.76845224,
+       10.19777631, 13.00627447, 12.2166908 , 13.28187352, 11.63794867,
+       13.10039385, 14.74542854, 15.34570065, 13.59974961, 15.05159625,
+       12.64807788, 15.76381504, 15.86640267, 15.54728581, 17.85995723,
+       15.50995487, 14.79101145, 18.16856046, 20.17045554, 16.49446633,
+       18.41673529, 17.24657162, 15.49351063, 22.49363636, 20.10535031,
+       19.28376332, 19.72132889, 19.68426233, 19.92852017, 21.63053763,
+       19.43820789, 22.77571803, 21.52550027, 21.36025545, 23.63246365,
+       22.4934742 , 22.81210646, 20.97514826, 21.98038786, 25.49873142,
+       24.81276344, 22.36927849, 24.81073349, 22.51059971, 27.99373936,
+       24.28979222, 26.35288122, 27.66829318, 24.70447271, 27.59622693,
+       29.05306128, 27.99765931, 27.0760332 , 28.29855623, 27.65515164,
+       29.21482719, 26.26966137, 28.90332653, 30.18122177, 31.47070239,
+       30.51950515, 31.33660832, 32.63472848, 32.19772335, 29.23970369])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-b06c176f-f31a-43ae-9008-25ae32f4df4d' class='xr-section-summary-in' type='checkbox'  ><label for='section-b06c176f-f31a-43ae-9008-25ae32f4df4d' class='xr-section-summary' >Indexes: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-index-name'><div>t</div></div><div class='xr-index-preview'>PandasIndex</div><input type='checkbox' disabled/><label></label><input id='index-94e3529b-6d2d-468e-aca1-30ca04af86c8' class='xr-index-data-in' type='checkbox'/><label for='index-94e3529b-6d2d-468e-aca1-30ca04af86c8' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([                0.0, 0.10101010101010101, 0.20202020202020202,
        0.30303030303030304, 0.40404040404040403,  0.5050505050505051,
         0.6060606060606061,  0.7070707070707071,  0.8080808080808081,
         0.9090909090909091,  1.0101010101010102,  1.1111111111111112,
@@ -620,7 +620,7 @@ Data variables:
          9.393939393939394,   9.494949494949495,   9.595959595959595,
          9.696969696969697,   9.797979797979798,     9.8989898989899,
                       10.0],
-      dtype=&#x27;float64&#x27;, name=&#x27;t&#x27;))</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-4ad51e0f-9925-4afc-b00e-de34757f6870' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-4ad51e0f-9925-4afc-b00e-de34757f6870' class='xr-section-summary'  title='Expand/collapse section'>Attributes: <span>(0)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><dl class='xr-attrs'></dl></div></li></ul></div></div>
+      dtype=&#x27;float64&#x27;, name=&#x27;t&#x27;))</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-adcd8708-1985-4edd-b64e-9ea75926ce6b' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-adcd8708-1985-4edd-b64e-9ea75926ce6b' class='xr-section-summary'  title='Expand/collapse section'>Attributes: <span>(0)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><dl class='xr-attrs'></dl></div></li></ul></div></div>
 
 
 
@@ -632,7 +632,7 @@ Data variables:
 
 ## Initialize a simulation ✨
 
-In pymob, a **simulation object** is initialized by creating an instance of the {class}`pymob.simulation.SimulationBase` class from the simulation module.  
+In pymob, a **simulation object** is initialized by creating an instance of the {class}`~pymob.simulation.SimulationBase` class from the simulation module.  
 We will choose a linear regression model, as it provides a good approximation of the data: $ y = a + b*x $
 
 ```{admonition} x-dimension
@@ -667,17 +667,17 @@ sim.solver = solve_analytic_1d
 sim.config.data_structure
 ```
 
-    MinMaxScaler(variable=y, min=-1.2529313454358775, max=32.77431830696904)
+    MinMaxScaler(variable=y, min=0.5212973246575279, max=32.634728477251194)
     
 
-    C:\Pymob\pymob\pymob\simulation.py:307: UserWarning: `sim.config.data_structure.y = Datavariable(dimensions=['t'] min=-1.2529313454358775 max=32.77431830696904 observed=True dimensions_evaluator=None)` has been assumed from `sim.observations`. If the order of the dimensions should be different, specify `sim.config.data_structure.y = DataVariable(dimensions=[...], ...)` manually.
+    C:\Pymob\pymob\pymob\simulation.py:307: UserWarning: `sim.config.data_structure.y = Datavariable(dimensions=['t'] min=0.5212973246575279 max=32.634728477251194 observed=True dimensions_evaluator=None)` has been assumed from `sim.observations`. If the order of the dimensions should be different, specify `sim.config.data_structure.y = DataVariable(dimensions=[...], ...)` manually.
       warnings.warn(
     
 
 
 
 
-    Datastructure(y=DataVariable(dimensions=['t'], min=-1.2529313454358775, max=32.77431830696904, observed=True, dimensions_evaluator=None))
+    Datastructure(y=DataVariable(dimensions=['t'], min=0.5212973246575279, max=32.634728477251194, observed=True, dimensions_evaluator=None))
 
 
 
@@ -713,7 +713,7 @@ sim.model_parameters["parameters"]
 
 
 Our model is now prepared with a defined parameter set.  
-To initialize the **Evaluator**, we call {meth}`pymob.simulation.SimulationBase.dispatch_constructor()`.   
+To initialize the **Evaluator**, we call {meth}`~pymob.simulation.SimulationBase.dispatch_constructor()`.   
 This step is essential and must be executed every time changes are made to the model. 
 
 The returned dataset (`evaluator.results`) has the exact same shape as the observation data.
@@ -1184,7 +1184,7 @@ Dimensions:  (t: 100)
 Coordinates:
   * t        (t) float64 800B 0.0 0.101 0.202 0.303 ... 9.697 9.798 9.899 10.0
 Data variables:
-    y        (t) float64 800B 1.0 1.303 1.606 1.909 ... 30.09 30.39 30.7 31.0</pre><div class='xr-wrap' style='display:none'><div class='xr-header'><div class='xr-obj-type'>xarray.Dataset</div></div><ul class='xr-sections'><li class='xr-section-item'><input id='section-bf80eaa8-9884-4187-be3c-beae3e76c5cd' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-bf80eaa8-9884-4187-be3c-beae3e76c5cd' class='xr-section-summary'  title='Expand/collapse section'>Dimensions:</label><div class='xr-section-inline-details'><ul class='xr-dim-list'><li><span class='xr-has-index'>t</span>: 100</li></ul></div><div class='xr-section-details'></div></li><li class='xr-section-item'><input id='section-8a9f7f00-6941-475e-86d3-da832a6b23b7' class='xr-section-summary-in' type='checkbox'  checked><label for='section-8a9f7f00-6941-475e-86d3-da832a6b23b7' class='xr-section-summary' >Coordinates: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>t</span></div><div class='xr-var-dims'>(t)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>0.0 0.101 0.202 ... 9.899 10.0</div><input id='attrs-01b2ced7-51bd-42a0-989b-23685df30390' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-01b2ced7-51bd-42a0-989b-23685df30390' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-202ca2de-722e-427c-9aab-8db7f9a71528' class='xr-var-data-in' type='checkbox'><label for='data-202ca2de-722e-427c-9aab-8db7f9a71528' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 0.      ,  0.10101 ,  0.20202 ,  0.30303 ,  0.40404 ,  0.505051,
+    y        (t) float64 800B 1.0 1.303 1.606 1.909 ... 30.09 30.39 30.7 31.0</pre><div class='xr-wrap' style='display:none'><div class='xr-header'><div class='xr-obj-type'>xarray.Dataset</div></div><ul class='xr-sections'><li class='xr-section-item'><input id='section-9d27d71e-f5db-467f-a3fd-a65cfe042cc0' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-9d27d71e-f5db-467f-a3fd-a65cfe042cc0' class='xr-section-summary'  title='Expand/collapse section'>Dimensions:</label><div class='xr-section-inline-details'><ul class='xr-dim-list'><li><span class='xr-has-index'>t</span>: 100</li></ul></div><div class='xr-section-details'></div></li><li class='xr-section-item'><input id='section-1bef969a-2d93-4669-ab41-b5a64a363492' class='xr-section-summary-in' type='checkbox'  checked><label for='section-1bef969a-2d93-4669-ab41-b5a64a363492' class='xr-section-summary' >Coordinates: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>t</span></div><div class='xr-var-dims'>(t)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>0.0 0.101 0.202 ... 9.899 10.0</div><input id='attrs-8e1facdb-7ef4-433a-a5eb-2241f2284cae' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-8e1facdb-7ef4-433a-a5eb-2241f2284cae' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-bc0ad2fe-efcb-4148-a881-c47399660fcd' class='xr-var-data-in' type='checkbox'><label for='data-bc0ad2fe-efcb-4148-a881-c47399660fcd' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 0.      ,  0.10101 ,  0.20202 ,  0.30303 ,  0.40404 ,  0.505051,
         0.606061,  0.707071,  0.808081,  0.909091,  1.010101,  1.111111,
         1.212121,  1.313131,  1.414141,  1.515152,  1.616162,  1.717172,
         1.818182,  1.919192,  2.020202,  2.121212,  2.222222,  2.323232,
@@ -1200,7 +1200,7 @@ Data variables:
         7.878788,  7.979798,  8.080808,  8.181818,  8.282828,  8.383838,
         8.484848,  8.585859,  8.686869,  8.787879,  8.888889,  8.989899,
         9.090909,  9.191919,  9.292929,  9.393939,  9.494949,  9.59596 ,
-        9.69697 ,  9.79798 ,  9.89899 , 10.      ])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-bf16fc3b-2d10-481c-8d0b-20669c196b3b' class='xr-section-summary-in' type='checkbox'  checked><label for='section-bf16fc3b-2d10-481c-8d0b-20669c196b3b' class='xr-section-summary' >Data variables: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span>y</span></div><div class='xr-var-dims'>(t)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>1.0 1.303 1.606 ... 30.39 30.7 31.0</div><input id='attrs-6334fbe2-584c-43f9-bb4a-d9330aaf2fbd' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-6334fbe2-584c-43f9-bb4a-d9330aaf2fbd' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-0dc278ee-7131-4f84-97ca-bd6b2242f94c' class='xr-var-data-in' type='checkbox'><label for='data-0dc278ee-7131-4f84-97ca-bd6b2242f94c' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 1.        ,  1.3030303 ,  1.60606061,  1.90909091,  2.21212121,
+        9.69697 ,  9.79798 ,  9.89899 , 10.      ])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-39530410-ec77-4f64-ad06-7988693f0afc' class='xr-section-summary-in' type='checkbox'  checked><label for='section-39530410-ec77-4f64-ad06-7988693f0afc' class='xr-section-summary' >Data variables: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span>y</span></div><div class='xr-var-dims'>(t)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>1.0 1.303 1.606 ... 30.39 30.7 31.0</div><input id='attrs-d5bc885b-3334-49a2-ad8c-0080d0bc0e1e' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-d5bc885b-3334-49a2-ad8c-0080d0bc0e1e' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-fad708e8-94f6-4b4e-bc29-2bc97653d0fb' class='xr-var-data-in' type='checkbox'><label for='data-fad708e8-94f6-4b4e-bc29-2bc97653d0fb' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 1.        ,  1.3030303 ,  1.60606061,  1.90909091,  2.21212121,
         2.51515152,  2.81818182,  3.12121212,  3.42424242,  3.72727273,
         4.03030303,  4.33333333,  4.63636364,  4.93939394,  5.24242424,
         5.54545455,  5.84848485,  6.15151515,  6.45454545,  6.75757576,
@@ -1219,7 +1219,7 @@ Data variables:
        25.24242424, 25.54545455, 25.84848485, 26.15151515, 26.45454545,
        26.75757576, 27.06060606, 27.36363636, 27.66666667, 27.96969697,
        28.27272727, 28.57575758, 28.87878788, 29.18181818, 29.48484848,
-       29.78787879, 30.09090909, 30.39393939, 30.6969697 , 31.        ])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-e789d90c-b446-4d5c-8ab1-417cdaa87542' class='xr-section-summary-in' type='checkbox'  ><label for='section-e789d90c-b446-4d5c-8ab1-417cdaa87542' class='xr-section-summary' >Indexes: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-index-name'><div>t</div></div><div class='xr-index-preview'>PandasIndex</div><input type='checkbox' disabled/><label></label><input id='index-b435329b-68e7-4db5-b4f8-37c8c4966a05' class='xr-index-data-in' type='checkbox'/><label for='index-b435329b-68e7-4db5-b4f8-37c8c4966a05' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([                0.0, 0.10101010101010101, 0.20202020202020202,
+       29.78787879, 30.09090909, 30.39393939, 30.6969697 , 31.        ])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-f35b6182-0eec-4c39-9437-982bdb0049ed' class='xr-section-summary-in' type='checkbox'  ><label for='section-f35b6182-0eec-4c39-9437-982bdb0049ed' class='xr-section-summary' >Indexes: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-index-name'><div>t</div></div><div class='xr-index-preview'>PandasIndex</div><input type='checkbox' disabled/><label></label><input id='index-b65f8685-9167-400b-954e-47b3561e3ffb' class='xr-index-data-in' type='checkbox'/><label for='index-b65f8685-9167-400b-954e-47b3561e3ffb' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([                0.0, 0.10101010101010101, 0.20202020202020202,
        0.30303030303030304, 0.40404040404040403,  0.5050505050505051,
         0.6060606060606061,  0.7070707070707071,  0.8080808080808081,
         0.9090909090909091,  1.0101010101010102,  1.1111111111111112,
@@ -1253,15 +1253,13 @@ Data variables:
          9.393939393939394,   9.494949494949495,   9.595959595959595,
          9.696969696969697,   9.797979797979798,     9.8989898989899,
                       10.0],
-      dtype=&#x27;float64&#x27;, name=&#x27;t&#x27;))</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-7c36564d-d456-4bb2-9623-ea54a6fa2551' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-7c36564d-d456-4bb2-9623-ea54a6fa2551' class='xr-section-summary'  title='Expand/collapse section'>Attributes: <span>(0)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><dl class='xr-attrs'></dl></div></li></ul></div></div>
+      dtype=&#x27;float64&#x27;, name=&#x27;t&#x27;))</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-97fbef1d-6c52-4d6d-b1c9-38f90ceab01b' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-97fbef1d-6c52-4d6d-b1c9-38f90ceab01b' class='xr-section-summary'  title='Expand/collapse section'>Attributes: <span>(0)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><dl class='xr-attrs'></dl></div></li></ul></div></div>
 
 
 
 ```{admonition} What does the dispatch constructor do?
 :class: hint
-Behind the scenes, the dispatch constructor assembles a lightweight Evaluator object from the Simulation object, that takes the least necessary amount of information, runs it through some dimension checks, and also connects it to the specified solver and initializes it. The purpose of the dispatch constructor is manyfold:
-By executing the entire overhead of a model evaluation and packing it into a new Evaluator instance sim.dispatch_constructor() to make single model evaluations as fast as possible and allow parallel evaluations, because each evaluator created by sim.dispatch() is it's a fully independent model instance with a separate set of parameters that can be solved.
-Evaluators store the raw output from a simulation and can generate an xarray object from it that corresponds to the data-structure of the observations with the evaluator.results property. This automatically aligns simulations results with observations, for simple computation of loss functions.
+Behind the scenes, the dispatch constructor assembles a lightweight Evaluator object from the Simulation object, that takes the least necessary amount of information, runs it through some dimension checks, and also connects it to the specified solver and initializes it.
 ```
 
 Let's take a look at the **results**.  
@@ -1281,7 +1279,7 @@ ax.legend()
 
 
 
-    <matplotlib.legend.Legend at 0x24c375963d0>
+    <matplotlib.legend.Legend at 0x2d2757dd250>
 
 
 
@@ -1294,7 +1292,7 @@ ax.legend()
 ## Estimating parameters and uncertainty with MCMC 🤔
 Of course this example is very simple. In fact, we could optimize the parameters perfectly by hand.   
 But just for fun, let's use *Markov Chain Monte Carlo (MCMC)* to estimate the parameters, their uncertainty and the uncertainty in the data.   
-We’ll run the parameter estimation with our **inferer**, using the NumPyro backend with a NUTS kernel. This completes the job in a few seconds.
+We’ll run the parameter estimation with our **{attr}`~pymob.simulation.inferer`**, using the NumPyro backend with a NUTS kernel. This completes the job in a few seconds.
 
 We are almost ready to infer the model parameters. To also estimate the uncertainty of the parameters, we add another parameter representing the error and assume that it follows a lognormal distribution.   
 Additionally, we specify an error model for the data distribution. This will be: $$y_{obs} \sim Normal (y, \sigma_y)$$  
@@ -1322,6 +1320,8 @@ sim.posterior_predictive_checks(pred_hdi_style={"alpha": 0.1})
 
     Jax 64 bit mode: False
     Absolute tolerance: 1e-07
+    
+
     Trace Shapes:      
      Param Sites:      
     Sample Sites:      
@@ -1333,20 +1333,76 @@ sim.posterior_predictive_checks(pred_hdi_style={"alpha": 0.1})
             value 100 |
     
 
-    sample: 100%|██████████| 3000/3000 [00:01<00:00, 1963.23it/s, 7 steps of size 8.27e-01. acc. prob=0.92]
+      0%|                                                                                                    | 0/3000 [00:00<?, ?it/s]
+
+    warmup:   0%|                                        | 1/3000 [00:02<2:24:08,  2.88s/it, 1 steps of size 1.87e+00. acc. prob=0.00]
+
+    warmup:   2%|█                                        | 75/3000 [00:02<01:23, 35.20it/s, 5 steps of size 1.36e-02. acc. prob=0.76]
+
+    warmup:   5%|██                                      | 158/3000 [00:03<00:33, 84.73it/s, 5 steps of size 1.28e+00. acc. prob=0.78]
+
+    warmup:   9%|███▌                                   | 270/3000 [00:03<00:16, 168.27it/s, 3 steps of size 1.37e+00. acc. prob=0.78]
+
+    warmup:  13%|████▉                                  | 379/3000 [00:03<00:10, 261.46it/s, 1 steps of size 7.30e-01. acc. prob=0.79]
+
+    warmup:  16%|██████▍                                | 492/3000 [00:03<00:06, 372.25it/s, 3 steps of size 9.54e-01. acc. prob=0.79]
+
+    warmup:  21%|████████▏                              | 626/3000 [00:03<00:04, 521.55it/s, 3 steps of size 1.30e+00. acc. prob=0.79]
+
+    warmup:  26%|█████████▉                             | 765/3000 [00:03<00:03, 678.16it/s, 3 steps of size 1.06e+00. acc. prob=0.79]
+
+    warmup:  30%|███████████▌                           | 891/3000 [00:03<00:02, 773.18it/s, 3 steps of size 1.35e+00. acc. prob=0.79]
+
+    sample:  34%|████████████▉                         | 1021/3000 [00:03<00:02, 886.43it/s, 7 steps of size 7.70e-01. acc. prob=0.94]
+
+    sample:  39%|██████████████▋                       | 1156/3000 [00:03<00:01, 993.67it/s, 3 steps of size 7.70e-01. acc. prob=0.93]
+
+    sample:  43%|███████████████▉                     | 1292/3000 [00:04<00:01, 1074.35it/s, 3 steps of size 7.70e-01. acc. prob=0.93]
+
+    sample:  48%|█████████████████▌                   | 1425/3000 [00:04<00:01, 1140.72it/s, 3 steps of size 7.70e-01. acc. prob=0.93]
+
+    sample:  52%|███████████████████▏                 | 1553/3000 [00:04<00:01, 1175.55it/s, 7 steps of size 7.70e-01. acc. prob=0.93]
+
+    sample:  56%|████████████████████▊                | 1686/3000 [00:04<00:01, 1218.48it/s, 7 steps of size 7.70e-01. acc. prob=0.93]
+
+    sample:  60%|██████████████████████▍              | 1815/3000 [00:04<00:00, 1227.49it/s, 3 steps of size 7.70e-01. acc. prob=0.93]
+
+    sample:  65%|███████████████████████▉             | 1943/3000 [00:04<00:00, 1177.93it/s, 3 steps of size 7.70e-01. acc. prob=0.92]
+
+    sample:  69%|█████████████████████████▍           | 2065/3000 [00:04<00:00, 1156.28it/s, 3 steps of size 7.70e-01. acc. prob=0.92]
+
+    sample:  73%|██████████████████████████▉          | 2184/3000 [00:04<00:00, 1158.87it/s, 3 steps of size 7.70e-01. acc. prob=0.92]
+
+    sample:  77%|████████████████████████████▍        | 2302/3000 [00:04<00:00, 1150.36it/s, 3 steps of size 7.70e-01. acc. prob=0.92]
+
+    sample:  81%|█████████████████████████████▊       | 2419/3000 [00:05<00:00, 1073.61it/s, 5 steps of size 7.70e-01. acc. prob=0.93]
+
+    sample:  85%|███████████████████████████████▎     | 2541/3000 [00:05<00:00, 1081.20it/s, 7 steps of size 7.70e-01. acc. prob=0.93]
+
+    sample:  89%|████████████████████████████████▊    | 2663/3000 [00:05<00:00, 1087.50it/s, 3 steps of size 7.70e-01. acc. prob=0.92]
+
+    sample:  93%|██████████████████████████████████▎  | 2784/3000 [00:05<00:00, 1088.87it/s, 3 steps of size 7.70e-01. acc. prob=0.92]
+
+    sample:  97%|███████████████████████████████████▊ | 2905/3000 [00:05<00:00, 1089.82it/s, 7 steps of size 7.70e-01. acc. prob=0.92]
+
+    sample: 100%|██████████████████████████████████████| 3000/3000 [00:05<00:00, 542.00it/s, 3 steps of size 7.70e-01. acc. prob=0.92]
+
+    
     
 
     
                     mean       std    median      5.0%     95.0%     n_eff     r_hat
-             b      2.98      0.03      2.98      2.92      3.03   1611.92      1.00
-       sigma_y      1.83      0.13      1.82      1.61      2.04   1703.02      1.00
+             b      3.05      0.03      3.05      3.01      3.09   1831.90      1.00
+       sigma_y      1.56      0.11      1.55      1.38      1.74   1341.54      1.00
     
+    
+
     Number of divergences: 0
     
 
 
     
-![png](superquickstart_files/superquickstart_20_3.png)
+![png](superquickstart_files/superquickstart_20_32.png)
     
 
 
@@ -1368,7 +1424,7 @@ You can explore the API of {class}`pymob.sim.plot.SimulationPlot` to find out ho
 ## Report the results 🗒️
 
 Pymob provides the option to generate an automated report of the parameter distribution for a simulation.  
-The report can be configured by modifying the options in {meth}`pymob.simulation.SimulationBase.config.report`.
+The report can be configured by modifying the options in {meth}`~pymob.simulation.SimulationBase.config.report`.
 
 
 ```python
@@ -1400,13 +1456,13 @@ sim.save_observations(force=True)
 sim.config.save(force=True)
 ```
 
-    Scenario directory exists at 'c:\Users\mgrho\pymob\docs\source\user_guide\case_studies\superquickstart\scenarios\linreg'.
-    Results directory exists at 'c:\Users\mgrho\pymob\docs\source\user_guide\case_studies\superquickstart\results\linreg'.
+    Scenario directory exists at 'C:\Users\mgrho\pymob\docs\source\user_guide\case_studies\superquickstart\scenarios\linreg'.
+    Results directory exists at 'C:\Users\mgrho\pymob\docs\source\user_guide\case_studies\superquickstart\results\linreg'.
     
 
 ### Commandline API
 
-The command-line API runs a series of commands that load the case study, execute the {meth}`pymob.simulation.SimulationBase.initialize` method and perform some more initialization tasks before running the required job.
+The command-line API runs a series of commands that load the case study, execute the {meth}`~pymob.simulation.SimulationBase.initialize` method and perform some more initialization tasks before running the required job.
 
 + `pymob-infer` runs an inference job, for example:  
 
