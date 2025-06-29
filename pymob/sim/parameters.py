@@ -10,9 +10,9 @@ import xarray as xr
 from pydantic import BaseModel, ConfigDict, model_serializer, field_validator, model_validator
 from pydantic.functional_validators import BeforeValidator
 from numpydantic import NDArray, Shape
-from nptyping import Float64, Int64
+from nptyping import Float64, Int64, Float32, Int32
 
-NumericArray = NDArray[Shape["*, ..."], (Float64,Int64)] # type:ignore
+NumericArray = NDArray[Shape["*, ..."], (Float64,Int64,Float32,Int32)] # type:ignore
 
 class Expression:
     """Random variables are context dependent. They may be dependent on other
