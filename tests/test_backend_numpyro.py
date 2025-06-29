@@ -2,6 +2,8 @@ import pytest
 import numpy as np
 from click.testing import CliRunner
 from matplotlib import pyplot as plt
+from jax._src.interpreters.partial_eval import DynamicJaxprTracer
+
 from pymob.solvers.diffrax import JaxSolver
 from pymob.inference.numpyro_backend import NumpyroBackend
 from pymob.sim.parameters import Param
@@ -38,6 +40,25 @@ def test_diffrax_exception():
 
     badness_for_infeasible_alpha = np.array(badness)[np.where(alpha >= ub_alpha)[0]]
     assert sum(badness_for_infeasible_alpha) > 0
+
+
+def test_tracer_error_after_numpyro():
+    sim = init_simulation_casestudy_api("test_scenario")
+    sim.set_inferer(backend="numpyro")
+    sim.prior_predictive_checks()
+    param_alpha = sim.parameterize.keywords["model_parameters"]["parameters"]["alpha"]
+    
+    if isinstance(param_alpha, DynamicJaxprTracer):
+        raise ValueError(
+            "Parameter in partially initialized keyword of the parameterize method" + 
+            "Contained a 'DynamicJaxprTracer' instead of a normal value."
+
+        )
+    
+    sim.dispatch_constructor()
+    e = sim.dispatch()
+    e()
+    e.results
 
 
 def test_convergence_user_defined_probability_model():
