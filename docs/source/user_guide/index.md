@@ -8,6 +8,7 @@ This guide is an overview and explains the important features.
 :maxdepth: 1
 
 installation
+superquickstart
 quickstart
 ```
 
@@ -15,6 +16,7 @@ quickstart
 :caption: Usage
 :maxdepth: 2
 
+Introduction
 framework_overview
 case_studies
 simulation
