@@ -1347,7 +1347,7 @@ class SimulationBase:
 
         tulpe: tuple of parameters, can have any length.
         """
-        parameters = model_parameters["parameters"]
+        parameters = copy.deepcopy(model_parameters["parameters"])
         parameters.update(free_parameters)
 
         updated_model_parameters = dict(parameters=parameters)

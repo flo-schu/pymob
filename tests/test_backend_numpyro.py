@@ -2,6 +2,8 @@ import pytest
 import numpy as np
 from click.testing import CliRunner
 from matplotlib import pyplot as plt
+from jax._src.interpreters.partial_eval import DynamicJaxprTracer
+
 from pymob.solvers.diffrax import JaxSolver
 from pymob.inference.numpyro_backend import NumpyroBackend
 from pymob.sim.parameters import Param
@@ -38,6 +40,25 @@ def test_diffrax_exception():
 
     badness_for_infeasible_alpha = np.array(badness)[np.where(alpha >= ub_alpha)[0]]
     assert sum(badness_for_infeasible_alpha) > 0
+
+
+def test_tracer_error_after_numpyro():
+    sim = init_simulation_casestudy_api("test_scenario")
+    sim.set_inferer(backend="numpyro")
+    sim.prior_predictive_checks()
+    param_alpha = sim.parameterize.keywords["model_parameters"]["parameters"]["alpha"]
+    
+    if isinstance(param_alpha, DynamicJaxprTracer):
+        raise ValueError(
+            "Parameter in partially initialized keyword of the parameterize method" + 
+            "Contained a 'DynamicJaxprTracer' instead of a normal value."
+
+        )
+    
+    sim.dispatch_constructor()
+    e = sim.dispatch()
+    e()
+    e.results
 
 
 def test_convergence_user_defined_probability_model():
@@ -207,7 +228,6 @@ def test_convergence_map_kernel():
 
 
 def test_convergence_sa_kernel():
-    pytest.skip()
     sim = init_simulation_casestudy_api("test_scenario")
 
     sim.config.inference_numpyro.kernel = "sa"
@@ -270,8 +290,8 @@ def test_convergence_hierarchical_lotka_volterra():
 
     # using SVI, because it is much faster than NUTS. 
     sim.config.inference_numpyro.kernel = "svi"
-    sim.config.inference_numpyro.svi_iterations = 2_000
-    sim.config.inference_numpyro.svi_learning_rate = 0.01
+    sim.config.inference_numpyro.svi_iterations = 5_000
+    sim.config.inference_numpyro.svi_learning_rate = 0.005
     sim.config.inference_numpyro.gaussian_base_distribution = True
     sim.config.jaxsolver.max_steps = 1e5
     sim.config.jaxsolver.throw_exception = False
@@ -289,8 +309,8 @@ def test_convergence_hierarchical_lotka_volterra():
     np.testing.assert_allclose(
         sim.inferer.idata.posterior.beta.mean(("chain", "draw")), 
         sim.config.model_parameters.beta.value,
-        atol=0.0005,
-        rtol=0.025
+        atol=0.0003,
+        rtol=0.0001
     )
 
     # TODO: CUrrently this is not very accurate. But it is a sufficient test
@@ -300,7 +320,7 @@ def test_convergence_hierarchical_lotka_volterra():
         sim.inferer.idata.posterior.alpha_species_hyper.mean(("chain", "draw")), 
         (1, 3),
         atol=0.1,
-        rtol=0.2
+        rtol=0.01
     )
 
 
