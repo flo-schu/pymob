@@ -4,6 +4,17 @@ import sys
 import importlib
 import textwrap
 
+class PymobError(Exception):
+    """Exception raised for custom error scenarios.
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
+
 def errormsg(msg):
     return textwrap.fill(textwrap.dedent(msg))
 
