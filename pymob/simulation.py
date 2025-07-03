@@ -18,7 +18,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 import pymob
 from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
-from pymob.utils.errors import errormsg, import_optional_dependency
+from pymob.utils.errors import errormsg, import_optional_dependency, PymobError
 from pymob.utils.store_file import parse_config_section
 from pymob.utils.misc import benchmark
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
@@ -275,6 +275,9 @@ class SimulationBase:
             raise KeyError(
                 "'model_parameters' must contain a 'parameters' key"
             )
+
+        self._check_input_for_nans(model_parameters=value, key="x_in")
+        self._check_input_for_nans(model_parameters=value, key="y0")
         
         if not isinstance(value["parameters"], dict):
             raise ValueError(
@@ -289,6 +292,52 @@ class SimulationBase:
 
     def _on_params_updated(self, updated_dict):
         self.model_parameters = updated_dict
+
+    def _check_input_for_nans(self, model_parameters, key):
+        if key not in model_parameters:
+            return
+
+        for data_var, array in model_parameters[key].items():
+            nans = array.isnull().sum([
+                d for d in array.dims 
+                if d == self.config.simulation.x_dimension
+            ])
+            nans = nans.where(nans, drop=True)
+
+            if sum(nans.shape) > 0:
+                batch_dim = self.config.simulation.batch_dimension
+                raise PymobError(
+                    f"The xarray passed to `sim.model_parameters['{key}']` contained "+
+                    f"NaN values. They occur at the {batch_dim}-coordinates: "+
+                    f"{nans.coords['id'].values}.\n\n"+
+                    
+                    "Why does this error occur?\n"+
+                    "--------------------------\n"+
+                    "Pymob uses y0 as initial conditions for a solver and uses x_in to "+
+                    "provide interpolated values for any value of t. Having nan values "+
+                    "in such components presents an unsolvable challenge to the solver.\n\n" +
+
+                    "How can I fix this error?\n"+
+                    "-------------------------\n"+
+                    "General advice: Use sim.parse_input https://pymob.readthedocs.io/en/stable/api/pymob.html#pymob.simulation.SimulationBase.parse_input\n"
+                    "* Problem with 'x_in': Check sim.observations and also check"+
+                    "sim.config.simulations.x_in"
+                    "You may need to take a decision how to interpolate "+
+                    "your data. Check out the xarray documentation "+
+                    "https://docs.xarray.dev/en/stable/generated/xarray.DataArray.interpolate_na.html" +
+                    "or https://docs.xarray.dev/en/stable/generated/xarray.DataArray.ffill.html "+
+                    "to replace nan values.\n"+ 
+                    "* If you want to make sure your 'x_in' follows a rectangular interpolation you can use\n"+
+                    "  >>> sim.parse_input('x_in', reference_data=sim.observations)\n"
+                    "  >>> pymob.solvers.base.rect_interpolation(x_in)\n"
+                    "* Problem with 'y0': Check sim.observations and also check "+
+                    "sim.config.simulation.y0\n\n"
+
+                    "Details\n"
+                    "-------\n"
+                    f"{key}: {model_parameters[key]}"
+                )
+        
 
     @property
     def observations(self):
