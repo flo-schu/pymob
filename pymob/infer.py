@@ -8,6 +8,8 @@ from pymob.simulation import SimulationBase
 from pymob.sim.config import Config
 
 @click.command()
+@click.option("-f", "--file", type=str, default=None, 
+              help="Path to the config file")
 @click.option("-c", "--case_study", type=str, default="lotka_volterra_case_study", 
               help=help.case_study)
 @click.option("-s", "--scenario", type=str, default="test_scenario", 
@@ -22,9 +24,13 @@ from pymob.sim.config import Config
               help="The number of cores to be used for multiprocessing")
 @click.option("--inference_backend", type=str, default="pymoo")
 @click.option("--only-report", type=bool, is_flag=True, default=False)
-def main(case_study, scenario, package, output, random_seed, n_cores, inference_backend, only_report):
+def main(file, case_study, scenario, package, output, random_seed, n_cores, inference_backend, only_report):
     
-    cfg = os.path.join(package, case_study, "scenarios", scenario, "settings.cfg")
+    if file is None:
+        cfg = os.path.join(package, case_study, "scenarios", scenario, "settings.cfg")
+    else:
+        cfg = file
+        
     config = Config(cfg)
     config.case_study.name = case_study
     config.case_study.scenario = scenario
