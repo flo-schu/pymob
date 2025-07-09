@@ -57,6 +57,7 @@ def main(file, case_study, scenario, package, output, random_seed, n_cores, infe
 
     sim.posterior_predictive_checks()
     sim.report()
+    sim.export()
 
     # TODO: Migrate to platform independent psutil
     # max_ram_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000

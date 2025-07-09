@@ -3,6 +3,7 @@ import sys
 import copy
 import warnings
 import importlib
+from copy import deepcopy
 from typing import Optional, List, Union, Literal, Any, Tuple, Sequence, Mapping
 from types import ModuleType
 import configparser
@@ -13,13 +14,14 @@ import logging
 import numpy as np
 from numpy.typing import NDArray
 import xarray as xr
+import arviz as az
 import dpath as dp
 from sklearn.preprocessing import MinMaxScaler
 
 import pymob
 from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
 from pymob.utils.errors import errormsg, import_optional_dependency, PymobError
-from pymob.utils.store_file import parse_config_section
+from pymob.utils.store_file import parse_config_section, is_number
 from pymob.utils.misc import benchmark
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
@@ -397,10 +399,15 @@ class SimulationBase:
 
         self.create_data_scaler()
         
-    def save_observations(self, filename="observations.nc", force=False):
-        fp = os.path.join(self.data_path, filename)
+    def save_observations(self, filename="observations.nc", directory=None, force=False):
+        if directory is None:
+            directory = self.data_path
+            
+        fp = os.path.join(directory, filename)
         if filename != self.config.case_study.observations:
             self.config.case_study.observations = filename
+
+        self._serialize_attrs(self.observations)
 
         if not os.path.exists(fp) or force:
             self.observations.to_netcdf(fp)
@@ -408,6 +415,14 @@ class SimulationBase:
             if input(f"Observations {fp} exist. Overwrite? [y/N]") == "y":
                 self.observations.to_netcdf(fp)
 
+    @staticmethod
+    def _serialize_attrs(observations):
+        for key, dv in observations.items():
+            dv.attrs = {
+                k: str(v) for k, v in dv.attrs.items() 
+            }
+
+        return observations
 
     @property
     def coordinates(self):
@@ -1915,3 +1930,106 @@ class SimulationBase:
         # into the report. I think their execution should be continued outside of the report,
         # but they could be linked (as images) inside the report. This way, the report
         # would just have to plot them if available.
+
+    def export(self, directory: Optional[str] = None):
+        """Exports a SimulationBase object to disk. 
+
+        Parameters
+        ----------
+        directory : str
+            Optional. Specifies the directory where the simulation should be exported to.
+        
+        This method exports at least two files:
+        - 'settings.cfg' 
+        - 'observations.nc'. 
+        
+        If the inferer was already run, it additionally exports 
+        - 'idata.nc'
+        
+        All files are stored to the directory specified in `sim.output_path`
+        """
+        self.config.case_study.data_path = self.output_path
+        # FIXME: Setting package to . did not work out with use of pymob infer
+        #        Why did I do this? Make sure it checks out
+        # self.config.case_study.package = "."
+        self.save_observations(force=True)
+
+        if hasattr(self, "inferer"):
+            backend = type(self.inferer).__name__
+        
+            if backend == "NumpyroBackend":
+                self.config.simulation.inferer = "numpyro"
+            elif backend == "ScipyBackend":
+                self.config.simulation.inferer = "scipy"
+            elif backend == "PymooBackend":
+                self.config.simulation.inferer = "pymoo"
+            elif backend == "PyabcBackend":
+                self.config.simulation.inferer = "pyabc"
+            else:
+                raise NotImplementedError(f"Backend: {backend} is not implemented.")
+
+            if hasattr(self.inferer, "idata"):
+                self.inferer.idata.to_netcdf(os.path.join(self.output_path, "idata.nc"))
+            else:
+                pass
+        else:
+            pass
+
+        self.config.save(fp=os.path.join(self.output_path,"settings.cfg"), force=True)
+
+    @classmethod
+    def from_directory(cls, directory: str) -> "SimulationBase":
+        """Imports a SimulationBase from a directory where the simulation had been 
+        exported to with sim.export()
+
+        Parameters
+        ----------
+        directory : str
+            The path to the directory, the required contents of the directory are:
+            'settings.cfg' and 'observations.nc'. Optionally 'idata.nc' can be defined,
+            which contains the posterior. From this a MempySim with completed inference
+            can be initialized
+        """
+        cfg_file = os.path.join(directory, "settings.cfg")
+        sim = cls(config=cfg_file)
+        sim.setup()
+
+        if hasattr(sim.config.simulation, "inferer"):
+            sim.set_inferer(sim.config.simulation.inferer)
+            idata = os.path.join(sim.output_path, "idata.nc")
+            if os.path.exists(idata):
+                sim.inferer.idata = az.from_netcdf(idata)
+            else:
+                pass
+        else:
+            pass
+        
+        return sim
+
+    def copy(self):
+        """Creates a copy of a SimulationBase object by deepcopying all loose references
+        TODO: Replace by export(..)->from_directory(...) to a temporary directoy. 
+              Note that the output and data paths should be stored before export and 
+              recovered after import
+        """
+        with warnings.catch_warnings(action="ignore"):
+            sim_copy = type(self)(self.config.copy(deep=True))
+            sim_copy.observations = self.observations.copy(deep=True)
+            
+            # must copy individual parts of the dict due to the on_update method
+            model_parameters = {k: deepcopy(v) for k, v in self.model_parameters.items()}
+            
+            # TODO: Refactor this once the parameterize method is removed.
+            sim_copy.parameterize = partial(sim_copy.parameterize, model_parameters=model_parameters)
+            sim_copy._model_parameters = ParameterDict(model_parameters, callback=sim_copy._on_params_updated)
+
+            sim_copy.load_modules()
+            if hasattr(self, "inferer"):
+                sim_copy.inferer = type(self.inferer)(sim_copy)
+                # idata uses deepcopy by default
+                sim_copy.inferer.idata = self.inferer.idata.copy()
+            sim_copy.model = self.model
+            sim_copy.solver_post_processing = self.solver_post_processing
+
+        return sim_copy
+    
