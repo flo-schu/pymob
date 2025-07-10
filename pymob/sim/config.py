@@ -269,7 +269,7 @@ def dict_to_string(dct: Dict, replace_whitespace=""):
 
 
 def list_to_string(lst: List):
-    return " ".join([str(l) for l in lst])
+    return " ".join([str(l).replace(" ", "") for l in lst])
 
 
 def param_to_string(prm: Param):
@@ -361,6 +361,7 @@ class Casestudy(PymobModel):
 
     output: Optional[str] = None
     data: Optional[str] = None
+    scenario_path_override: Optional[str] = None
 
     observations: Optional[str] = None
     
@@ -413,6 +414,9 @@ class Casestudy(PymobModel):
         
     @property
     def scenario_path(self):
+        if self.scenario_path_override is not None:
+            return self.scenario_path_override
+
         package_path = os.path.basename(os.path.abspath(self.package))
         if package_path == self.name:
             # if the package path is identical to the case study path, then 

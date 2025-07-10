@@ -28,6 +28,8 @@ def opt(a, b, c):
     return a if a is not None else b if b is not None else c
 
 def is_number(s):
+    if s is None:
+        return False
     try:
         float(s)
         return True
