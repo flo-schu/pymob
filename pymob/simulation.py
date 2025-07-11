@@ -1938,6 +1938,7 @@ class SimulationBase:
         ----------
         directory : str
             Optional. Specifies the directory where the simulation should be exported to.
+            Otherwise exports to output path
         
         This method exports at least two files:
         - 'settings.cfg' 
@@ -1948,11 +1949,15 @@ class SimulationBase:
         
         All files are stored to the directory specified in `sim.output_path`
         """
-        self.config.case_study.data_path = self.output_path
+        if directory is None:
+            directory = self.output_path
+
+        data_path_backup = self.config.case_study.data
+        self.config.case_study.data = directory
         # FIXME: Setting package to . did not work out with use of pymob infer
         #        Why did I do this? Make sure it checks out
         # self.config.case_study.package = "."
-        self.save_observations(force=True)
+        self.save_observations(directory=directory, force=True)
 
         if hasattr(self, "inferer"):
             backend = type(self.inferer).__name__
@@ -1968,14 +1973,21 @@ class SimulationBase:
             else:
                 raise NotImplementedError(f"Backend: {backend} is not implemented.")
 
+
             if hasattr(self.inferer, "idata"):
-                self.inferer.idata.to_netcdf(os.path.join(self.output_path, "idata.nc"))
+                idata_path = os.path.join(directory, "idata.nc")
+                # removes the existing file before attempting overwrite. Otherwise
+                # this raises an OS Error
+                if os.access(idata_path, os.W_OK):
+                    os.remove(idata_path)
+                self.inferer.idata.to_netcdf(idata_path)
             else:
                 pass
         else:
             pass
 
-        self.config.save(fp=os.path.join(self.output_path,"settings.cfg"), force=True)
+        self.config.save(fp=os.path.join(directory,"settings.cfg"), force=True)
+        self.config.case_study.data = data_path_backup
 
     @classmethod
     def from_directory(cls, directory: str) -> "SimulationBase":
