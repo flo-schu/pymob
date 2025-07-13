@@ -2008,7 +2008,7 @@ class SimulationBase:
 
         if hasattr(sim.config.simulation, "inferer"):
             sim.set_inferer(sim.config.simulation.inferer)
-            idata = os.path.join(sim.output_path, "idata.nc")
+            idata = os.path.join(directory, "idata.nc")
             if os.path.exists(idata):
                 sim.inferer.idata = az.from_netcdf(idata)
             else:
