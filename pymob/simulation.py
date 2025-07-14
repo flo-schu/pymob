@@ -2010,7 +2010,10 @@ class SimulationBase:
             sim.set_inferer(sim.config.simulation.inferer)
             idata = os.path.join(directory, "idata.nc")
             if os.path.exists(idata):
-                sim.inferer.idata = az.from_netcdf(idata)
+                # load transfers the idata object into memory, which is important
+                # for decoupling it from the underlying file, which may be used
+                # for 
+                sim.inferer.idata = az.from_netcdf(idata).load()
             else:
                 pass
         else:
