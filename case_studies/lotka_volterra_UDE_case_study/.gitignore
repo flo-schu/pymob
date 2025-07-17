@@ -1,0 +1,4 @@
+__pycache__
+results
+*.code-workspace
+*.egg-info
