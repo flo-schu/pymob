@@ -399,7 +399,61 @@ class SimulationBase:
 
         self.create_data_scaler()
         
-    def save_observations(self, filename="observations.nc", directory=None, force=False):
+    def save_observations(
+        self, 
+        filename="observations.nc", 
+        directory=None, 
+        force=False
+    ):
+        """Save observations to a NetCDF file.
+
+        This function saves the observations data to a NetCDF file with a specified
+        filename and directory. By default, it saves to the data path defined in the
+        configuration. It prompts the user for confirmation before overwriting an
+        existing file, unless the `force` flag is set.
+
+        Parameters
+        ----------
+        filename : str, optional
+            The name of the NetCDF file to save. Defaults to "observations.nc".
+        directory : str, optional
+            The directory to save the NetCDF file to. If None, the data path
+            defined in the object's configuration is used. Defaults to None.
+        force : bool, optional
+            If True, overwrite the file without prompting. Defaults to False.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
+
+        Notes
+        -----
+        - The function updates the `observations` attribute in the object's
+        configuration to reflect the saved filename.
+        - The `drop_encoding()` method is called on the observations dataset
+        before saving to remove any encoding information.  This is a common
+        practice to ensure portability and avoid issues with different NetCDF
+        readers.
+        - The function uses `os.path.join()` to construct the full file path,
+        ensuring correct path handling across different operating systems.
+        - Before exporting attributes of the dataset are serialized to avoid
+        export errors.
+        
+        Examples
+        --------
+        >>> # Save observations to the default data path with the default filename
+        >>> self.save_observations() 
+
+        >>> # Save observations to a specific directory with a custom filename
+        >>> self.save_observations(filename="my_obs.nc", directory="/path/to/my/data")
+
+        >>> # Overwrite an existing file without prompting
+        >>> self.save_observations(force=True)
+        """
         if directory is None:
             directory = self.data_path
             
@@ -410,10 +464,10 @@ class SimulationBase:
         self._serialize_attrs(self.observations)
 
         if not os.path.exists(fp) or force:
-            self.observations.to_netcdf(fp)
+            self.observations.drop_encoding().to_netcdf(fp)
         else:
             if input(f"Observations {fp} exist. Overwrite? [y/N]") == "y":
-                self.observations.to_netcdf(fp)
+                self.observations.drop_encoding().to_netcdf(fp)
 
     @staticmethod
     def _serialize_attrs(observations):
