@@ -2,6 +2,8 @@ import os
 import sys
 import copy
 import warnings
+import textwrap
+import tempfile
 import importlib
 from copy import deepcopy
 from typing import Optional, List, Union, Literal, Any, Tuple, Sequence, Mapping
@@ -1985,15 +1987,31 @@ class SimulationBase:
         # but they could be linked (as images) inside the report. This way, the report
         # would just have to plot them if available.
 
-    def export(self, directory: Optional[str] = None):
-        """Exports a SimulationBase object to disk. 
+    def export(
+        self, 
+        directory: Optional[str] = None,
+        mode: Literal["export", "copy"] = "export",
+
+    ):
+        """Exports a SimulationBase object to disk. If directory is given, objects are
+        exported to the directory, otherwise, exports are made to sim.output_path
 
         Parameters
         ----------
+
         directory : str
             Optional. Specifies the directory where the simulation should be exported to.
             Otherwise exports to output path
+        mode : str
+            If from_directory is used in 'import'-mode, the output, data and scenario
+            paths are changed to take the path of the directory, which means that all
+            output, data, etc. is directed to the directory. If mode='copy', the original
+            paths read from the config file remain as they were. 
         
+    
+        Notes
+        -----
+
         This method exports at least two files:
         - 'settings.cfg' 
         - 'observations.nc'. 
@@ -2001,12 +2019,16 @@ class SimulationBase:
         If the inferer was already run, it additionally exports 
         - 'idata.nc'
         
-        All files are stored to the directory specified in `sim.output_path`
         """
         if directory is None:
             directory = self.output_path
 
+        os.makedirs(directory, exist_ok=True)
+
         data_path_backup = self.config.case_study.data
+        output_path_backup = self.config.case_study.output
+        scenario_path_backup = self.config.case_study.scenario_path_override
+        
         self.config.case_study.data = directory
         # FIXME: Setting package to . did not work out with use of pymob infer
         #        Why did I do this? Make sure it checks out
@@ -2040,11 +2062,38 @@ class SimulationBase:
         else:
             pass
 
-        self.config.save(fp=os.path.join(directory,"settings.cfg"), force=True)
-        self.config.case_study.data = data_path_backup
+        if mode == "copy":
+            # under copy-mode, the exported scenario file should retain the original
+            # data path. This is temporarily overwritten in from_directory(mode="copy")
+            # and then reset
+            self.config.case_study.data = data_path_backup
+            self.config.save(fp=os.path.join(directory, "settings.cfg"), force=True)
+        elif mode == "export":
+            # under mode export, the data_path in the config file should reflect the 
+            # export directory
+            # output path and scenario paths are irrelevant because they are overwritten
+            # using import mode of from_directory
+            self.config.case_study.output = directory
+            self.config.case_study.scenario_path_override = directory
+            self.config.save(fp=os.path.join(directory, "settings.cfg"), force=True)
+            self.config.case_study.data = data_path_backup
+            self.config.case_study.output = output_path_backup
+            self.config.case_study.scenario_path_override = scenario_path_backup
+
+        else:
+            raise PymobError(textwrap.dedent(
+                """export only supports the modes 'copy' and 'export', please select 
+                one of those options.
+                """
+            ))
+
 
     @classmethod
-    def from_directory(cls, directory: str) -> "SimulationBase":
+    def from_directory(
+        cls, 
+        directory: str,
+        mode: Literal["import", "copy"] = "import",
+    ) -> "SimulationBase":
         """Imports a SimulationBase from a directory where the simulation had been 
         exported to with sim.export()
 
@@ -2055,9 +2104,31 @@ class SimulationBase:
             'settings.cfg' and 'observations.nc'. Optionally 'idata.nc' can be defined,
             which contains the posterior. From this a MempySim with completed inference
             can be initialized
+
+        mode : str
+            If from_directory is used in 'import'-mode, the output, data and scenario
+            paths are changed to take the path of the directory, which means that all
+            output, data, etc. is directed to the directory. If mode='copy', the original
+            paths read from the config file remain as they were. 
         """
         cfg_file = os.path.join(directory, "settings.cfg")
-        sim = cls(config=cfg_file)
+        config = Config(config=cfg_file)
+
+        if mode == "import":
+            config.case_study.data = directory
+            config.case_study.output = directory
+            config.case_study.scenario_path_override = directory
+        elif mode == "copy":
+            data_path_backup = config.case_study.data
+            config.case_study.data = directory            
+        else:
+            raise PymobError(textwrap.dedent(
+                """from_directory only supports the modes 'copy' and 'import', please select 
+                one of those options.
+                """
+            ))
+
+        sim = cls(config)
         sim.setup()
 
         if hasattr(sim.config.simulation, "inferer"):
@@ -2072,33 +2143,26 @@ class SimulationBase:
                 pass
         else:
             pass
-        
+
+        if mode == "copy":
+            # reset the data path to its original value, so that the copied simulation
+            # is equivalent to the original one.
+            sim.config.case_study.data = data_path_backup
+
         return sim
 
     def copy(self):
-        """Creates a copy of a SimulationBase object by deepcopying all loose references
-        TODO: Replace by export(..)->from_directory(...) to a temporary directoy. 
-              Note that the output and data paths should be stored before export and 
-              recovered after import
+        """Creates a copy of a SimulationBase object by exporting to a temporary directory
+        in the output path and importing again from that directoy. The temporary directory
+        is destroyed directly afterwards
         """
         with warnings.catch_warnings(action="ignore"):
-            sim_copy = type(self)(self.config.copy(deep=True))
-            sim_copy.observations = self.observations.copy(deep=True)
-            
-            # must copy individual parts of the dict due to the on_update method
-            model_parameters = {k: deepcopy(v) for k, v in self.model_parameters.items()}
-            
-            # TODO: Refactor this once the parameterize method is removed.
-            sim_copy.parameterize = partial(sim_copy.parameterize, model_parameters=model_parameters)
-            sim_copy._model_parameters = ParameterDict(model_parameters, callback=sim_copy._on_params_updated)
-
-            sim_copy.load_modules()
-            if hasattr(self, "inferer"):
-                sim_copy.inferer = type(self.inferer)(sim_copy)
-                # idata uses deepcopy by default
-                sim_copy.inferer.idata = self.inferer.idata.copy()
-            sim_copy.model = self.model
-            sim_copy.solver_post_processing = self.solver_post_processing
+            # create the tempdir in the output path, because a default temporary directory
+            # may not have enough space. Using the output path here resolves any path issues.
+            tmp_basedir = os.path.join(self.output_path, "_tmp")
+            os.makedirs(tmp_basedir, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir=tmp_basedir) as name:
+                self.export(directory=name, mode="copy")
+                sim_copy = type(self).from_directory(name, mode="copy")
 
         return sim_copy
-    

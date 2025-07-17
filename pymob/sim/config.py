@@ -147,7 +147,27 @@ class DataVariable(BaseModel):
         else:
             return None
     
+    def __eq__(self, value):
+        smin, smax = self.min, self.max
+        vmin, vmax = value.min, value.max
 
+        if np.all(np.isnan([smin, vmin])):
+            min_equal = True
+        else:
+            min_equal = all(vmin == smax)
+        
+        if np.all(np.isnan([smax, vmax])):
+            max_equal = True
+        else:
+            max_equal = all(vmax == smax)
+            
+        return all([
+            self.dimensions == value.dimensions,
+            self.observed == value.observed,
+            self.dimensions_evaluator == value.dimensions_evaluator,
+            min_equal,
+            max_equal,
+        ])
 
 class ParameterDict(dict):
     def __init__(self, *args, **kwargs):
