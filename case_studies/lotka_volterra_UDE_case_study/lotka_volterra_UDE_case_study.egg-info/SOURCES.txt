@@ -1,0 +1,15 @@
+LICENSE
+README.md
+pyproject.toml
+lotka_volterra_case_study/__init__.py
+lotka_volterra_case_study/data.py
+lotka_volterra_case_study/mod.py
+lotka_volterra_case_study/plot.py
+lotka_volterra_case_study/prob.py
+lotka_volterra_case_study/sim.py
+lotka_volterra_case_study.egg-info/PKG-INFO
+lotka_volterra_case_study.egg-info/SOURCES.txt
+lotka_volterra_case_study.egg-info/dependency_links.txt
+lotka_volterra_case_study.egg-info/requires.txt
+lotka_volterra_case_study.egg-info/top_level.txt
+tests/test_simulation.py

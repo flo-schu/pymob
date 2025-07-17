@@ -1,0 +1,9 @@
+pymob[numpyro]==0.5.0a19
+preliz
+
+[dev]
+pytest>=7.3
+bumpver
+pre-commit
+ipykernel
+ipywidgets
