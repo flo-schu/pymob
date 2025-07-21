@@ -7,7 +7,7 @@ import numpy as np
 import jax
 
 class Func(eqx.Module):
-    theta_true: jnp.array
+    theta_true: tuple
     mlp: eqx.nn.MLP
 
     def __init__(self, width_size, depth, *, key, theta_true, **kwargs):
@@ -35,6 +35,6 @@ class Func(eqx.Module):
 
         return jnp.array([dprey_dt.astype(float), dpredator_dt.astype(float)[0]])
     
-    def __hash__(self):
-        return 0
+    # def __hash__(self):
+    #     return 0
     
