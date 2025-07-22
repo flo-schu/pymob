@@ -969,6 +969,9 @@ class Config(BaseModel):
         if os.path.exists(file_path) and not force:
             ui_overwrite = input("Settings file already exists. Overwrite? [y/N]")
             write = True if ui_overwrite == "y" else False
+        else:
+            # create a directory for the new scenario file
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
         if write:
             with open(file_path, "w") as f:
