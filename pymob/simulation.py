@@ -2156,7 +2156,8 @@ class SimulationBase:
         in the output path and importing again from that directoy. The temporary directory
         is destroyed directly afterwards
         """
-        with warnings.catch_warnings(action="ignore"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
             # create the tempdir in the output path, because a default temporary directory
             # may not have enough space. Using the output path here resolves any path issues.
             tmp_basedir = os.path.join(self.output_path, "_tmp")
