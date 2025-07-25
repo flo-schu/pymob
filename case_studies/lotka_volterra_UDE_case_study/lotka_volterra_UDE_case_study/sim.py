@@ -7,10 +7,10 @@ import jax.numpy as jnp
 import jax.random as jr
 
 class UDESimulation(Simulation_v2):
-    alpha = 1.3
-    beta = 0.9
-    gamma = 0.8
-    delta = 1.8
+    alpha = jnp.array(1.3)
+    beta = jnp.array(0.9)
+    gamma = jnp.array(0.8)
+    delta = jnp.array(1.8)
 
     key = jr.PRNGKey(5678)
     data_key, model_key, loader_key = jr.split(key, 3)
@@ -20,10 +20,10 @@ class UDESimulation(Simulation_v2):
 
     def initialize(self, input):
 
-        alpha = 1.3
-        beta = 0.9
-        gamma = 0.8
-        delta = 1.8
+        alpha = jnp.array(1.3)
+        beta = jnp.array(0.9)
+        gamma = jnp.array(0.8)
+        delta = jnp.array(1.8)
 
         key = jr.PRNGKey(5678)
         data_key, model_key, loader_key = jr.split(key, 3)
