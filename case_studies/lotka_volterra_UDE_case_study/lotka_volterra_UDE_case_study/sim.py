@@ -14,7 +14,7 @@ class UDESimulation(Simulation_v2):
 
     key = jr.PRNGKey(5678)
     data_key, model_key, loader_key = jr.split(key, 3)
-    model = Func(10,10,key=model_key,theta_true=(alpha,beta,gamma))
+    model = Func(10,10,(alpha,beta,gamma,delta),"tanh(x)",key=model_key)
     
     solver = JaxSolver
 
@@ -27,7 +27,7 @@ class UDESimulation(Simulation_v2):
 
         key = jr.PRNGKey(5678)
         data_key, model_key, loader_key = jr.split(key, 3)
-        self.model = Func(10,10,key=model_key,theta_true=(alpha,beta,gamma))
+        self.model = Func(10,10,(alpha,beta,gamma,delta),"tanh(x)",key=model_key)
 
         self.observations = xr.load_dataset(input[0])
 
