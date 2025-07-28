@@ -244,6 +244,7 @@ class Report:
             "--resource-path=..",
             f"--extract-media=media/{self.config.case_study.name}_{self.config.case_study.scenario}",
             "--standalone",
+            "--mathjax",
             f"--output={self.config.case_study.name}_{self.config.case_study.scenario}.html",
             "../report.md"
         ])
