@@ -1561,7 +1561,7 @@ class SimulationBase:
                 category=UserWarning
             )
 
-        if self.config.simulation.y0 is not None:
+        if self.config.simulation.x_in is not None:
             self.model_parameters["x_in"] = self.parse_input(
                 input="x_in", 
                 reference_data=self.observations,
@@ -1569,10 +1569,11 @@ class SimulationBase:
             )
         else:
             warnings.warn(
-                "'sim.config.simulation.y0' is undefined.",
+                "'sim.config.simulation.x_in' is undefined.",
                 category=UserWarning
             )
 
+        self.model_parameters["parameters"] = self.config.model_parameters.value_dict
     
     def dump(self, results):
         pass
