@@ -1,6 +1,6 @@
 from case_studies.lotka_volterra_case_study.lotka_volterra_case_study.sim import Simulation_v2
 from case_studies.lotka_volterra_UDE_case_study.lotka_volterra_UDE_case_study.mod import Func
-from pymob.solvers.diffrax import JaxSolver
+from pymob.solvers.diffrax import JaxSolver, UDESolver
 import xarray as xr
 import numpy as np
 import jax.numpy as jnp
@@ -16,7 +16,7 @@ class UDESimulation(Simulation_v2):
     data_key, model_key, loader_key = jr.split(key, 3)
     model = Func(10,10,(alpha,beta,gamma,delta),"tanh(x)",key=model_key)
     
-    solver = JaxSolver
+    solver = UDESolver
 
     def initialize(self, input):
 

@@ -6,6 +6,8 @@ import xarray as xr
 import numpy as np
 from numpy.typing import NDArray
 from pymob.solvers.base import mappar, SolverBase
+from pymob.solvers.diffrax import UDESolver
+import equinox as eqx
 
 def create_dataset_from_numpy(Y, Y_names, coordinates):
     DeprecationWarning(
@@ -238,10 +240,13 @@ class Evaluator:
                 })
 
                 solver_options.update(solver_extra_options)
-                
+
+                model_solver = self.model
+                if solver == UDESolver:
+                    model_params, model_solver = eqx.partition(self.model, eqx.is_array)             
 
                 self._solver = solver(
-                    model=self.model,
+                    model=model_solver,
                     post_processing=self.post_processing,
                     
                     coordinates=frozen_coordinates,
@@ -347,7 +352,10 @@ class Evaluator:
         if seed is not None:
             self._signature.update({"seed": seed})
 
-        if isinstance(self._solver, SolverBase):
+        if isinstance(self._solver, UDESolver):
+            params, static = eqx.partition(self.model, eqx.is_array)
+            Y_ = self._solver(params, **self.parameters)
+        elif isinstance(self._solver, SolverBase):
             Y_ = self._solver(**self.parameters)
 
         else:

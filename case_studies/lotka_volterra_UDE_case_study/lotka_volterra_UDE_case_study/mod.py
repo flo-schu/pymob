@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import jax
 
+@eqx.filter_jit
 def transformWeightsBackwards(in_size, out_size, width_size, depth, list):
     """
     Transform a list of MLP weights to a nested Array/list structure
@@ -56,6 +57,7 @@ def transformWeightsBackwards(in_size, out_size, width_size, depth, list):
             res.append(weights)
     return res
 
+@eqx.filter_jit
 def transformBiasBackwards(out_size, width_size, depth, list):
     """
     Transform a list of MLP bias to a nested Array/list structure
@@ -96,6 +98,7 @@ def transformBiasBackwards(out_size, width_size, depth, list):
             res.append(bias)
     return res
 
+@eqx.filter_jit
 def transformWeights(weights):
     """
     Transform a nested Array/list structure of MLP bias to a simple list.
@@ -131,6 +134,7 @@ def transformWeights(weights):
             list.append(el.item())
     return in_size, out_size, width_size, depth, list
 
+@eqx.filter_jit
 def transformBias(bias):
     """
     Transform a nested Array/list structure of MLP bias to a simple list.
@@ -161,6 +165,7 @@ def transformBias(bias):
             list.append(el.item())
     return out_size, width_size, depth, list
 
+@eqx.filter_jit
 def getFuncWeights(func):
     """
     Returns the weights of the MLP inside a Func object in a nested
@@ -170,6 +175,7 @@ def getFuncWeights(func):
     get_weights = lambda m: [x.weight for x in jax.tree_util.tree_leaves(m, is_leaf=is_linear) if is_linear(x)]
     return get_weights(func.mlp)
 
+@eqx.filter_jit
 def getFuncBias(func):
     """
     Returns the bias of the MLP inside a Func object in a nested
@@ -207,8 +213,8 @@ class Func(eqx.Module):
         state.
     """
 
-    alpha: jnp.array
-    delta: jnp.array
+    alpha: float
+    delta: float
     mlp: eqx.nn.MLP
     nnUDE_type: str
 
@@ -263,7 +269,41 @@ class Func(eqx.Module):
         self.mlp = mlp
         self.nnUDE_type = nnUDE_type
 
-    def __call__(self, t, y, *args):
+    # def __call__(self, t, y, *args):
+    #     """
+    #     Returns the growth rates of predator and prey depending on their current state.
+
+    #     Parameters
+    #     ----------
+    #     t : scalar
+    #         Just here to fulfill the requirements by diffeqsolve(). Has no effect and
+    #         can be set to None.
+    #     y : jax.ArrayImpl
+    #         Array containing two values: the current abundance of prey and predator,
+    #         respectively.
+
+    #     Returns:
+    #     --------
+    #     jax.ArrayImpl
+    #         An array containing the growth rates of prey and predators, respectively.
+    #     """
+
+    #     prey, predator = y
+    #     dprey_dt_ode = jax.lax.stop_gradient(self.alpha) * prey 
+    #     dpredator_dt_ode = - jax.lax.stop_gradient(self.delta) * predator
+    #     if self.nnUDE_type == "x":
+    #         dprey_dt_nn, dpredator_dt_nn = self.mlp(y) * jnp.stack(prey, predator)
+    #     elif self.nnUDE_type == "tanh(x)":
+    #         dprey_dt_nn, dpredator_dt_nn = self.mlp(y) * jnp.array([jnp.tanh(prey).astype(float), jnp.tanh(predator).astype(float)])
+    #     elif self.nnUDE_type == "tanh(10x)":
+    #         dprey_dt_nn, dpredator_dt_nn = self.mlp(y) * jnp.array([jnp.tanh(10*prey).astype(float), jnp.tanh(10*predator).astype(float)])
+
+    #     dprey_dt = dprey_dt_ode + dprey_dt_nn
+    #     dpredator_dt = dpredator_dt_ode + dpredator_dt_nn
+
+    #     return jnp.array([dprey_dt.astype(float), dpredator_dt.astype(float)])
+
+    def __call__(self, t, y, alpha, delta):
         """
         Returns the growth rates of predator and prey depending on their current state.
 
@@ -283,27 +323,34 @@ class Func(eqx.Module):
         """
 
         prey, predator = y
-        dprey_dt_ode = jax.lax.stop_gradient(self.alpha) * prey 
-        dpredator_dt_ode = - jax.lax.stop_gradient(self.delta) * predator
+        y_mlp = jnp.array([x for x in y])
+        dprey_dt_ode = alpha * prey 
+        dpredator_dt_ode = - delta * predator
         if self.nnUDE_type == "x":
-            dprey_dt_nn, dpredator_dt_nn = self.mlp(y) * jnp.stack(prey, predator)
+            dprey_dt_nn, dpredator_dt_nn = self.mlp(y_mlp) * jnp.stack(prey, predator)
         elif self.nnUDE_type == "tanh(x)":
-            dprey_dt_nn, dpredator_dt_nn = self.mlp(y) * jnp.array([jnp.tanh(prey).astype(float), jnp.tanh(predator).astype(float)])
+            dprey_dt_nn, dpredator_dt_nn = self.mlp(y_mlp) * jnp.array([jnp.tanh(prey).astype(float), jnp.tanh(predator).astype(float)])
         elif self.nnUDE_type == "tanh(10x)":
-            dprey_dt_nn, dpredator_dt_nn = self.mlp(y) * jnp.array([jnp.tanh(10*prey).astype(float), jnp.tanh(10*predator).astype(float)])
+            dprey_dt_nn, dpredator_dt_nn = self.mlp(y_mlp) * jnp.array([jnp.tanh(10*prey).astype(float), jnp.tanh(10*predator).astype(float)])
 
         dprey_dt = dprey_dt_ode + dprey_dt_nn
         dpredator_dt = dpredator_dt_ode + dpredator_dt_nn
 
-        return jnp.array([dprey_dt.astype(float), dpredator_dt.astype(float)])
+        return jnp.array(dprey_dt.astype(float)), jnp.array(dpredator_dt.astype(float))
     
+    @eqx.filter_jit
     def __hash__(self):
-        a = (self.alpha.item(), self.delta.item(), self.nnUDE_type)
-        b1 = transformBias(getFuncBias(self))
-        b2 = transformWeights(getFuncWeights(self))
-        b = b2[0:4] + tuple(b1[3]) + tuple(b2[4])
-        c = a + b
-        return c.__hash__()
+        params, static = eqx.partition(self, eqx.is_array)
+        hash1 = static.mlp.__hash__()
+        hash2 = 0
+        if params.alpha != None:        
+            a = (params.alpha.item(), params.delta.item(), params.nnUDE_type)
+            b1 = transformBias(getFuncBias(params))
+            b2 = transformWeights(getFuncWeights(params))
+            b = b2[0:4] + tuple(b1[3]) + tuple(b2[4])
+            c = a + b
+            hash2 = c.__hash__()
+        return hash1 + hash2
     
     def __eq__(self, other):
         return type(self) == type(other) and self.__hash__() == other.__hash__()
