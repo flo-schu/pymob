@@ -26,6 +26,7 @@ from pymob.sim.base import stack_variables
 from pymob.sim.config import Config, ParameterDict, DataVariable, Param, NumericArray
 from pymob.sim.plot import SimulationPlot
 from pymob.sim.report import Report
+from pymob.solvers.diffrax import UDESolver
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -563,7 +564,10 @@ class SimulationBase:
     def infer_ode_states(self) -> int:
         if self.config.simulation.n_ode_states == -1:
             try: 
-                return_args = get_return_arguments(self.model)
+                if self.solver == UDESolver:
+                    return_args = get_return_arguments(self.model.__call__)
+                else:
+                    return_args = get_return_arguments(self.model)
                 n_ode_states = len(return_args)
                 warnings.warn(
                     "The number of ODE states was not specified in "
