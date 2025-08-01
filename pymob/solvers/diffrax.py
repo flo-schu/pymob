@@ -375,6 +375,9 @@ class UDESolver(JaxSolver):
     def odesolve(self, model_params, y0, args, x_in):
         model = eqx.combine(self.model, model_params)
         f = lambda t, y, args: model(t, y, *args)
+
+        y0 = tuple(x[0] for x in jnp.array(y0))
+        args = tuple([x[0] for x in args])
         
         if len(x_in) > 0:
             if len(x_in) > 2:
@@ -422,9 +425,6 @@ class UDESolver(JaxSolver):
             stepsize_controller = ClipStepSizeController(stepsize_controller, jump_ts=jumps)
         else:
             pass
-
-        y0 = tuple(x[0] for x in jnp.array(y0))
-        args = tuple([x[0] for x in args])
 
         sol = diffeqsolve(
             terms=term, 

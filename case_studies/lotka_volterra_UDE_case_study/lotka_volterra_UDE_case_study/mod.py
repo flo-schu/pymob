@@ -354,3 +354,173 @@ class Func(eqx.Module):
     
     def __eq__(self, other):
         return type(self) == type(other) and self.__hash__() == other.__hash__()
+    
+class FuncXin(eqx.Module):
+    """
+    A class used to represent the non-negative UDE representation of the 
+    Lotka Volterra model.
+
+    ...
+
+    Attributes
+    ----------
+    alpha : jnp.array
+        A jax.numpy array containing a single float value representing the
+        per-capita growth rate of prey.
+    delta : jnp.array
+        A jax.numpy array containing a single float value representing the
+        per-capita death rate of predators.
+    mlp : eqx.nn.MLP
+        A multilayer perceptron representing the missing dynamics.
+    nnUDE_type : str
+        The selected way non-negativity is achieved. Options are "x", "tanh(x)"
+        and "tanh(10x)".
+
+    Methods
+    -------
+    __call__(self, t, y, *args)
+        Returns the growth rates of predator and prey depending on their current
+        state.
+    """
+
+    alpha: float
+    delta: float
+    mlp: eqx.nn.MLP
+    nnUDE_type: str
+
+    def __init__(self, width_size, depth, theta_true, nnUDE_type, weights=None, bias=None, *, key, **kwargs):
+        """
+        Parameters
+        ----------
+        width_size : int
+            The width of the MLP layers (excluding the output layer which is of the
+            width 1).
+        depth : int
+            The amount of layers after the input layer (that is, the MLP has depth + 1
+            layers in total).
+        theta_true : list
+            A list of four floats representing the parameters of the Lotka Volterra model
+            [alpha, beta, gamma, delta].
+        nnUDE_type : str
+            The selected way non-negativity is achieved. Options are "x", "tanh(x)"
+            and "tanh(10x)".
+        key : jax.ArrayImpl, optional
+            A key used to make stochastic processes reproducible. If no key is provided,
+            the randomly chosen weights and bias within the multilayer perceptron may
+            differ between runs.
+        weights : list, optional
+            List containing weights for the neural network embedded in the UDE. Needs
+            to follow the structure given by the transformWeights() function. If set,
+            the randomly chosen weights will be overwritten, otherwise they stay as
+            they are.
+        bias : list, optional
+            List containing bias for the neural network embedded in the UDE. Needs to
+            follow the structure given by the transformBiass() function. If set, the
+            randomly chosen bias will be overwritten, otherwise they stay as they are.
+        """
+
+        super().__init__(**kwargs)
+        mlp = eqx.nn.MLP(in_size=2, out_size=2, width_size=width_size, depth=depth, activation=jnn.softplus, key=key)
+
+        is_linear = lambda x: isinstance(x, eqx.nn.Linear)
+
+        if weights != None:
+            get_weights = lambda m: [x.weight for x in jax.tree_util.tree_leaves(m, is_leaf=is_linear) if is_linear(x)]
+            new_weights = transformWeightsBackwards(in_size = mlp.in_size, out_size = mlp.out_size, width_size = mlp.width_size, depth = mlp.depth, list = weights)
+            mlp = eqx.tree_at(get_weights, mlp, new_weights)
+
+        if bias != None:
+            get_bias = lambda m: [x.bias for x in jax.tree_util.tree_leaves(m, is_leaf=is_linear) if is_linear(x)]
+            new_bias = transformBiasBackwards(out_size = mlp.out_size, width_size = mlp.width_size, depth = mlp.depth, list = bias)
+            mlp = eqx.tree_at(get_bias, mlp, new_bias)
+
+        self.alpha = theta_true[0]
+        self.delta = theta_true[3]
+        self.mlp = mlp
+        self.nnUDE_type = nnUDE_type
+
+    # def __call__(self, t, y, *args):
+    #     """
+    #     Returns the growth rates of predator and prey depending on their current state.
+
+    #     Parameters
+    #     ----------
+    #     t : scalar
+    #         Just here to fulfill the requirements by diffeqsolve(). Has no effect and
+    #         can be set to None.
+    #     y : jax.ArrayImpl
+    #         Array containing two values: the current abundance of prey and predator,
+    #         respectively.
+
+    #     Returns:
+    #     --------
+    #     jax.ArrayImpl
+    #         An array containing the growth rates of prey and predators, respectively.
+    #     """
+
+    #     prey, predator = y
+    #     dprey_dt_ode = jax.lax.stop_gradient(self.alpha) * prey 
+    #     dpredator_dt_ode = - jax.lax.stop_gradient(self.delta) * predator
+    #     if self.nnUDE_type == "x":
+    #         dprey_dt_nn, dpredator_dt_nn = self.mlp(y) * jnp.stack(prey, predator)
+    #     elif self.nnUDE_type == "tanh(x)":
+    #         dprey_dt_nn, dpredator_dt_nn = self.mlp(y) * jnp.array([jnp.tanh(prey).astype(float), jnp.tanh(predator).astype(float)])
+    #     elif self.nnUDE_type == "tanh(10x)":
+    #         dprey_dt_nn, dpredator_dt_nn = self.mlp(y) * jnp.array([jnp.tanh(10*prey).astype(float), jnp.tanh(10*predator).astype(float)])
+
+    #     dprey_dt = dprey_dt_ode + dprey_dt_nn
+    #     dpredator_dt = dpredator_dt_ode + dpredator_dt_nn
+
+    #     return jnp.array([dprey_dt.astype(float), dpredator_dt.astype(float)])
+
+    def __call__(self, t, y, x_in, alpha, delta):
+        """
+        Returns the growth rates of predator and prey depending on their current state.
+
+        Parameters
+        ----------
+        t : scalar
+            Just here to fulfill the requirements by diffeqsolve(). Has no effect and
+            can be set to None.
+        y : jax.ArrayImpl
+            Array containing two values: the current abundance of prey and predator,
+            respectively.
+
+        Returns:
+        --------
+        jax.ArrayImpl
+            An array containing the growth rates of prey and predators, respectively.
+        """
+
+        prey, predator = y
+        y_mlp = jnp.array([x for x in y])
+        dprey_dt_ode = alpha * prey 
+        dpredator_dt_ode = - delta * predator
+        if self.nnUDE_type == "x":
+            dprey_dt_nn, dpredator_dt_nn = self.mlp(y_mlp) * jnp.stack(prey, predator)
+        elif self.nnUDE_type == "tanh(x)":
+            dprey_dt_nn, dpredator_dt_nn = self.mlp(y_mlp) * jnp.array([jnp.tanh(prey).astype(float), jnp.tanh(predator).astype(float)])
+        elif self.nnUDE_type == "tanh(10x)":
+            dprey_dt_nn, dpredator_dt_nn = self.mlp(y_mlp) * jnp.array([jnp.tanh(10*prey).astype(float), jnp.tanh(10*predator).astype(float)])
+
+        dprey_dt = dprey_dt_ode + dprey_dt_nn + x_in.evaluate(t)
+        dpredator_dt = dpredator_dt_ode + dpredator_dt_nn
+
+        return jnp.array(dprey_dt.astype(float)), jnp.array(dpredator_dt.astype(float))
+    
+    @eqx.filter_jit
+    def __hash__(self):
+        params, static = eqx.partition(self, eqx.is_array)
+        hash1 = static.mlp.__hash__()
+        hash2 = 0
+        if params.alpha != None:        
+            a = (params.alpha.item(), params.delta.item(), params.nnUDE_type)
+            b1 = transformBias(getFuncBias(params))
+            b2 = transformWeights(getFuncWeights(params))
+            b = b2[0:4] + tuple(b1[3]) + tuple(b2[4])
+            c = a + b
+            hash2 = c.__hash__()
+        return hash1 + hash2
+    
+    def __eq__(self, other):
+        return type(self) == type(other) and self.__hash__() == other.__hash__()
