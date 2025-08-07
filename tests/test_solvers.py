@@ -2,6 +2,8 @@ import os
 import time
 import numpy as np
 import pytest
+import diffrax
+import jax.numpy as jnp
 
 from pymob.sim.config import Param, DataVariable
 from pymob.solvers import JaxSolver, SolverBase
@@ -9,7 +11,8 @@ from pymob.solvers.base import rect_interpolation
 from tests.fixtures import (
     init_simulation_casestudy_api, 
     init_lotkavolterra_simulation_replicated,
-    setup_solver
+    setup_solver,
+    init_lotka_volterra_UDE_case_study_from_settings
 )
 
 from pymob import SimulationBase
@@ -170,6 +173,34 @@ def test_solver_dimensional_order():
     np.testing.assert_equal(
         (res_id_time.to_array() - res_time_id.to_array()).values, 0
     )
+
+def test_UDE_solver():
+    sim = init_lotka_volterra_UDE_case_study_from_settings()
+
+    sim.dispatch_constructor()
+
+    evaluator = sim.dispatch(theta={"delta":1.8})
+    evaluator()
+    data_res = evaluator.results
+
+    f = lambda t, y, args: sim.model(t, y, *args)
+    t = sim.coordinates["time"]
+
+    data_res2 = diffrax.diffeqsolve(diffrax.ODETerm(f), 
+        diffrax.Tsit5(),
+        t0=t[0],
+        t1=t[-1],
+        dt0=t[1] - t[0],
+        y0=(jnp.array(sim.model_parameters["y0"]["prey"].to_numpy()), jnp.array(sim.model_parameters["y0"]["predator"].to_numpy())),
+        args=(jnp.array(sim.model_parameters["parameters"]["alpha"]),jnp.array(sim.model_parameters["parameters"]["delta"])),
+        stepsize_controller=diffrax.PIDController(rtol=sim.evaluator._solver.rtol, atol=sim.evaluator._solver.atol, pcoeff=sim.evaluator._solver.pcoeff, icoeff=sim.evaluator._solver.icoeff, dcoeff=sim.evaluator._solver.dcoeff),
+        saveat=diffrax.SaveAt(ts=t),
+        max_steps=sim.config.jaxsolver.max_steps,
+        throw = False,
+    )
+
+    assert(jnp.max(jnp.abs((data_res["prey"].to_numpy() - data_res2.ys[0]) / (data_res["prey"].to_numpy()))) < 1e-3)
+    assert(jnp.max(jnp.abs((data_res["predator"].to_numpy() - data_res2.ys[1]) / (data_res["predator"].to_numpy()))) < 1e-3)
 
 
 

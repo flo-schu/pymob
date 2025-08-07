@@ -2,15 +2,20 @@ from typing import Literal
 import numpy as np
 import xarray as xr
 import pytest
+import jax.random as jr
+import jax.numpy as jnp
 
-from pymob.solvers.diffrax import JaxSolver
+from pymob.solvers.diffrax import JaxSolver, UDESolver
 from pymob.sim.config import Config, DataVariable, Modelparameters
 from pymob.sim.parameters import Param, RandomVariable, Expression, OptionRV
 from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
 from pymob.examples import linear_model
 
-from lotka_volterra_case_study.sim import Simulation
+# These changes have only been made to accomodate the way I installed the case studies and
+# should not be pulled.
+from case_studies.lotka_volterra_case_study.lotka_volterra_case_study.sim import Simulation
+from case_studies.lotka_volterra_UDE_case_study.lotka_volterra_UDE_case_study.mod import Func
 
 rng = np.random.default_rng(1)
 
@@ -164,3 +169,17 @@ def create_simulation_for_test_numpyro_behavior():
     sim.config.create_directory("scenario", force=True)
     sim.config.save(force=True)
     
+def init_lotka_volterra_UDE_case_study_from_settings():
+
+    config = Config("case_studies\\lotka_volterra_UDE_case_study\\scenarios\\UDETest\\settings.cfg")
+    sim = SimulationBase(config)
+    sim.initialize(config)
+
+    key = jr.PRNGKey(5678)
+    data_key, model_key, loader_key = jr.split(key, 3)
+    sim.model = Func(10,10,(jnp.array(1.3),jnp.array(0.9),jnp.array(0.8),jnp.array(1.3)),"tanh(x)",key=model_key)
+
+    sim.model_parameters["parameters"] = sim.config.model_parameters.value_dict
+    sim.solver = UDESolver
+
+    return sim
