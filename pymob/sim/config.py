@@ -793,6 +793,17 @@ class Numpyro(PymobModel):
     svi_iterations: Annotated[int, to_str] = 10_000
     svi_learning_rate: Annotated[float, to_str] = 0.0001
 
+class Optax(PymobModel):
+    UDE_parameters: Modelparameters = Modelparameters()
+    MLP_weight_dist: OptionRV = "normal()"
+    MLP_bias_dist: OptionRV = "normal()"
+    loss_function: Callable = lambda x_obs, x_pred: (x_obs - x_pred)**2
+    length_strategy: list = [0.1, 1]
+    steps_strategy: list = [1000]*2
+    lr_strategy: list = [3e-3]*2
+    clip_strategy: list = [0.1]*2
+    batch_size: int = 1
+
 class Report(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
     
@@ -880,6 +891,7 @@ class Config(BaseModel):
     inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")
     inference_pymoo: Pymoo = Field(default=Pymoo(), alias="inference.pymoo")
     inference_numpyro: Numpyro = Field(default=Numpyro(), alias="inference.numpyro")
+    inference_optax: Optax = Field(default=Optax(), alias="inference.optax")
     report: Report = Field(default=Report(), alias="report")
         
     @property

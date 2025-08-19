@@ -1152,6 +1152,15 @@ class SimulationBase:
                 from pymob.inference.scipy_backend import ScipyBackend
 
             self.inferer = ScipyBackend(simulation=self)
+
+        elif backend == "optax":
+            optax = import_optional_dependency(
+                "optax", errors="raise", extra=extra.format("optax")
+            )
+            if optax is not None:
+                from pymob.inference.optax_backend import OptaxBackend
+
+            self.inferer = OptaxBackend(simulation=self)
     
     
     

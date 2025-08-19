@@ -459,3 +459,46 @@ class UDESolver(JaxSolver):
         res_dict = OrderedDict({v:val for v, val in zip(odestates, sol)})
 
         return self.post_processing(res_dict, jnp.array(self.x), interp, *ppargs)
+    
+    def standalone_solver(self, model, ts, y0):
+        """
+        Returns a time series (evaluated at the time points defined by ts) of the model 
+        defined in Func starting from an initial condition y0.
+
+        Parameters
+        ----------
+        ts : jax.ArrayImpl
+            An array containing all the time points the timeseries should be evaluated for.
+        y0 : jax.ArrayImpl
+            An array containg the initial condition for the simulation.
+
+        Returns:
+        --------
+        jax.ArrayImpl
+            An array containing the simulated time series for both state variables.
+        """
+
+        if y0.shape == ():
+            y0 = tuple([y0])
+        else:
+            y0 = tuple(x for x in y0)
+
+        f = lambda t, y, args: model(t,y)
+
+        sol = diffrax.diffeqsolve(
+            diffrax.ODETerm(f),
+            self.diffrax_solver(),
+            t0=ts[0],
+            t1=ts[-1],
+            dt0=ts[1] - ts[0],
+            y0=y0,
+            stepsize_controller=PIDController(
+                rtol=self.rtol, atol=self.atol,
+                pcoeff=self.pcoeff, icoeff=self.icoeff, dcoeff=self.dcoeff, 
+            ),
+            adjoint=RecursiveCheckpointAdjoint(),
+            saveat=diffrax.SaveAt(ts=ts),
+            max_steps=int(self.max_steps),
+            throw = False,
+        )
+        return sol.ys
