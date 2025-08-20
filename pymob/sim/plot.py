@@ -5,6 +5,7 @@ import xarray as xr
 import arviz as az
 import numpy as np
 import numpy.typing as npt
+import jax.numpy as jnp
 
 from pymob.sim.config import Config
 from matplotlib import pyplot as plt
@@ -328,4 +329,73 @@ class SimulationPlot:
             f"{self.config.case_study.output_path}/{filename}"
         )
 
+class OptaxPlot:
+    figure: Figure
+    axes: Axes
+
+    def __init__(self, observations, models, solver, config):
+
+        self.observations = observations
+        self.models = models
+        self.solver = solver
+        self.config = config
+
+        self.plot_num = self.config.inference_optax.multiple_runs_plot
+
+        if self.config.simulation.batch_dimension in [x for x in self.observations.sizes.keys()]:
+            no_datasets = self.observations.sizes[self.config.simulation.batch_dimension]
+        else:
+            no_datasets = 1
+
+        if no_datasets < self.plot_num:
+            self.plot_num = no_datasets
+            warnings.warn(f"The requested number of plots ({self.config.inference_optax.multiple_runs_plot}) exceeds the number of available datasets ({no_datasets}). Therefore, only {no_datasets} rows are being plotted.", UserWarning)            
+
+        self.ts = self.observations.time.values
+        y0s_unstacked = jnp.array([y.values for (x,y) in self.observations.isel(time=0).items()])
+        self.y0s = jnp.stack(y0s_unstacked, axis=(len(y0s_unstacked.shape)-1))
+
+        self.ys = jnp.array([[self.solver(model, self.ts, self.y0s[i]) for model in self.models] for i in jnp.arange(self.plot_num)])
+        self.n_ode_states = self.ys[0].shape[1]
         
+        self.plot_model_predictions()
+
+    def plot_model_predictions(self):
+
+        data_vars = [x for x in self.observations.data_vars.keys()]
+
+        if self.n_ode_states <= 3:
+            fig_width = self.n_ode_states * 8
+            fig_height = self.plot_num * 6
+        else:
+            fig_width = 25
+            fig_heigth = 25 * 3/4 * (self.plot_num/self.n_ode_states)
+
+        self.figure, self.axes = plt.subplots(ncols=self.n_ode_states, nrows=self.plot_num, figsize=(fig_width,fig_height))
+
+        for j in jnp.arange(self.plot_num):
+
+            obs_unstacked = jnp.array([y.values for (x,y) in self.observations.isel(batch_id=int(j)).items()])
+            obs = jnp.stack(obs_unstacked, axis=(len(obs_unstacked.shape)-1))
+
+            for i in jnp.arange(self.n_ode_states):
+
+                preds = self.ys[j,:,i]
+                maxima = jnp.array([jnp.max(preds[:,i]) for i in jnp.arange(preds.shape[1])])
+                minima = jnp.array([jnp.min(preds[:,i]) for i in jnp.arange(preds.shape[1])])
+
+                best_model_results = self.ys[j][0][i]
+
+                self.axes[j][i].plot(self.ts, obs[:,i], "o", markersize=5, label="observations")
+                self.axes[j][i].plot(self.ts, best_model_results, c="grey", label="model with lowest loss")
+                self.axes[j][i].fill_between(self.ts, minima, maxima, color="lightgrey", label="range of all models")
+
+                self.axes[j][i].set(xlabel = "time", ylabel = data_vars[i])
+                self.axes[j][i].legend()
+
+        self.figure.show()
+    
+    def save(self, filename):
+        self.figure.savefig(
+            f"{self.config.case_study.output_path}/{filename}"
+        )

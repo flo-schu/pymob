@@ -15,6 +15,7 @@ from numpy.typing import NDArray
 import xarray as xr
 import dpath as dp
 from sklearn.preprocessing import MinMaxScaler
+import equinox as eqx
 
 import pymob
 from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
@@ -24,7 +25,7 @@ from pymob.utils.misc import benchmark
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
 from pymob.sim.config import Config, ParameterDict, DataVariable, Param, NumericArray
-from pymob.sim.plot import SimulationPlot
+from pymob.sim.plot import SimulationPlot, OptaxPlot
 from pymob.sim.report import Report
 from pymob.solvers.diffrax import UDESolver
 
@@ -1831,17 +1832,30 @@ class SimulationBase:
         Placeholder method. Minimally plots the posterior predictions of a 
         simulation.
         """
+        from pymob.inference.optax_backend import OptaxBackend
 
-        simplot = self.SimulationPlot(
-            observations=self.observations,
-            idata=self.inferer.idata,
-            coordinates=self.dimension_coords,
-            config=self.config,
-            idata_groups=["posterior_predictive"],
-            **plot_kwargs
-        )
+        if isinstance(self.inferer, OptaxBackend):
 
-        simplot.plot_data_variables()
+            self.SimulationPlot = OptaxPlot
+
+            simplot = self.SimulationPlot(
+                observations=self.observations,
+                models=self.inferer.optimized_models,
+                solver=eqx.filter_jit(self.evaluator._solver.standalone_solver),
+                config=self.config,
+            )
+        else:
+            simplot = self.SimulationPlot(
+                observations=self.observations,
+                idata=self.inferer.idata,
+                coordinates=self.dimension_coords,
+                config=self.config,
+                idata_groups=["posterior_predictive"],
+                **plot_kwargs
+            )
+
+            simplot.plot_data_variables()
+
         simplot.save("posterior_predictive.png")
 
 

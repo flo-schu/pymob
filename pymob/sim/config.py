@@ -803,6 +803,9 @@ class Optax(PymobModel):
     lr_strategy: list = [3e-3]*2
     clip_strategy: list = [0.1]*2
     batch_size: int = 1
+    multiple_runs_target: int = 10
+    multiple_runs_limit: int = 50
+    multiple_runs_plot: int = 1
 
 class Report(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
