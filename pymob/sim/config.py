@@ -174,6 +174,14 @@ def string_to_list(option: Union[List, str]) -> List:
         return [option] 
     else:
         return [i.strip() for i in option.split(" ")]
+    
+
+def string_to_floatlist(option: Union[List, str]) -> List:
+    return [float(i) for i in string_to_list(option)]
+
+
+def string_to_intlist(option: Union[List, str]) -> List:
+    return [int(i) for i in string_to_list(option)]
 
 
 def string_to_tuple(option: Union[List, str]) -> Tuple:
@@ -792,20 +800,43 @@ class Numpyro(PymobModel):
     # svi parameters
     svi_iterations: Annotated[int, to_str] = 10_000
     svi_learning_rate: Annotated[float, to_str] = 0.0001
+    
+
+def string_to_modelparams(option:str|Modelparameters) -> Modelparameters:
+    if isinstance(option, Modelparameters):
+        return option
+    else:
+        modelparams_dict = Modelparameters()
+        for substring in option.split("  "):
+            name, value = substring.split(" = ")
+            setattr(modelparams_dict, name, string_to_param(value))
+        return Modelparameters.model_validate(modelparams_dict, strict=False)
+
+def modelparams_to_string(mprms: Modelparameters):
+    string = ""
+    for (key, item) in mprms.all.items():
+        string += key + " = " + param_to_string(item) + "  "
+    return string
+
+serialize_modelparams_to_string = PlainSerializer(
+    modelparams_to_string, 
+    return_type=str, 
+    when_used="json"
+)
 
 class Optax(PymobModel):
-    UDE_parameters: Modelparameters = Modelparameters()
+    UDE_parameters: Annotated[Modelparameters, BeforeValidator(string_to_modelparams), serialize_modelparams_to_string] = Modelparameters()
     MLP_weight_dist: OptionRV = "normal()"
     MLP_bias_dist: OptionRV = "normal()"
     loss_function: Callable = lambda x_obs, x_pred: (x_obs - x_pred)**2
-    length_strategy: list = [0.1, 1]
-    steps_strategy: list = [1000]*2
-    lr_strategy: list = [3e-3]*2
-    clip_strategy: list = [0.1]*2
-    batch_size: int = 1
-    multiple_runs_target: int = 10
-    multiple_runs_limit: int = 50
-    multiple_runs_plot: int = 1
+    length_strategy: Annotated[list, BeforeValidator(string_to_floatlist), serialize_list_to_string] = [0.1, 1]
+    steps_strategy: Annotated[list, BeforeValidator(string_to_intlist), serialize_list_to_string] = [1000]*2
+    lr_strategy: Annotated[list, BeforeValidator(string_to_floatlist), serialize_list_to_string] = [3e-3]*2
+    clip_strategy: Annotated[list, BeforeValidator(string_to_floatlist), serialize_list_to_string] = [0.1]*2
+    batch_size: Annotated[int, to_str] = 1
+    multiple_runs_target: Annotated[int, to_str] = 10
+    multiple_runs_limit: Annotated[int, to_str] = 50
+    multiple_runs_plot: Annotated[int, to_str] = 1
 
 class Report(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
@@ -947,7 +978,7 @@ class Config(BaseModel):
             by_alias=True, 
             mode="json", 
             exclude_none=True,
-            exclude={"case_study": {"output_path", "data_path", "root", "init_root", "default_settings_path"}}
+            exclude={"case_study": {"output_path", "data_path", "root", "init_root", "default_settings_path"}, "inference_optax": {"loss_function"}}
         )
         self._config.update(**settings)
 

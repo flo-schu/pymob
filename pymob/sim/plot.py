@@ -349,7 +349,9 @@ class OptaxPlot:
 
         if no_datasets < self.plot_num:
             self.plot_num = no_datasets
-            warnings.warn(f"The requested number of plots ({self.config.inference_optax.multiple_runs_plot}) exceeds the number of available datasets ({no_datasets}). Therefore, only {no_datasets} rows are being plotted.", UserWarning)            
+            warnings.warn(
+                f"The requested number of plots ({self.config.inference_optax.multiple_runs_plot}) exceeds the number of available datasets ({no_datasets}). Therefore, only {no_datasets} rows are being plotted.", UserWarning
+            )            
 
         self.ts = self.observations.time.values
         y0s_unstacked = jnp.array([y.values for (x,y) in self.observations.isel(time=0).items()])
@@ -365,8 +367,8 @@ class OptaxPlot:
         data_vars = [x for x in self.observations.data_vars.keys()]
 
         if self.n_ode_states <= 3:
-            fig_width = self.n_ode_states * 8
-            fig_height = self.plot_num * 6
+            fig_width = self.n_ode_states * 6
+            fig_height = self.plot_num * 4.5
         else:
             fig_width = 25
             fig_heigth = 25 * 3/4 * (self.plot_num/self.n_ode_states)
@@ -386,14 +388,13 @@ class OptaxPlot:
 
                 best_model_results = self.ys[j][0][i]
 
-                self.axes[j][i].plot(self.ts, obs[:,i], "o", markersize=5, label="observations")
+                self.axes[j][i].plot(self.ts, obs[:,i], "o", markersize=3, label="observations")
                 self.axes[j][i].plot(self.ts, best_model_results, c="grey", label="model with lowest loss")
                 self.axes[j][i].fill_between(self.ts, minima, maxima, color="lightgrey", label="range of all models")
 
                 self.axes[j][i].set(xlabel = "time", ylabel = data_vars[i])
-                self.axes[j][i].legend()
 
-        self.figure.show()
+            self.axes[0][1].legend()
     
     def save(self, filename):
         self.figure.savefig(

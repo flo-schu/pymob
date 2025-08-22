@@ -5,6 +5,7 @@ from typing import (
     Protocol
 )
 import copy
+import warnings
 import jax.numpy as jnp
 import jax.random as jr
 import numpy as np
@@ -12,6 +13,7 @@ from functools import partial
 import optax
 import equinox as eqx
 import xarray as xr
+from tqdm import tqdm, TqdmWarning
 
 from case_studies.lotka_volterra_UDE_case_study.lotka_volterra_UDE_case_study.mod import Func
 
@@ -90,8 +92,23 @@ class OptaxBackend(InferenceBackend):
         if no_datasets < self.config.inference_optax.batch_size:
             raise ValueError(f"The specified training batch size ({self.config.inference_optax.batch_size}) is larger than the number of batches in the data ({no_datasets}).")
         
+        simulation.config.inference_optax.MLP_bias_dist = to_rv(simulation.config.inference_optax.MLP_bias_dist)
+        simulation.config.inference_optax.MLP_weight_dist = to_rv(simulation.config.inference_optax.MLP_weight_dist)
+        
     def run(self):
-        self.optimized_models = self.sort_models_by_global_loss(self.optimize_multiple_runs())[0]
+        models, success = self.optimize_multiple_runs()
+        losses = [self.global_loss(model) for model in models]
+
+        i = 0
+        print("\nrun number\tsuccessful?\tloss\n")
+        for (j, s) in enumerate(success):
+            if s:
+                print(f"run {j+1}\t\tyes\t\t{losses[i]}")
+                i += 1
+            else:
+                print(f"run {j+1}\t\tno\t\t---")
+
+        self.optimized_models = self.sort_models_by_global_loss(models)
 
     class StopOptimizing(Exception):
         pass
@@ -150,7 +167,7 @@ class OptaxBackend(InferenceBackend):
 
         dist = OptaxBackend._distribution(
             name="weights", 
-            random_variable=to_rv(cfg.MLP_weight_dist),
+            random_variable=cfg.MLP_weight_dist,
             dims=(),
             shape=()
         )
@@ -162,7 +179,7 @@ class OptaxBackend(InferenceBackend):
 
         dist = OptaxBackend._distribution(
             name="bias", 
-            random_variable=to_rv(cfg.MLP_bias_dist),
+            random_variable=cfg.MLP_bias_dist,
             dims=(),
             shape=()
         )
@@ -173,7 +190,7 @@ class OptaxBackend(InferenceBackend):
 
         return model_type(params, weights, bias, key=jr.PRNGKey(0))
     
-    def optimize_model(self, model):
+    def optimize_model(self, model, pbar):
         # transform observations to suitable format
         ts, ys, data_vars = self.transform_observations(self.simulation.observations)
         length_size = len(ts)
@@ -220,7 +237,7 @@ class OptaxBackend(InferenceBackend):
             model = eqx.apply_updates(model, updates)
             # jax.debug.breakpoint()
             return loss, model, opt_state
-
+        
         for lr, steps, length, clip in zip(self.config.inference_optax.lr_strategy, self.config.inference_optax.steps_strategy, self.config.inference_optax.length_strategy, self.config.inference_optax.clip_strategy):
             optim = optax.chain(optax.clip(clip), optax.adabelief(lr))
             opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
@@ -232,7 +249,7 @@ class OptaxBackend(InferenceBackend):
                     range(steps), dataloader((_ys,), self.config.inference_optax.batch_size, key=loader_key)
                 ):
                     loss, model, opt_state = make_step(_ts, yi, model, opt_state, loss_func)
-                    print("Length: " + str(length) + ", Step: " + str(step) + ", Loss: " + str(loss), end = "\r")
+                    pbar.update(length)
                     if not jnp.isfinite(loss).all():
                         raise self.StopOptimizing()
 
@@ -241,7 +258,7 @@ class OptaxBackend(InferenceBackend):
                     range(steps), [[_ys]] * steps
                 ):
                     loss, model, opt_state = make_step(_ts, yi, model, opt_state, loss_func)
-                    print("Length: " + str(length) + ", Step: " + str(step) + ", Loss: " + str(loss), end = "\r")
+                    pbar.update(length)
                     if not jnp.isfinite(loss).all():
                         raise self.StopOptimizing()
 
@@ -253,25 +270,42 @@ class OptaxBackend(InferenceBackend):
         tried_runs = successful_runs = 0
 
         models = []
+        success = []
 
-        while tried_runs < cfg.multiple_runs_limit and successful_runs < cfg.multiple_runs_target:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", type=TqdmWarning)
 
-            tried_runs += 1
-            print(f"Run {tried_runs}. So far {successful_runs} out of {tried_runs - 1} runs successful.")
-            
-            try:
+            pbar = tqdm(total = cfg.multiple_runs_target * jnp.sum(jnp.array(cfg.steps_strategy) * jnp.array(cfg.length_strategy)).item(), desc=f"{successful_runs} of {cfg.multiple_runs_target} runs completed")
 
-                optimizable_model = self.construct_model()
-                optimized_model = self.optimize_model(optimizable_model)
+            while tried_runs < cfg.multiple_runs_limit and successful_runs < cfg.multiple_runs_target:
 
-                models.append(optimized_model)
-                successful_runs += 1
+                runstr = "run" if (tried_runs-successful_runs)==1 else "runs"
+                pbar.set_postfix_str(f"{tried_runs - successful_runs} unsuccessful {runstr} so far")
+                tried_runs += 1
+                
+                try:
 
-            except self.StopOptimizing:
+                    optimizable_model = self.construct_model()
+                    optimized_model = self.optimize_model(optimizable_model, pbar)
 
-                pass
+                    models.append(optimized_model)
+                    successful_runs += 1
+                    pbar.set_description(f"{successful_runs} of {cfg.multiple_runs_target} runs completed")
+                    success.append(True)
 
-        return models
+                except self.StopOptimizing:
+
+                    success.append(False)
+                    pbar.n = successful_runs * jnp.sum(jnp.array(cfg.steps_strategy) * jnp.array(cfg.length_strategy)).item()
+                    pbar.last_print_n = successful_runs * jnp.sum(jnp.array(cfg.steps_strategy) * jnp.array(cfg.length_strategy)).item()
+                    pass
+
+        if successful_runs < cfg.multiple_runs_target:
+            warnings.warn(
+                f"Target number of successful runs was not reached before surpassing the specified number of tries. Only {successful_runs} optimized models were returned."
+            )
+
+        return models, success
     
     def global_loss(self, model):
         ts, ys, data_vars = self.transform_observations(self.simulation.observations)
@@ -301,4 +335,4 @@ class OptaxBackend(InferenceBackend):
             sorted_models.append(y)
             sorted_losses.append(x)
 
-        return sorted_models, sorted_losses
+        return sorted_models
