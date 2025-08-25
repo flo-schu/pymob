@@ -195,6 +195,12 @@ class OptaxBackend(InferenceBackend):
         ts, ys, data_vars = self.transform_observations(self.simulation.observations)
         length_size = len(ts)
 
+        if "x_in" in self.simulation.model_parameters.keys():
+            x_in_temp = self.transform_observations(self.simulation.model_parameters["x_in"])
+            x_in = (x_in_temp[0], x_in_temp[1][0,0])
+        else:
+            x_in = None
+
         multiple_datasets = self.config.simulation.batch_dimension in [x for x in self.simulation.observations.sizes.keys()]
         if not multiple_datasets:
             ys = jnp.expand_dims(ys,0)
@@ -221,8 +227,8 @@ class OptaxBackend(InferenceBackend):
                     end = start + batch_size
 
         @eqx.filter_value_and_grad
-        def grad_loss(model, ti, yi, loss_func):
-            y_pred = jnp.array(jax.vmap(self.simulation.evaluator._solver.standalone_solver, in_axes=(None, None, 0))(model, ti, yi[:, 0]))
+        def grad_loss(model, ti, yi, x_in, loss_func):
+            y_pred = jnp.array(jax.vmap(self.simulation.evaluator._solver.standalone_solver, in_axes=(None, None, 0, None))(model, ti, yi[:, 0], x_in))
 
             if y_pred.shape[0] > 1:
                 y_pred = jnp.stack(y_pred, axis = (len(y_pred.shape)-1))
@@ -231,8 +237,8 @@ class OptaxBackend(InferenceBackend):
             return jnp.mean(losses)
 
         @eqx.filter_jit
-        def make_step(ti, yi, model, opt_state, loss_func):
-            loss, grads = grad_loss(model, ti, yi, loss_func)
+        def make_step(ti, yi, x_in, model, opt_state, loss_func):
+            loss, grads = grad_loss(model, ti, yi, x_in, loss_func)
             updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_inexact_array))
             model = eqx.apply_updates(model, updates)
             # jax.debug.breakpoint()
@@ -248,7 +254,7 @@ class OptaxBackend(InferenceBackend):
                 for step, (yi,) in zip(
                     range(steps), dataloader((_ys,), self.config.inference_optax.batch_size, key=loader_key)
                 ):
-                    loss, model, opt_state = make_step(_ts, yi, model, opt_state, loss_func)
+                    loss, model, opt_state = make_step(_ts, yi, x_in, model, opt_state, loss_func)
                     pbar.update(length)
                     if not jnp.isfinite(loss).all():
                         raise self.StopOptimizing()
@@ -257,7 +263,7 @@ class OptaxBackend(InferenceBackend):
                 for step, (yi,) in zip(
                     range(steps), [[_ys]] * steps
                 ):
-                    loss, model, opt_state = make_step(_ts, yi, model, opt_state, loss_func)
+                    loss, model, opt_state = make_step(_ts, yi, x_in, model, opt_state, loss_func)
                     pbar.update(length)
                     if not jnp.isfinite(loss).all():
                         raise self.StopOptimizing()
@@ -273,7 +279,7 @@ class OptaxBackend(InferenceBackend):
         success = []
 
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", type=TqdmWarning)
+            warnings.filterwarnings("ignore", category=TqdmWarning)
 
             pbar = tqdm(total = cfg.multiple_runs_target * jnp.sum(jnp.array(cfg.steps_strategy) * jnp.array(cfg.length_strategy)).item(), desc=f"{successful_runs} of {cfg.multiple_runs_target} runs completed")
 
@@ -310,12 +316,18 @@ class OptaxBackend(InferenceBackend):
     def global_loss(self, model):
         ts, ys, data_vars = self.transform_observations(self.simulation.observations)
 
+        if "x_in" in self.simulation.model_parameters.keys():
+            x_in_temp = self.transform_observations(self.simulation.model_parameters["x_in"])
+            x_in = (x_in_temp[0], x_in_temp[1][0,0])
+        else:
+            x_in = None
+
         def loss_func(y_obs, y_pred):
             return self.config.inference_optax.loss_function(jnp.where(jnp.isnan(y_obs), y_pred, y_obs), y_pred)
             
         @eqx.filter_jit
         def loss(model, ti, yi, loss_func):
-            y_pred = jnp.array(jax.vmap(self.simulation.evaluator._solver.standalone_solver, in_axes=(None, None, 0))(model, ti, yi[:, 0]))
+            y_pred = jnp.array(jax.vmap(self.simulation.evaluator._solver.standalone_solver, in_axes=(None, None, 0, None))(model, ti, yi[:, 0], x_in))
 
             if y_pred.shape[0] > 1:
                 y_pred = jnp.stack(y_pred, axis = (len(y_pred.shape)-1))

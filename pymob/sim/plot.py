@@ -333,7 +333,7 @@ class OptaxPlot:
     figure: Figure
     axes: Axes
 
-    def __init__(self, observations, models, solver, config):
+    def __init__(self, observations, x_in, models, solver, config):
 
         self.observations = observations
         self.models = models
@@ -357,7 +357,7 @@ class OptaxPlot:
         y0s_unstacked = jnp.array([y.values for (x,y) in self.observations.isel(time=0).items()])
         self.y0s = jnp.stack(y0s_unstacked, axis=(len(y0s_unstacked.shape)-1))
 
-        self.ys = jnp.array([[self.solver(model, self.ts, self.y0s[i]) for model in self.models] for i in jnp.arange(self.plot_num)])
+        self.ys = jnp.array([[self.solver(model, self.ts, self.y0s[i], x_in) for model in self.models] for i in jnp.arange(self.plot_num)])
         self.n_ode_states = self.ys[0].shape[1]
         
         self.plot_model_predictions()
@@ -371,7 +371,7 @@ class OptaxPlot:
             fig_height = self.plot_num * 4.5
         else:
             fig_width = 25
-            fig_heigth = 25 * 3/4 * (self.plot_num/self.n_ode_states)
+            fig_height = 25 * 3/4 * (self.plot_num/self.n_ode_states)
 
         self.figure, self.axes = plt.subplots(ncols=self.n_ode_states, nrows=self.plot_num, figsize=(fig_width,fig_height))
 

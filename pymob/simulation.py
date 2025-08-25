@@ -1838,8 +1838,15 @@ class SimulationBase:
 
             self.SimulationPlot = OptaxPlot
 
+            if "x_in" in self.model_parameters.keys():
+                x_in_temp = self.inferer.transform_observations(self.model_parameters["x_in"])
+                x_in = (x_in_temp[0], x_in_temp[1][0,0])
+            else:
+                x_in = None
+
             simplot = self.SimulationPlot(
                 observations=self.observations,
+                x_in=x_in,
                 models=self.inferer.optimized_models,
                 solver=eqx.filter_jit(self.evaluator._solver.standalone_solver),
                 config=self.config,

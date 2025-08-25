@@ -283,13 +283,12 @@ class UDESolver(JaxSolver):
 
         Y_0 = self.preprocess_y_0(y0)
 
-        ode_args, pp_args = self.preprocess_parameters(model_params, parameters)
+        pp_args = self.preprocess_parameters(model_params, parameters)
 
         initialized_eval_func = partial(
             self.odesolve_splitargs,
             model_params = model_params,
             odestates = tuple(y0.keys()),
-            n_odeargs=len(ode_args),
             n_ppargs=len(pp_args),
             n_xin=len(x_in_flat)
         )
@@ -298,12 +297,11 @@ class UDESolver(JaxSolver):
             initialized_eval_func, 
             in_axes=(
                 *[0 for _ in range(self.n_ode_states)], 
-                *[0 for _ in range(len(ode_args))],
                 *[0 for _ in range(len(pp_args))],
                 *[0 for _ in range(len(x_in_flat))], 
             )
         )
-        result = loop_eval(*Y_0, *ode_args, *pp_args, *x_in_flat)
+        result = loop_eval(*Y_0, *pp_args, *x_in_flat)
 
         # if self.batch_dimension not in self.coordinates:    
         # this is not yet stable, because it may remove extra dimensions
@@ -346,17 +344,6 @@ class UDESolver(JaxSolver):
     @eqx.filter_jit
     def preprocess_parameters(self, model_params, parameters, num_backend: ModuleType = jnp):
         model = eqx.combine(self.model, model_params)
-        ode_args = mappar(
-            model, 
-            parameters, 
-            exclude=self.exclude_kwargs_model, 
-            to="dict"
-        )
-        ode_args_broadcasted = self._broadcast_args(
-            arg_dict=frozendict(ode_args), # type: ignore
-            num_backend=num_backend
-        )
-        
         pp_args = mappar(
             self.post_processing, 
             parameters, 
@@ -368,16 +355,16 @@ class UDESolver(JaxSolver):
             num_backend=num_backend
         )
 
-        return ode_args_broadcasted, pp_args_broadcasted
+        return pp_args_broadcasted
 
     # @partial(eqx.filter_jit, static_argnames=["self"])
     @eqx.filter_jit
-    def odesolve(self, model_params, y0, args, x_in):
+    def odesolve(self, model_params, y0, x_in):
         model = eqx.combine(self.model, model_params)
-        f = lambda t, y, args: model(t, y, *args)
+        f = lambda t, y, interp: model(t, y, *interp)
 
         y0 = tuple(x[0] for x in jnp.array(y0))
-        args = tuple([x[0] for x in args])
+        interp = ()
         
         if len(x_in) > 0:
             if len(x_in) > 2:
@@ -399,13 +386,11 @@ class UDESolver(JaxSolver):
                     "x dimension (e.g. time) after the batch dimension and before "+
                     "any other dimension."
                 )
-            interp = LinearInterpolation(ts=x_in[0], ys=x_in[1])
-            args=(interp, *args)
+            interp = tuple([LinearInterpolation(ts=x_in[0], ys=x_in[1])])
             # jumps = x_in[0][self.coordinates_input_vars["x_in"][self.x_dim] < self.x[-1]]
             jumps = jnp.array(self.x_in_jumps, dtype=float)
         else:
-            interp = None
-            args = args
+            interp = interp
             jumps = None
 
         term = ODETerm(f)
@@ -431,9 +416,9 @@ class UDESolver(JaxSolver):
             solver=solver, 
             t0=t_min, 
             t1=t_max, 
-            dt0=0.1, 
+            dt0=self.x[1]-self.x[0], 
             y0=y0, 
-            args=args, 
+            args=interp,
             saveat=saveat, 
             stepsize_controller=stepsize_controller,
             adjoint=RecursiveCheckpointAdjoint(),
@@ -448,19 +433,18 @@ class UDESolver(JaxSolver):
     
     # @partial(eqx.filter_jit, static_argnames=["self", "odestates", "n_odeargs", "n_ppargs", "n_xin"])
     @eqx.filter_jit
-    def odesolve_splitargs(self, *args, model_params, odestates, n_odeargs, n_ppargs, n_xin):
+    def odesolve_splitargs(self, *args, model_params, odestates, n_ppargs, n_xin):
         n_odestates = len(odestates)
         y0 = args[:n_odestates]
-        odeargs = args[n_odestates:n_odeargs+n_odestates]
-        ppargs = args[n_odeargs+n_odestates:n_odeargs+n_odestates+n_ppargs]
-        x_in = args[n_odestates+n_odeargs+n_ppargs:n_odestates+n_odeargs+n_ppargs+n_xin]
-        sol, interp = self.odesolve(model_params=model_params, y0=y0, args=odeargs, x_in=x_in)
+        ppargs = args[n_odestates:n_odestates+n_ppargs]
+        x_in = args[n_odestates+n_ppargs:n_odestates+n_ppargs+n_xin]
+        sol, interp = self.odesolve(model_params=model_params, y0=y0, x_in=x_in)
         
         res_dict = OrderedDict({v:val for v, val in zip(odestates, sol)})
 
         return self.post_processing(res_dict, jnp.array(self.x), interp, *ppargs)
     
-    def standalone_solver(self, model, ts, y0):
+    def standalone_solver(self, model, ts, y0, x_in):
         """
         Returns a time series (evaluated at the time points defined by ts) of the model 
         defined in Func starting from an initial condition y0.
@@ -483,7 +467,48 @@ class UDESolver(JaxSolver):
         else:
             y0 = tuple(x for x in y0)
 
-        f = lambda t, y, args: model(t,y)
+        if x_in == None:
+            interp = ()
+            jumps = None
+        else:
+            if len(x_in) > 0:
+                if len(x_in) > 2:
+                    raise NotImplementedError(
+                        "Currently only one interpolation is implemented, but "+
+                        "it should be relatively simple to implement multiple "+
+                        "interpolations. I assume, the interpolations could be "+
+                        "passed as a list and expanded in the model. If you are "+
+                        "dealing with this. Try pre-compute the interpolations. "+
+                        "This should speed up the solver. "
+                    )
+                
+                
+                if x_in[0].shape[0] != x_in[1].shape[0]:
+                    raise ValueError(
+                        "Mismatch in zero-th dimensions of x and y in interpolation "+
+                        "input 'x_in'. This often results of a problematic dimensional "+
+                        "order. Consider reordering the dimensions and reordering the "+
+                        "x dimension (e.g. time) after the batch dimension and before "+
+                        "any other dimension."
+                    )
+                interp = tuple([LinearInterpolation(ts=x_in[0], ys=x_in[1])])
+                # jumps = x_in[0][self.coordinates_input_vars["x_in"][self.x_dim] < self.x[-1]]
+                jumps = jnp.array(self.x_in_jumps, dtype=float)
+            else:
+                interp = ()
+                jumps = None
+
+        f = lambda t, y, x_in: model(t,y,*x_in)
+
+        stepsize_controller = PIDController(
+            rtol=self.rtol, atol=self.atol,
+            pcoeff=self.pcoeff, icoeff=self.icoeff, dcoeff=self.dcoeff, 
+        )
+
+        if jumps is not None:
+            stepsize_controller = ClipStepSizeController(stepsize_controller, jump_ts=jumps)
+        else:
+            pass
 
         sol = diffrax.diffeqsolve(
             diffrax.ODETerm(f),
@@ -492,10 +517,8 @@ class UDESolver(JaxSolver):
             t1=ts[-1],
             dt0=ts[1] - ts[0],
             y0=y0,
-            stepsize_controller=PIDController(
-                rtol=self.rtol, atol=self.atol,
-                pcoeff=self.pcoeff, icoeff=self.icoeff, dcoeff=self.dcoeff, 
-            ),
+            args=interp,
+            stepsize_controller=stepsize_controller,
             adjoint=RecursiveCheckpointAdjoint(),
             saveat=diffrax.SaveAt(ts=ts),
             max_steps=int(self.max_steps),
