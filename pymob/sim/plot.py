@@ -340,25 +340,55 @@ class OptaxPlot:
         self.solver = solver
         self.config = config
 
-        self.plot_num = self.config.inference_optax.multiple_runs_plot
+        self.plot_num = config.inference_optax.multiple_runs_plot
 
-        if self.config.simulation.batch_dimension in [x for x in self.observations.sizes.keys()]:
-            no_datasets = self.observations.sizes[self.config.simulation.batch_dimension]
+        if config.simulation.batch_dimension in [x for x in observations.sizes.keys()]:
+            self.n_datasets = observations.sizes[config.simulation.batch_dimension]
+            self.n_validation_sets = int(np.round(self.n_datasets * (1-config.inference_optax.data_split)).astype(int))
+            if self.n_validation_sets == self.n_datasets:
+                self.n_validation_sets -= 1
+            if self.n_validation_sets == 0:
+                self.n_validation_sets = 1
         else:
-            no_datasets = 1
-
-        if no_datasets < self.plot_num:
-            self.plot_num = no_datasets
+            self.n_datasets = 1
+            self.n_validation_sets = 1
             warnings.warn(
-                f"The requested number of plots ({self.config.inference_optax.multiple_runs_plot}) exceeds the number of available datasets ({no_datasets}). Therefore, only {no_datasets} rows are being plotted.", UserWarning
+                "The single provided data batch will be used for both training and validation. " \
+                "This should not be the case, please provide multiple datasets.",
+                category=UserWarning
+            )
+
+        if (self.n_validation_sets) < self.plot_num:
+            self.plot_num = self.n_validation_sets
+            warnings.warn(
+                f"The requested number of plots ({config.inference_optax.multiple_runs_plot}) exceeds the number of " \
+                f"validation datasets ({self.n_validation_sets}). Therefore, only {self.plot_num} rows are being plotted.", 
+                category = UserWarning
             )            
 
         self.ts = self.observations.time.values
         y0s_unstacked = jnp.array([y.values for (x,y) in self.observations.isel(time=0).items()])
-        self.y0s = jnp.stack(y0s_unstacked, axis=(len(y0s_unstacked.shape)-1))
+        y0s_stacked = jnp.stack(y0s_unstacked, axis=(len(y0s_unstacked.shape)-1))
+        if self.n_datasets == 1:
+            self.y0s = jnp.expand_dims(y0s_stacked, 0)
+        else:
+            self.y0s = y0s_stacked[self.n_datasets - self.n_validation_sets:]
+        print(y0s_unstacked.shape)
+        print(y0s_stacked.shape)
+        print(self.y0s.shape)
 
         self.ys = jnp.array([[self.solver(model, self.ts, self.y0s[i], x_in) for model in self.models] for i in jnp.arange(self.plot_num)])
         self.n_ode_states = self.ys[0].shape[1]
+        
+        obs_unstacked = jnp.array([y.values for (x,y) in self.observations.items()])
+        obs_stacked = jnp.stack(obs_unstacked, axis=(len(obs_unstacked.shape)-1))
+        if self.n_datasets == 1:
+            self.obs = jnp.expand_dims(obs_stacked, 0)
+        else:
+            self.obs = obs_stacked[self.n_datasets - self.n_validation_sets:]
+        print(obs_unstacked.shape)
+        print(obs_stacked.shape)
+        print(self.obs.shape)
         
         self.plot_model_predictions()
 
@@ -377,10 +407,14 @@ class OptaxPlot:
 
         for j in jnp.arange(self.plot_num):
 
-            obs_unstacked = jnp.array([y.values for (x,y) in self.observations.isel(batch_id=int(j)).items()])
-            obs = jnp.stack(obs_unstacked, axis=(len(obs_unstacked.shape)-1))
-
             for i in jnp.arange(self.n_ode_states):
+
+                if self.plot_num > 1:
+                    current_axis = self.axes[j]
+                else:
+                    current_axis = self.axes
+                if self.n_ode_states > 1:
+                    current_axis = current_axis[i]
 
                 preds = self.ys[j,:,i]
                 maxima = jnp.array([jnp.max(preds[:,i]) for i in jnp.arange(preds.shape[1])])
@@ -388,14 +422,20 @@ class OptaxPlot:
 
                 best_model_results = self.ys[j][0][i]
 
-                self.axes[j][i].plot(self.ts, obs[:,i], "o", markersize=3, label="observations")
-                self.axes[j][i].plot(self.ts, best_model_results, c="grey", label="model with lowest loss")
-                self.axes[j][i].fill_between(self.ts, minima, maxima, color="lightgrey", label="range of all models")
+                current_axis.plot(self.ts, self.obs[j,:,i], "o", markersize=3, label="observations")
+                current_axis.plot(self.ts, best_model_results, c="grey", label="model with lowest loss")
+                current_axis.fill_between(self.ts, minima, maxima, color="lightgrey", label="range of all models")
 
-                self.axes[j][i].set(xlabel = "time", ylabel = data_vars[i])
+                current_axis.set(xlabel = "time", ylabel = data_vars[i])
 
-            self.axes[0][1].legend()
-    
+        if self.plot_num > 1 and self.n_ode_states > 1:
+            self.axes[0][self.n_ode_states-1].legend()
+        elif self.plot_num > 1 or self.n_ode_states > 1:
+            self.axes[0].legend()
+        else:
+            self.axes.legend()
+
+        
     def save(self, filename):
         self.figure.savefig(
             f"{self.config.case_study.output_path}/{filename}"

@@ -834,6 +834,7 @@ class Optax(PymobModel):
     lr_strategy: Annotated[list, BeforeValidator(string_to_floatlist), serialize_list_to_string] = [3e-3]*2
     clip_strategy: Annotated[list, BeforeValidator(string_to_floatlist), serialize_list_to_string] = [0.1]*2
     batch_size: Annotated[int, to_str] = 1
+    data_split: float = 0.8
     multiple_runs_target: Annotated[int, to_str] = 10
     multiple_runs_limit: Annotated[int, to_str] = 50
     multiple_runs_plot: Annotated[int, to_str] = 1

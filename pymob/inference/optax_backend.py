@@ -85,12 +85,31 @@ class OptaxBackend(InferenceBackend):
         super().__init__(simulation)
 
         if simulation.config.simulation.batch_dimension in [x for x in simulation.observations.sizes.keys()]:
-            no_datasets = simulation.observations.sizes[simulation.config.simulation.batch_dimension]
+            self.n_datasets = np.round(simulation.observations.sizes[simulation.config.simulation.batch_dimension] * simulation.config.inference_optax.data_split)
+            self.n_train_sets = jnp.round(self.n_datasets * simulation.config.inference_optax.data_split).astype(int)
+            if self.n_train_sets == self.n_datasets:
+                self.n_train_sets -= 1
+            if self.n_train_sets == 0:
+                self.n_train_sets = 1
         else:
-            no_datasets = 1
+            self.n_datasets = 1
+            self.n_train_sets = 1
+            warnings.warn(
+                "The single provided data batch will be used for both training and validation. " \
+                "This should not be the case, please provide multiple datasets.",
+                category=UserWarning
+            )
 
-        if no_datasets < self.config.inference_optax.batch_size:
-            raise ValueError(f"The specified training batch size ({self.config.inference_optax.batch_size}) is larger than the number of batches in the data ({no_datasets}).")
+        self.batch_size = self.config.inference_optax.batch_size
+
+        if self.n_train_sets < self.batch_size:
+            self.batch_size = self.n_train_sets
+            warnings.warn(
+                f"The specified training batch size ({self.config.inference_optax.batch_size}) is larger " \
+                f"than the number of batches made available for training ({self.n_datasets}). The batch size " \
+                f"was therefore lowered to {self.batch_size}.",
+                category=UserWarning
+            )
         
         simulation.config.inference_optax.MLP_bias_dist = to_rv(simulation.config.inference_optax.MLP_bias_dist)
         simulation.config.inference_optax.MLP_weight_dist = to_rv(simulation.config.inference_optax.MLP_weight_dist)
@@ -193,6 +212,8 @@ class OptaxBackend(InferenceBackend):
     def optimize_model(self, model, pbar):
         # transform observations to suitable format
         ts, ys, data_vars = self.transform_observations(self.simulation.observations)
+        if self.n_datasets > 1:
+            ys = ys[:self.n_train_sets]
         length_size = len(ts)
 
         if "x_in" in self.simulation.model_parameters.keys():
@@ -308,13 +329,18 @@ class OptaxBackend(InferenceBackend):
 
         if successful_runs < cfg.multiple_runs_target:
             warnings.warn(
-                f"Target number of successful runs was not reached before surpassing the specified number of tries. Only {successful_runs} optimized models were returned."
+                "Target number of successful runs was not reached before surpassing the " \
+                f"specified number of tries. Only {successful_runs} optimized models were returned."
             )
 
         return models, success
     
     def global_loss(self, model):
         ts, ys, data_vars = self.transform_observations(self.simulation.observations)
+        if self.n_datasets > 1:
+            ys = ys[self.n_train_sets:]
+        else:
+            ys = jnp.array([ys,])
 
         if "x_in" in self.simulation.model_parameters.keys():
             x_in_temp = self.transform_observations(self.simulation.model_parameters["x_in"])
