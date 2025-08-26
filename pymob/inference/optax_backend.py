@@ -151,13 +151,16 @@ class OptaxBackend(InferenceBackend):
     def transform_observations(self, observations):
         ts = jnp.array(observations.time.values)
         data_vars = [x for x in observations.data_vars]
-        if len(data_vars) > 1:
-            ys_unstacked = jnp.array([y.values for (x,y) in observations.items()])
-            ys = jnp.stack(ys_unstacked, axis=(len(ys_unstacked.shape)-1)) # check with Flo if this is a universal solution or if the stacked axis has to be adapted to the input data -> TODO
-        else:
-            ys = jnp.array([[y.values for (x,y) in observations.items()]])
+        ys_unstacked = jnp.array([y.values for (x,y) in observations.items()])
+        ys = jnp.stack(ys_unstacked, axis=(len(ys_unstacked.shape)-1)) # check with Flo if this is a universal solution or if the stacked axis has to be adapted to the input data -> TODO
 
         return ts, ys, data_vars
+    
+    def transform_x_in(self, x_in):
+        ts = jnp.array(x_in.time.values)
+        ys = jnp.array([y.values for (x,y) in x_in.items()])
+
+        return ts, ys
 
     def transform_observations_backwards(self, ts, ys, data_vars):
         datasets = jnp.arange(ys.shape[0]) + 1
@@ -217,8 +220,8 @@ class OptaxBackend(InferenceBackend):
         length_size = len(ts)
 
         if "x_in" in self.simulation.model_parameters.keys():
-            x_in_temp = self.transform_observations(self.simulation.model_parameters["x_in"])
-            x_in = (x_in_temp[0], x_in_temp[1][0,0])
+            x_in_temp = self.transform_x_in(self.simulation.model_parameters["x_in"])
+            x_in = (x_in_temp[0], x_in_temp[1][0])
         else:
             x_in = None
 
@@ -250,9 +253,7 @@ class OptaxBackend(InferenceBackend):
         @eqx.filter_value_and_grad
         def grad_loss(model, ti, yi, x_in, loss_func):
             y_pred = jnp.array(jax.vmap(self.simulation.evaluator._solver.standalone_solver, in_axes=(None, None, 0, None))(model, ti, yi[:, 0], x_in))
-
-            if y_pred.shape[0] > 1:
-                y_pred = jnp.stack(y_pred, axis = (len(y_pred.shape)-1))
+            y_pred = jnp.stack(y_pred, axis = (len(y_pred.shape)-1))
 
             losses = loss_func(yi, y_pred)
             return jnp.mean(losses)
@@ -343,8 +344,8 @@ class OptaxBackend(InferenceBackend):
             ys = jnp.array([ys,])
 
         if "x_in" in self.simulation.model_parameters.keys():
-            x_in_temp = self.transform_observations(self.simulation.model_parameters["x_in"])
-            x_in = (x_in_temp[0], x_in_temp[1][0,0])
+            x_in_temp = self.transform_x_in(self.simulation.model_parameters["x_in"])
+            x_in = (x_in_temp[0], x_in_temp[1][0])
         else:
             x_in = None
 
@@ -354,9 +355,7 @@ class OptaxBackend(InferenceBackend):
         @eqx.filter_jit
         def loss(model, ti, yi, loss_func):
             y_pred = jnp.array(jax.vmap(self.simulation.evaluator._solver.standalone_solver, in_axes=(None, None, 0, None))(model, ti, yi[:, 0], x_in))
-
-            if y_pred.shape[0] > 1:
-                y_pred = jnp.stack(y_pred, axis = (len(y_pred.shape)-1))
+            y_pred = jnp.stack(y_pred, axis = (len(y_pred.shape)-1))
 
             losses = loss_func(yi, y_pred)
             return jnp.mean(losses)

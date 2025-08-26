@@ -373,9 +373,6 @@ class OptaxPlot:
             self.y0s = jnp.expand_dims(y0s_stacked, 0)
         else:
             self.y0s = y0s_stacked[self.n_datasets - self.n_validation_sets:]
-        print(y0s_unstacked.shape)
-        print(y0s_stacked.shape)
-        print(self.y0s.shape)
 
         self.ys = jnp.array([[self.solver(model, self.ts, self.y0s[i], x_in) for model in self.models] for i in jnp.arange(self.plot_num)])
         self.n_ode_states = self.ys[0].shape[1]
@@ -386,9 +383,6 @@ class OptaxPlot:
             self.obs = jnp.expand_dims(obs_stacked, 0)
         else:
             self.obs = obs_stacked[self.n_datasets - self.n_validation_sets:]
-        print(obs_unstacked.shape)
-        print(obs_stacked.shape)
-        print(self.obs.shape)
         
         self.plot_model_predictions()
 
