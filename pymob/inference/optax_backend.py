@@ -79,7 +79,7 @@ class OptaxBackend(InferenceBackend):
         super().__init__(simulation)
 
         if simulation.config.simulation.batch_dimension in [x for x in simulation.observations.sizes.keys()]:
-            self.n_datasets = np.round(simulation.observations.sizes[simulation.config.simulation.batch_dimension] * simulation.config.inference_optax.data_split)
+            self.n_datasets = simulation.observations.sizes[simulation.config.simulation.batch_dimension]
             self.n_train_sets = jnp.round(self.n_datasets * simulation.config.inference_optax.data_split).astype(int)
             if self.n_train_sets == self.n_datasets:
                 self.n_train_sets -= 1
@@ -101,9 +101,22 @@ class OptaxBackend(InferenceBackend):
             warnings.warn(
                 f"The specified training batch size ({self.config.inference_optax.batch_size}) is larger " \
                 f"than the number of batches made available for training ({self.n_datasets}). The batch size " \
-                f"was therefore lowered to {self.batch_size}.",
+                f"was therefore lowered to {self.batch_size} (internally, the value in the config " \
+                "stays the same).",
                 category=UserWarning
             )
+
+        if simulation.config.inference_optax.multiple_runs_target > simulation.config.inference_optax.multiple_runs_limit:
+            self.multiple_runs_target = simulation.config.inference_optax.multiple_runs_limit
+            warnings.warn(
+                f"The specified target number for successful runs/output models ({simulation.config.inference_optax.multiple_runs_target}) " \
+                f"is larger than the allowed total number of runs ({simulation.config.inference_optax.multiple_runs_limit}). " \
+                f"The target was therefore lowered to {self.multiple_runs_target} (internally, the value in the config " \
+                "stays the same).",
+                category=UserWarning
+            )
+        else:
+            self.multiple_runs_target = simulation.config.inference_optax.multiple_runs_target
         
         simulation.config.inference_optax.MLP_bias_dist = to_rv(simulation.config.inference_optax.MLP_bias_dist)
         simulation.config.inference_optax.MLP_weight_dist = to_rv(simulation.config.inference_optax.MLP_weight_dist)
@@ -130,18 +143,32 @@ class OptaxBackend(InferenceBackend):
         pass
 
     def parse_probabilistic_model(self):
-        pass
+        raise NotImplementedError("This method is currently not available for the Optax backend.")
 
     def posterior_predictions(self):
-        pass
+        raise NotImplementedError("This method is currently not available for the Optax backend.")
 
     def prior_predictions(self):
-        pass
+        raise NotImplementedError("This method is currently not available for the Optax backend.")
 
     def create_log_likelihood(self) -> Tuple[Errorfunction,Errorfunction]:
-        # TODO: define
-        return 
+        raise NotImplementedError("This method is currently not available for the Optax backend.")
     
+    def plot_likelihood_landscape(self, parameters, log_likelihood_func, gradient_func = None, bounds = ..., n_grid_points = 100, n_vector_points = 50, normal_base=False, ax = None):
+        raise NotImplementedError("This method is currently not available for the Optax backend.")
+    
+    def plot_prior_predictions(self, data_variable, x_dim, ax=None, subset=..., n=None, seed=None, plot_preds_without_obs=False, prediction_data_variable = None, **plot_kwargs):
+        raise NotImplementedError("This method is currently not available for the Optax backend.")
+    
+    def plot_posterior_predictions(self, data_variable, x_dim, ax=None, subset=..., n=None, seed=None, plot_preds_without_obs=False, prediction_data_variable = None, **plot_kwargs):
+        raise NotImplementedError("This method is currently not available for the Optax backend.")
+    
+    def plot(self):
+        raise NotImplementedError("This method is currently not available for the Optax backend.")
+    
+    def plot_diagnostics(self):
+        raise NotImplementedError("This method is currently not available for the Optax backend.")
+        
     def transform_observations(self, observations):
         ts = jnp.array(observations.time.values)
         data_vars = [x for x in observations.data_vars]
@@ -213,7 +240,7 @@ class OptaxBackend(InferenceBackend):
             ys = ys[:self.n_train_sets]
         length_size = len(ts)
 
-        if "x_in" in self.simulation.model_parameters.keys():
+        if "x_in" in self.simulation.model_parameters.keys() and [x for x in self.simulation.model_parameters["x_in"].data_vars] != []:
             x_in_temp = self.transform_x_in(self.simulation.model_parameters["x_in"])
             x_in = (x_in_temp[0], x_in_temp[1][0])
         else:
@@ -297,9 +324,9 @@ class OptaxBackend(InferenceBackend):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=TqdmWarning)
 
-            pbar = tqdm(total = cfg.multiple_runs_target * jnp.sum(jnp.array(cfg.steps_strategy) * jnp.array(cfg.length_strategy)).item(), desc=f"{successful_runs} of {cfg.multiple_runs_target} runs completed")
+            pbar = tqdm(total = self.multiple_runs_target * jnp.sum(jnp.array(cfg.steps_strategy) * jnp.array(cfg.length_strategy)).item(), desc=f"{successful_runs} of {self.multiple_runs_target} runs completed")
 
-            while tried_runs < cfg.multiple_runs_limit and successful_runs < cfg.multiple_runs_target:
+            while tried_runs < cfg.multiple_runs_limit and successful_runs < self.multiple_runs_target:
 
                 runstr = "run" if (tried_runs-successful_runs)==1 else "runs"
                 pbar.set_postfix_str(f"{tried_runs - successful_runs} unsuccessful {runstr} so far")
@@ -312,7 +339,7 @@ class OptaxBackend(InferenceBackend):
 
                     models.append(optimized_model)
                     successful_runs += 1
-                    pbar.set_description(f"{successful_runs} of {cfg.multiple_runs_target} runs completed")
+                    pbar.set_description(f"{successful_runs} of {self.multiple_runs_target} runs completed")
                     success.append(True)
 
                 except self.StopOptimizing:
@@ -322,10 +349,10 @@ class OptaxBackend(InferenceBackend):
                     pbar.last_print_n = successful_runs * jnp.sum(jnp.array(cfg.steps_strategy) * jnp.array(cfg.length_strategy)).item()
                     pass
 
-        if successful_runs < cfg.multiple_runs_target:
+        if successful_runs < self.multiple_runs_target:
             warnings.warn(
                 "Target number of successful runs was not reached before surpassing the " \
-                f"specified number of tries. Only {successful_runs} optimized models were returned."
+                f"allowed total number of runs. Only {successful_runs} optimized models were returned."
             )
 
         return models, success
@@ -337,7 +364,7 @@ class OptaxBackend(InferenceBackend):
         else:
             ys = jnp.array([ys,])
 
-        if "x_in" in self.simulation.model_parameters.keys():
+        if "x_in" in self.simulation.model_parameters.keys() and [x for x in self.simulation.model_parameters["x_in"].data_vars] != []:
             x_in_temp = self.transform_x_in(self.simulation.model_parameters["x_in"])
             x_in = (x_in_temp[0], x_in_temp[1][0])
         else:

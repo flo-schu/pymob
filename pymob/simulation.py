@@ -1838,7 +1838,7 @@ class SimulationBase:
 
             self.SimulationPlot = OptaxPlot
 
-            if "x_in" in self.model_parameters.keys():
+            if "x_in" in self.model_parameters.keys() and [x for x in self.model_parameters["x_in"].data_vars] != []:
                 x_in_temp = self.inferer.transform_x_in(self.model_parameters["x_in"])
                 x_in = (x_in_temp[0], x_in_temp[1][0])
             else:
