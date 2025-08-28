@@ -12,10 +12,8 @@ from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
 from pymob.examples import linear_model
 
-# These changes have only been made to accomodate the way I installed the case studies and
-# should not be pulled.
-from case_studies.lotka_volterra_case_study.lotka_volterra_case_study.sim import Simulation
-from case_studies.lotka_volterra_UDE_case_study.lotka_volterra_UDE_case_study.mod import Func
+from lotka_volterra_case_study.sim import Simulation
+from lotka_volterra_UDE_case_study.mod import Func
 
 rng = np.random.default_rng(1)
 

@@ -1,1 +1,1 @@
-from case_studies.lotka_volterra_case_study.prob import *
+from lotka_volterra_case_study.prob import *

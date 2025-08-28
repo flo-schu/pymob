@@ -1,0 +1,15 @@
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v2.3.0
+  hooks:
+  - id: check-yaml
+  - id: check-toml
+
+- repo: local
+  hooks:
+  - id: pytest-check
+    name: pytest-check
+    entry: test.sh
+    language: script
+    pass_filenames: false
+    always_run: true
