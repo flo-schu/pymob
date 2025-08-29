@@ -192,7 +192,7 @@ def test_UDE_solver():
         t1=t[-1],
         dt0=t[1] - t[0],
         y0=(jnp.array(sim.model_parameters["y0"]["prey"].to_numpy()), jnp.array(sim.model_parameters["y0"]["predator"].to_numpy())),
-        args=(jnp.array(sim.model_parameters["parameters"]["alpha"]),jnp.array(sim.model_parameters["parameters"]["delta"])),
+        args=(),
         stepsize_controller=diffrax.PIDController(rtol=sim.evaluator._solver.rtol, atol=sim.evaluator._solver.atol, pcoeff=sim.evaluator._solver.pcoeff, icoeff=sim.evaluator._solver.icoeff, dcoeff=sim.evaluator._solver.dcoeff),
         saveat=diffrax.SaveAt(ts=t),
         max_steps=sim.config.jaxsolver.max_steps,

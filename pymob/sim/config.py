@@ -24,7 +24,7 @@ from pydantic.functional_serializers import PlainSerializer
 
 import pymob
 from pymob.utils.store_file import scenario_file, converters
-from pymob.sim.parameters import Param, NumericArray, OptionRV
+from pymob.sim.parameters import Param, NumericArray, OptionRV, to_rv
 # this loads at the import of the module
 default_path = sys.path.copy()
 
@@ -807,9 +807,10 @@ def string_to_modelparams(option:str|Modelparameters) -> Modelparameters:
         return option
     else:
         modelparams_dict = Modelparameters()
-        for substring in option.split("  "):
-            name, value = substring.split(" = ")
-            setattr(modelparams_dict, name, string_to_param(value))
+        if option != "":
+            for substring in option.split("  "):
+                name, value = substring.split(" = ")
+                setattr(modelparams_dict, name, string_to_param(value))
         return Modelparameters.model_validate(modelparams_dict, strict=False)
 
 def modelparams_to_string(mprms: Modelparameters):
@@ -825,9 +826,11 @@ serialize_modelparams_to_string = PlainSerializer(
 )
 
 class Optax(PymobModel):
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
+
     UDE_parameters: Annotated[Modelparameters, BeforeValidator(string_to_modelparams), serialize_modelparams_to_string] = Modelparameters()
-    MLP_weight_dist: OptionRV = "normal()"
-    MLP_bias_dist: OptionRV = "normal()"
+    MLP_weight_dist: OptionRV = to_rv("normal()")
+    MLP_bias_dist: OptionRV = to_rv("normal()")
     loss_function: Callable = lambda x_obs, x_pred: (x_obs - x_pred)**2
     length_strategy: Annotated[list, BeforeValidator(string_to_floatlist), serialize_list_to_string] = [0.1, 1]
     steps_strategy: Annotated[list, BeforeValidator(string_to_intlist), serialize_list_to_string] = [1000]*2

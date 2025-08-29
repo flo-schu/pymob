@@ -118,8 +118,6 @@ class OptaxBackend(InferenceBackend):
         else:
             self.multiple_runs_target = simulation.config.inference_optax.multiple_runs_target
         
-        simulation.config.inference_optax.MLP_bias_dist = to_rv(simulation.config.inference_optax.MLP_bias_dist)
-        simulation.config.inference_optax.MLP_weight_dist = to_rv(simulation.config.inference_optax.MLP_weight_dist)
         
     def run(self):
         models, success = self.optimize_multiple_runs()

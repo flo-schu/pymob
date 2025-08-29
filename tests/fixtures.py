@@ -175,9 +175,10 @@ def init_lotka_volterra_UDE_case_study_from_settings():
 
     key = jr.PRNGKey(5678)
     data_key, model_key, loader_key = jr.split(key, 3)
-    sim.model = Func(10,10,(jnp.array(1.3),jnp.array(0.9),jnp.array(0.8),jnp.array(1.3)),"tanh(x)",key=model_key)
+    sim.model = Func({"alpha":jnp.array(1.3), "delta":jnp.array(1.8)},key=model_key)
 
-    sim.model_parameters["parameters"] = sim.config.model_parameters.value_dict
     sim.solver = UDESolver
+
+    sim.model_parameters["y0"] = sim.observations.sel(time = 0).drop_vars("time")
 
     return sim
