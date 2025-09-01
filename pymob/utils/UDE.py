@@ -3,6 +3,14 @@ import jax.numpy as jnp
 import jax.tree_util as jtu
 import jax.nn as jnn
 import jax.lax as jl
+from pymob.utils.errors import import_optional_dependency
+equinox = import_optional_dependency(
+    "equinox", errors="raise", extra="set_inferer(backend='equinox') was not executed successfully, because "
+    "'equinox' dependencies were not found. They can be installed with "
+    "pip install pymob[equinox]. Alternatively:"
+)
+if equinox is not None:
+    import equinox as eqx
 
 def transformWeightsBackwards(in_size, out_size, width_size, depth, list):
     """

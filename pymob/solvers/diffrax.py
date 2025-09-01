@@ -9,7 +9,7 @@ import jax.numpy as jnp
 from jax import Array
 import jax
 import diffrax
-import equinox as eqx
+from pymob.utils.errors import import_optional_dependency
 from diffrax._solver.base import _MetaAbstractSolver
 from diffrax import (
     diffeqsolve, 
@@ -23,6 +23,13 @@ from diffrax import (
     RecursiveCheckpointAdjoint,
     LinearInterpolation,
 )
+equinox = import_optional_dependency(
+    "equinox", errors="raise", extra="set_inferer(backend='equinox') was not executed successfully, because "
+    "'equinox' dependencies were not found. They can be installed with "
+    "pip install pymob[equinox]. Alternatively:"
+)
+if equinox is not None:
+    import equinox as eqx
 
 Mode = Literal['r', 'rb', 'w', 'wb']
 
