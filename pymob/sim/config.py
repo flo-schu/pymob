@@ -840,7 +840,6 @@ class Optax(PymobModel):
     data_split: float = 0.8
     multiple_runs_target: Annotated[int, to_str] = 10
     multiple_runs_limit: Annotated[int, to_str] = 50
-    multiple_runs_plot: Annotated[int, to_str] = 1
 
 class Report(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
