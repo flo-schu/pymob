@@ -237,11 +237,6 @@ class UDEBase(eqx.Module):
                 params[param[0]] = param[1]
         return params
     
-    def preprocess_y(self,y):  
-
-        y_mlp = jnp.array([x for x in y])
-        return y_mlp
-
     @eqx.filter_jit
     def __hash__(self):
         dynamic, static = eqx.partition(self, eqx.is_array)

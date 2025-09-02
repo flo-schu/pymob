@@ -370,7 +370,7 @@ class UDESolver(JaxSolver):
         model = eqx.combine(self.model, model_params)
         f = lambda t, y, interp: model(t, y, *interp)
 
-        y0 = tuple(x[0] for x in jnp.array(y0))
+        y0 = jnp.array([x[0] for x in jnp.array(y0)])
         interp = ()
         
         if len(x_in) > 0:
@@ -436,7 +436,9 @@ class UDESolver(JaxSolver):
             throw=self.throw_exception
         )
 
-        return tuple(sol.ys), interp
+        sol_y = tuple([sol.ys[:,i] for i in jnp.arange(sol.ys.shape[1])])
+
+        return tuple(sol_y), interp
     
     # @partial(eqx.filter_jit, static_argnames=["self", "odestates", "n_odeargs", "n_ppargs", "n_xin"])
     @eqx.filter_jit
@@ -470,9 +472,9 @@ class UDESolver(JaxSolver):
         """
 
         if y0.shape == ():
-            y0 = tuple([y0])
+            y0 = jnp.array([y0])
         else:
-            y0 = tuple(x for x in y0)
+            y0 = jnp.array([x for x in jnp.array(y0)])
 
         if x_in == None:
             interp = ()
@@ -531,4 +533,7 @@ class UDESolver(JaxSolver):
             max_steps=int(self.max_steps),
             throw = False,
         )
-        return sol.ys
+
+        sol_y = tuple([sol.ys[:,i] for i in jnp.arange(sol.ys.shape[1])])
+        
+        return sol_y

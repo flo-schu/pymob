@@ -38,18 +38,17 @@ class Func(UDEBase):
         """
 
         params = self.preprocess_params()
-        y_mlp = self.preprocess_y(y)
 
         prey, predator = y
         
         dprey_dt_ode = params["alpha"] * prey 
         dpredator_dt_ode = - params["delta"] * predator
-        dprey_dt_nn, dpredator_dt_nn = self.mlp(y_mlp) * jnp.array([jnp.tanh(prey).astype(float), jnp.tanh(predator).astype(float)])
+        dprey_dt_nn, dpredator_dt_nn = self.mlp(y) * jnp.array([jnp.tanh(prey).astype(float), jnp.tanh(predator).astype(float)])
 
         dprey_dt = dprey_dt_ode + dprey_dt_nn
         dpredator_dt = dpredator_dt_ode + dpredator_dt_nn
 
-        return jnp.array(dprey_dt.astype(float)), jnp.array(dpredator_dt.astype(float))
+        return jnp.array([dprey_dt.astype(float),dpredator_dt.astype(float)])
     
 class Func1D(UDEBase):
 
