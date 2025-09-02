@@ -14,8 +14,9 @@ import optax
 import equinox as eqx
 import xarray as xr
 from tqdm import tqdm, TqdmWarning
+import matplotlib.pyplot as plt
 
-from case_studies.lotka_volterra_UDE_case_study.lotka_volterra_UDE_case_study.mod import Func
+from lotka_volterra_UDE_case_study.mod import Func
 
 # I'd like to get rid of this but don't know how it works for the Param object. -> ask Flo
 from pymob.sim.parameters import to_rv
@@ -158,8 +159,104 @@ class OptaxBackend(InferenceBackend):
     def plot_prior_predictions(self, data_variable, x_dim, ax=None, subset=..., n=None, seed=None, plot_preds_without_obs=False, prediction_data_variable = None, **plot_kwargs):
         raise NotImplementedError("This method is currently not available for the Optax backend.")
     
-    def plot_posterior_predictions(self, data_variable, x_dim, ax=None, subset=..., n=None, seed=None, plot_preds_without_obs=False, prediction_data_variable = None, **plot_kwargs):
-        raise NotImplementedError("This method is currently not available for the Optax backend.")
+    def plot_posterior_predictions(
+        self, data_variable: str, x_dim: str, ax=None, subset={},
+        n=1, seed=None, plot_preds_without_obs=False,
+        prediction_data_variable: Optional[str] = None,
+        **plot_kwargs
+    ):
+        observations = self.simulation.observations
+
+        if self.n_datasets > 1:
+            if n > (self.n_datasets - self.n_train_sets):
+                msgstr = "dataset is" if (self.n_datasets - self.n_train_sets)==1 else "datasets are"
+                warnings.warn(
+                    f"The specified number of plotted datasets ({n}) is greater than " \
+                    f"the number of validation datasets ({int(self.n_datasets - self.n_train_sets)}). " \
+                    f"Therefore, only {int(self.n_datasets - self.n_train_sets)} {msgstr} being plotted.",
+                    category = UserWarning
+                )
+                n = int(self.n_datasets - self.n_train_sets)
+            observations = observations.isel({self.simulation.config.simulation.batch_dimension: slice(int(self.n_train_sets), int(self.n_train_sets + n))})
+        else:
+            if n > 1:
+                warnings.warn(
+                    f"The specified number of plotted datasets ({n}) is greater than " \
+                    "the number of validation datasets (1). " \
+                    "Therefore, only 1 dataset is being plotted.",
+                    category = UserWarning
+                )
+                n = 1
+            observations = observations.expand_dims(self.simulation.config.simulation.batch_dimension)
+            observations = observations.assign_coords({self.simulation.config.simulation.batch_dimension:[0]})
+
+        predslist = []
+        for model in self.optimized_models:
+            self.simulation.model = model
+            self.simulation.dispatch_constructor()
+            evaluator = self.simulation.dispatch()
+            evaluator()
+            preds_temp = evaluator.results
+            if self.n_datasets > 1:
+                preds_temp = preds_temp.sel({self.simulation.config.simulation.batch_dimension: slice(int(self.n_train_sets), int(self.n_train_sets + n - 1))})
+            else:
+                preds_temp = preds_temp.expand_dims(self.simulation.config.simulation.batch_dimension)
+                preds_temp = preds_temp.assign_coords({self.simulation.config.simulation.batch_dimension:[0]})
+            predslist.append(preds_temp)
+        for (i, pred) in enumerate(predslist):
+            pred = pred.expand_dims("model")
+            predslist[i] = pred.assign_coords(model=[i])
+        predictions = xr.combine_by_coords(predslist)
+
+        # filter subset coordinates present in data_variable
+        subset = {k: v for k, v in subset.items() if k in observations.coords}
+        
+        if prediction_data_variable is None:
+            prediction_data_variable = data_variable
+
+        # select subset
+        if prediction_data_variable in predictions:
+            preds = predictions.sel(subset)[prediction_data_variable]
+        else:
+            raise KeyError(
+                f"{prediction_data_variable} was not found in the predictions "+
+                "consider specifying the data variable for the predictions "+
+                "explicitly with the option `prediction_data_variable`."
+            )
+        try:
+            obs = observations.sel(subset)[data_variable]
+        except KeyError:
+            pass
+            # obs = preds.copy().mean(dim=("chain", "draw"))
+            # obs.values = np.full_like(obs.values, np.nan)
+
+        if ax is None:
+            _, ax = plt.subplots(ncols=1, nrows=n, figsize=(5,3*n), constrained_layout = True)
+
+        for j in jnp.arange(n):
+
+            if n > 1:
+                current_axis = ax[j]
+            else:
+                current_axis = ax
+
+            maxima = jnp.array([jnp.max(preds.values[:,j][:,i]) for i in jnp.arange(preds.values[:,j].shape[1])])
+            minima = jnp.array([jnp.min(preds.values[:,j][:,i]) for i in jnp.arange(preds.values[:,j].shape[1])])
+
+            best_model_results = preds.values[0,j]
+
+            current_axis.plot(obs[x_dim].values, obs.values[j], "o", markersize=3, label="observations")
+            current_axis.plot(obs[x_dim].values, best_model_results, c="grey", label="model with lowest loss")
+            current_axis.fill_between(obs[x_dim].values, minima, maxima, color="lightgrey", label="range of all models")
+
+            current_axis.set(xlabel = x_dim, ylabel = data_variable)    
+
+        if n > 1:
+            ax[0].legend()
+        else:
+            ax.legend()
+
+        return ax
     
     def plot(self):
         raise NotImplementedError("This method is currently not available for the Optax backend.")

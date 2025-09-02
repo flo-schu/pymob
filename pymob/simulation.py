@@ -15,7 +15,6 @@ from numpy.typing import NDArray
 import xarray as xr
 import dpath as dp
 from sklearn.preprocessing import MinMaxScaler
-import equinox as eqx
 
 import pymob
 from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
@@ -565,8 +564,15 @@ class SimulationBase:
     def infer_ode_states(self) -> int:
         if self.config.simulation.n_ode_states == -1:
             try: 
-                if self.solver == UDESolver:
-                    return_args = get_return_arguments(self.model.__call__)
+                equinox = import_optional_dependency(
+                    "equinox", errors="ignore"
+                )
+                if equinox is not None:
+                    from pymob.solvers.diffrax import UDESolver
+                    if self.solver == UDESolver:
+                        return_args = get_return_arguments(self.model.__call__)
+                    else:
+                        return_args = get_return_arguments(self.model)
                 else:
                     return_args = get_return_arguments(self.model)
                 n_ode_states = len(return_args)
@@ -1158,7 +1164,10 @@ class SimulationBase:
             optax = import_optional_dependency(
                 "optax", errors="raise", extra=extra.format("optax")
             )
-            if optax is not None:
+            equinox = import_optional_dependency(
+                "equinox", errors="raise", extra=extra.format("equinox")
+            )
+            if optax is not None and equinox is not None:
                 from pymob.inference.optax_backend import OptaxBackend
 
             self.inferer = OptaxBackend(simulation=self)
@@ -1832,36 +1841,28 @@ class SimulationBase:
         Placeholder method. Minimally plots the posterior predictions of a 
         simulation.
         """
-        from pymob.inference.optax_backend import OptaxBackend
 
-        if isinstance(self.inferer, OptaxBackend):
+        optax = import_optional_dependency(
+            "optax", errors="ignore"
+        )
+        equinox = import_optional_dependency(
+            "equinox", errors="ignore"
+        )
+        if optax is not None and equinox is not None:
+            from pymob.inference.optax_backend import OptaxBackend
+            if isinstance(self.inferer, OptaxBackend):
+                raise NotImplementedError("Posterior predictive plots are not available for the Optax backend. Use OptaxBackend.plot_posterior_predictions() instead.")
 
-            self.SimulationPlot = OptaxPlot
+        simplot = self.SimulationPlot(
+            observations=self.observations,
+            idata=self.inferer.idata,
+            coordinates=self.dimension_coords,
+            config=self.config,
+            idata_groups=["posterior_predictive"],
+            **plot_kwargs
+        )
 
-            if "x_in" in self.model_parameters.keys() and [x for x in self.model_parameters["x_in"].data_vars] != []:
-                x_in_temp = self.inferer.transform_x_in(self.model_parameters["x_in"])
-                x_in = (x_in_temp[0], x_in_temp[1][0])
-            else:
-                x_in = None
-
-            simplot = self.SimulationPlot(
-                observations=self.observations,
-                x_in=x_in,
-                models=self.inferer.optimized_models,
-                solver=eqx.filter_jit(self.evaluator._solver.standalone_solver),
-                config=self.config,
-            )
-        else:
-            simplot = self.SimulationPlot(
-                observations=self.observations,
-                idata=self.inferer.idata,
-                coordinates=self.dimension_coords,
-                config=self.config,
-                idata_groups=["posterior_predictive"],
-                **plot_kwargs
-            )
-
-            simplot.plot_data_variables()
+        simplot.plot_data_variables()
 
         simplot.save("posterior_predictive.png")
 
