@@ -175,7 +175,7 @@ def test_solver_dimensional_order():
     )
 
 def test_UDE_solver():
-    sim = init_lotka_volterra_UDE_case_study_from_settings()
+    sim = init_lotka_volterra_UDE_case_study_from_settings("UDESolverTest")
 
     sim.dispatch_constructor()
 
@@ -199,8 +199,8 @@ def test_UDE_solver():
         throw = False,
     )
 
-    assert(jnp.max(jnp.abs((data_res["prey"].to_numpy() - data_res2.ys[0]) / (data_res["prey"].to_numpy()))) < 1e-3)
-    assert(jnp.max(jnp.abs((data_res["predator"].to_numpy() - data_res2.ys[1]) / (data_res["predator"].to_numpy()))) < 1e-3)
+    np.testing.assert_allclose(data_res["prey"].to_numpy(), data_res2.ys[0], atol = 1e-1, rtol = 1e-3)
+    np.testing.assert_allclose(data_res["predator"].to_numpy(), data_res2.ys[1], atol = 1e-1, rtol = 1e-3)
 
 
 

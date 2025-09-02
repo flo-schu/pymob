@@ -167,9 +167,9 @@ def create_simulation_for_test_numpyro_behavior():
     sim.config.create_directory("scenario", force=True)
     sim.config.save(force=True)
     
-def init_lotka_volterra_UDE_case_study_from_settings():
+def init_lotka_volterra_UDE_case_study_from_settings(option: str):
 
-    config = Config("case_studies\\lotka_volterra_UDE_case_study\\scenarios\\UDETest\\settings.cfg")
+    config = Config(f"case_studies/lotka_volterra_UDE_case_study/scenarios/{option}/settings.cfg")
     sim = SimulationBase(config)
     sim.initialize(config)
 
