@@ -191,7 +191,7 @@ def test_UDE_solver():
         t0=t[0],
         t1=t[-1],
         dt0=t[1] - t[0],
-        y0=(jnp.array(sim.model_parameters["y0"]["prey"].to_numpy()), jnp.array(sim.model_parameters["y0"]["predator"].to_numpy())),
+        y0=jnp.array([sim.model_parameters["y0"]["prey"].to_numpy(), jnp.array(sim.model_parameters["y0"]["predator"].to_numpy())]),
         args=(),
         stepsize_controller=diffrax.PIDController(rtol=sim.evaluator._solver.rtol, atol=sim.evaluator._solver.atol, pcoeff=sim.evaluator._solver.pcoeff, icoeff=sim.evaluator._solver.icoeff, dcoeff=sim.evaluator._solver.dcoeff),
         saveat=diffrax.SaveAt(ts=t),
@@ -199,8 +199,8 @@ def test_UDE_solver():
         throw = False,
     )
 
-    np.testing.assert_allclose(data_res["prey"].to_numpy(), data_res2.ys[0], atol = 1e-1, rtol = 1e-3)
-    np.testing.assert_allclose(data_res["predator"].to_numpy(), data_res2.ys[1], atol = 1e-1, rtol = 1e-3)
+    np.testing.assert_allclose(data_res["prey"].to_numpy(), data_res2.ys[:,0], atol = 1e-1, rtol = 1e-3)
+    np.testing.assert_allclose(data_res["predator"].to_numpy(), data_res2.ys[:,1], atol = 1e-1, rtol = 1e-3)
 
 
 

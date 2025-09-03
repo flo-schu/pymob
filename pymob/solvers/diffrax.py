@@ -531,7 +531,7 @@ class UDESolver(JaxSolver):
             adjoint=RecursiveCheckpointAdjoint(),
             saveat=diffrax.SaveAt(ts=ts),
             max_steps=int(self.max_steps),
-            throw = False,
+            throw = self.throw_exception
         )
 
         sol_y = tuple([sol.ys[:,i] for i in jnp.arange(sol.ys.shape[1])])
