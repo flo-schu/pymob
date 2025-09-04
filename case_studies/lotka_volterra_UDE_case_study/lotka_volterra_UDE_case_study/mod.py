@@ -83,10 +83,9 @@ class Func1D(UDEBase):
         """
 
         params = self.preprocess_params()
-        y_mlp = self.preprocess_y(y)
 
-        X, = y
+        X = y
         
-        dX_dt = params["r"] * X + self.mlp(y_mlp)
+        dX_dt = params["r"] * X + self.mlp(y)
 
-        return tuple(jnp.array(dX_dt.astype(float)))
+        return jnp.array(dX_dt.astype(float))
