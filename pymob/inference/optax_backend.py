@@ -150,6 +150,10 @@ class OptaxBackend(InferenceBackend):
 
         self.optimized_models = self.sort_models_by_global_loss2(self.optimized_models)
 
+    @property
+    def best_model(self):
+        return self.optimized_models[0]
+
     class StopOptimizing(Exception):
         pass
 
@@ -396,7 +400,10 @@ class OptaxBackend(InferenceBackend):
             return loss, model, opt_state
         
         for lr, steps, length, clip in zip(self.config.inference_optax.lr_strategy, self.config.inference_optax.steps_strategy, self.config.inference_optax.length_strategy, self.config.inference_optax.clip_strategy):
-            optim = optax.chain(optax.clip(clip), optax.adabelief(lr))
+            if clip != 0:
+                optim = optax.chain(optax.clip(clip), optax.adabelief(lr))
+            else:
+                optim = optax.adabelief(lr)
             opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
             _ts = ts[: int(length_size * length)]
             _ys = ys[:, : int(length_size * length)]
@@ -430,12 +437,6 @@ class OptaxBackend(InferenceBackend):
             ys = jnp.expand_dims(ys,0)
         length_size = len(ts)
 
-        # if "x_in" in self.simulation.model_parameters.keys() and [x for x in self.simulation.model_parameters["x_in"].data_vars] != []:
-        #     x_in_temp = self.transform_x_in(self.simulation.model_parameters["x_in"])
-        #     x_in = (x_in_temp[0], x_in_temp[1][0])
-        # else:
-        #     x_in = None
-
         # optimize model
         loader_key = jr.PRNGKey(np.random.randint(0,10000,()))
 
@@ -443,13 +444,13 @@ class OptaxBackend(InferenceBackend):
             return self.config.inference_optax.loss_function(jnp.where(jnp.isnan(y_obs), y_pred, y_obs), y_pred)
             
         def dataloader(batch_size, *, key):
-            indices = jnp.arange(self.n_datasets)
+            indices = jnp.arange(self.n_train_sets)
             while True:
                 perm = jr.permutation(key, indices)
                 (key,) = jr.split(key, 1)
                 start = 0
                 end = batch_size
-                while end < self.n_datasets:
+                while end < self.n_train_sets:
                     batch_perm = perm[start:end]
                     yield batch_perm
                     start = end
@@ -474,7 +475,10 @@ class OptaxBackend(InferenceBackend):
             return loss, model, opt_state
         
         for lr, steps, length, clip in zip(self.config.inference_optax.lr_strategy, self.config.inference_optax.steps_strategy, self.config.inference_optax.length_strategy, self.config.inference_optax.clip_strategy):
-            optim = optax.chain(optax.clip(clip), optax.adabelief(lr))
+            if clip != 0:
+                optim = optax.chain(optax.clip(clip), optax.adabelief(lr))
+            else:
+                optim = optax.adabelief(lr)
             opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
             # _ts = ts[: int(length_size * length)]
             _ys = ys[:, : int(length_size * length)]
@@ -492,6 +496,91 @@ class OptaxBackend(InferenceBackend):
             else:
                 for step in range(steps):
                     loss, model, opt_state = make_step(_ys, jnp.array([0]), model, evaluator, data_vars, opt_state, loss_func)
+                    pbar.update(length)
+                    if not jnp.isfinite(loss).all():
+                        raise self.StopOptimizing()
+
+        return model
+    
+    def optimize_model3(self, model, pbar):
+        # transform observations to suitable format
+        ts, ys, data_vars = self.transform_observations(self.simulation.observations)
+        if self.n_datasets > 1:
+            ys = ys[:self.n_train_sets]
+        else:
+            ys = jnp.expand_dims(ys,0)
+        length_size = len(ts)
+        obs = self.simulation.observations
+
+        # optimize model
+        loader_key = jr.PRNGKey(np.random.randint(0,10000,()))
+
+        def loss_func(y_obs, y_pred):
+            return self.config.inference_optax.loss_function(jnp.where(jnp.isnan(y_obs), y_pred, y_obs), y_pred)
+            
+        def dataloader(arrays, observations, batch_size, *, key):
+            dataset_size = arrays[0].shape[0]
+            assert all(array.shape[0] == dataset_size for array in arrays)
+            indices = jnp.arange(self.n_train_sets)
+            while True:
+                perm = jr.permutation(key, indices)
+                (key,) = jr.split(key, 1)
+                start = 0
+                end = batch_size
+                while end < self.n_train_sets:
+                    batch_perm = perm[start:end]
+                    yield tuple(array[batch_perm] for array in arrays), observations.isel({self.simulation.config.simulation.batch_dimension: batch_perm})
+                    start = end
+                    end = start + batch_size
+
+        @eqx.filter_value_and_grad
+        def grad_loss(model, yi, evaluator, data_vars, loss_func):
+            evaluator.model = model
+            evaluator()
+            y_pred = jnp.array([evaluator.Y[data_var] for data_var in data_vars])
+            y_pred = jnp.stack(y_pred, axis = (len(y_pred.shape)-1))[:,:yi.shape[1]]
+
+            losses = loss_func(yi, y_pred)
+            return jnp.mean(losses)
+
+        @eqx.filter_jit
+        def make_step(yi, model, evaluator, data_vars, opt_state, loss_func):
+            loss, grads = grad_loss(model, yi, evaluator, data_vars, loss_func)
+            updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_inexact_array))
+            model = eqx.apply_updates(model, updates)
+            # jax.debug.breakpoint()
+            return loss, model, opt_state
+        
+        for lr, steps, length, clip in zip(self.config.inference_optax.lr_strategy, self.config.inference_optax.steps_strategy, self.config.inference_optax.length_strategy, self.config.inference_optax.clip_strategy):
+            if clip != 0:
+                optim = optax.chain(optax.clip(clip), optax.adabelief(lr))
+            else:
+                optim = optax.adabelief(lr)
+            opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
+            _obs = obs.isel(time = slice(0, int(length_size * length)))
+            _ys = ys[:, : int(length_size * length)]
+            evaluator = self.simulation.dispatch()
+
+            if self.n_datasets > 1:
+                for step, ((yi,), obs_i) in zip(
+                    range(steps), dataloader((_ys,), _obs, self.config.inference_optax.batch_size, key=loader_key)
+                ):
+                    self.simulation.observations = obs_i
+                    self.simulation.model_parameters["y0"] = self.simulation.observations.sel(time = 0).drop_vars("time")
+                    self.simulation.dispatch_constructor()
+                    evaluator = self.simulation.dispatch()
+                    loss, model, opt_state = make_step(yi, model, evaluator, data_vars, opt_state, loss_func)
+                    pbar.update(length)
+                    if not jnp.isfinite(loss).all():
+                        raise self.StopOptimizing()
+
+            else:
+                self.simulation.observations = _obs
+                self.simulation.model_parameters["y0"] = self.simulation.observations.sel(time = 0).drop_vars("time")
+                self.simulation.dispatch_constructor()
+                evaluator = self.simulation.dispatch()
+                for step in range(steps):
+                    loss, model, opt_state = make_step(_ys, model, evaluator, data_vars, opt_state, loss_func)
                     pbar.update(length)
                     if not jnp.isfinite(loss).all():
                         raise self.StopOptimizing()
