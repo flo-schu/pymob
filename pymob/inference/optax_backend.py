@@ -1,5 +1,6 @@
 import jax
 from pymob.inference.base import InferenceBackend, Distribution, Errorfunction
+from pymob.utils.UDE import getFuncBias, transformBias, getFuncWeights, transformWeights
 from typing import (
     Tuple, Dict, Union, Optional, Callable, Literal, List, Any,
     Protocol
@@ -14,13 +15,10 @@ import optax
 import equinox as eqx
 from equinox import EquinoxRuntimeError
 import xarray as xr
+import arviz as az
 from tqdm import tqdm, TqdmWarning
 import matplotlib.pyplot as plt
 
-from lotka_volterra_UDE_case_study.mod import Func
-
-# I'd like to get rid of this but don't know how it works for the Param object. -> ask Flo
-from pymob.sim.parameters import to_rv
 
 scipy_to_jax = {
     # Continuous Distributions
@@ -133,7 +131,9 @@ class OptaxBackend(InferenceBackend):
             else:
                 print(f"run {j+1}\t\tno\t\t---")
 
-        self.optimized_models = self.sort_models_by_global_loss(self.optimized_models)    
+        self.optimized_models = self.sort_models_by_global_loss(self.optimized_models)  
+
+        self.idata = self.create_idata()  
     
     def run2(self):
         self.optimized_models, success = self.optimize_multiple_runs2()
@@ -209,23 +209,24 @@ class OptaxBackend(InferenceBackend):
             observations = observations.expand_dims(self.simulation.config.simulation.batch_dimension)
             observations = observations.assign_coords({self.simulation.config.simulation.batch_dimension:[0]})
 
-        predslist = []
-        for model in self.optimized_models:
-            self.simulation.model = model
-            self.simulation.dispatch_constructor()
-            evaluator = self.simulation.dispatch()
-            evaluator()
-            preds_temp = evaluator.results
-            if self.n_datasets > 1:
-                preds_temp = preds_temp.sel({self.simulation.config.simulation.batch_dimension: slice(int(self.n_train_sets), int(self.n_train_sets + n - 1))})
-            else:
-                preds_temp = preds_temp.expand_dims(self.simulation.config.simulation.batch_dimension)
-                preds_temp = preds_temp.assign_coords({self.simulation.config.simulation.batch_dimension:[0]})
-            predslist.append(preds_temp)
-        for (i, pred) in enumerate(predslist):
-            pred = pred.expand_dims("model")
-            predslist[i] = pred.assign_coords(model=[i])
-        predictions = xr.combine_by_coords(predslist)
+        # predslist = []
+        # for model in self.optimized_models:
+        #     self.simulation.model = model
+        #     self.simulation.dispatch_constructor()
+        #     evaluator = self.simulation.dispatch()
+        #     evaluator()
+        #     preds_temp = evaluator.results
+        #     if self.n_datasets > 1:
+        #         preds_temp = preds_temp.sel({self.simulation.config.simulation.batch_dimension: slice(int(self.n_train_sets), int(self.n_train_sets + n - 1))})
+        #     else:
+        #         preds_temp = preds_temp.expand_dims(self.simulation.config.simulation.batch_dimension)
+        #         preds_temp = preds_temp.assign_coords({self.simulation.config.simulation.batch_dimension:[0]})
+        #     predslist.append(preds_temp)
+        # for (i, pred) in enumerate(predslist):
+        #     pred = pred.expand_dims("model")
+        #     predslist[i] = pred.assign_coords(model=[i])
+        # predictions = xr.combine_by_coords(predslist)
+        predictions = self.idata.posterior_predictive_multibatch
 
         # filter subset coordinates present in data_variable
         subset = {k: v for k, v in subset.items() if k in observations.coords}
@@ -259,12 +260,13 @@ class OptaxBackend(InferenceBackend):
             else:
                 current_axis = ax
 
-            maxima = jnp.array([jnp.max(preds.values[:,j][:,i]) for i in jnp.arange(preds.values[:,j].shape[1])])
-            minima = jnp.array([jnp.min(preds.values[:,j][:,i]) for i in jnp.arange(preds.values[:,j].shape[1])])
+            maxima = jnp.array([jnp.max(preds.values[0,:,j][:,i]) for i in jnp.arange(preds.values[0,:,j].shape[1])])
+            minima = jnp.array([jnp.min(preds.values[0,:,j][:,i]) for i in jnp.arange(preds.values[0,:,j].shape[1])])
 
-            best_model_results = preds.values[0,j]
+            best_model_results = preds.values[0,0,j]
 
-            current_axis.plot(obs[x_dim].values, obs.values[j], "o", markersize=3, label="observations")
+            if not plot_preds_without_obs:
+                current_axis.plot(obs[x_dim].values, obs.values[j], "o", markersize=3, label="observations")
             current_axis.plot(obs[x_dim].values, best_model_results, c="grey", label="model with lowest loss")
             current_axis.fill_between(obs[x_dim].values, minima, maxima, color="lightgrey", label="range of all models")
 
@@ -767,3 +769,51 @@ class OptaxBackend(InferenceBackend):
             sorted_losses.append(x)
 
         return sorted_models
+    
+    def create_idata(self):
+
+        list = [key for key in self.simulation.config.inference_optax.UDE_parameters.free.keys()]
+
+        dict = {list[j]: np.array([getattr(self.optimized_models[i], list[j]) for i in np.arange(len(self.optimized_models))]) for j in np.arange(len(list))}
+        dict["weights"] = np.array([[transformWeights(getFuncWeights(model))[4] for model in self.optimized_models]])
+        dict["bias"] = np.array([[transformBias(getFuncBias(model))[3] for model in self.optimized_models]])
+
+        idata = az.convert_to_inference_data(
+            dict,
+            dims = {"weights": ["chain","draw","n_weight"], "bias": ["chain","draw","n_bias"]},
+            coords = {"n_weight": np.arange(len(dict["weights"][0,0])), "n_bias": np.arange(len(dict["bias"][0,0]))}
+        )
+
+        post_pred = {}
+        data_vars = self.simulation.observations.data_vars
+        evaluator = self.simulation.dispatch()
+        for x in data_vars:
+            post_pred[x] = []
+
+        for model in self.optimized_models:
+            evaluator.model = model
+            evaluator()
+            
+            for x in data_vars:
+                post_pred[x].append(evaluator.Y[x])
+
+        for x in data_vars:
+            post_pred[x] = jnp.array(post_pred[x])
+            post_pred[x] = jnp.expand_dims(post_pred[x], 0)
+
+        post_pred_xr = []
+
+        ts = self.simulation.observations.time.values
+        model_ids = jnp.arange(len(self.optimized_models))
+        batch_ids = jnp.arange(self.n_datasets)
+        chain_ids = jnp.arange(1)
+
+        for x in data_vars:
+            post_pred_xr.append(xr.DataArray(post_pred[x], coords={"chain": chain_ids, "draw": model_ids, "data_batch": batch_ids, "time": ts}).to_dataset(name=x))
+
+        post_pred_xr = xr.merge([x for x in post_pred_xr])
+
+        # idata.add_groups({"observed_data": self.simulation.observations.isel(batch_id = slice(self.n_train_sets,self.n_datasets)), "posterior_model_fits": post_pred_xr})
+        idata.add_groups({"observed_data_multibatch": self.simulation.observations.isel(batch_id = slice(self.n_train_sets,self.n_datasets)), "observed_data": self.simulation.observations.isel(batch_id = int(self.n_train_sets)), "posterior_predictive_multibatch": post_pred_xr.isel(data_batch = slice(self.n_train_sets,self.n_datasets)), "posterior_predictive": post_pred_xr.isel(data_batch = int(self.n_train_sets))})
+
+        return idata

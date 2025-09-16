@@ -1842,17 +1842,6 @@ class SimulationBase:
         simulation.
         """
 
-        optax = import_optional_dependency(
-            "optax", errors="ignore"
-        )
-        equinox = import_optional_dependency(
-            "equinox", errors="ignore"
-        )
-        if optax is not None and equinox is not None:
-            from pymob.inference.optax_backend import OptaxBackend
-            if isinstance(self.inferer, OptaxBackend):
-                raise NotImplementedError("Posterior predictive plots are not available for the Optax backend. Use OptaxBackend.plot_posterior_predictions() instead.")
-
         simplot = self.SimulationPlot(
             observations=self.observations,
             idata=self.inferer.idata,
