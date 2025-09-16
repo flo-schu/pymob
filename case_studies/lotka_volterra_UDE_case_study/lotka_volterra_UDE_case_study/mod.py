@@ -2,7 +2,7 @@ import equinox as eqx
 import jax.nn as jnn
 import jax.numpy as jnp
 import jax
-from pymob.utils.UDE import UDEBase
+from pymob.utils.UDE import UDEBase, transformBiasBackwards, transformWeightsBackwards
     
 class Func(UDEBase):
 
@@ -13,42 +13,20 @@ class Func(UDEBase):
 
     alpha: jax.Array
     delta: jax.Array
-
-    def __init__(self, params, weights=None, bias=None, *, key, **kwargs):
-        self.init_MLP(weights, bias, key=key)
-        self.init_params(params)
-        
-    def __call__(self, t, y):
-        """
-        Returns the growth rates of predator and prey depending on their current state.
-
-        Parameters
-        ----------
-        t : scalar
-            Just here to fulfill the requirements by diffeqsolve(). Has no effect and
-            can be set to None.
-        y : jax.ArrayImpl
-            Array containing two values: the current abundance of prey and predator,
-            respectively.
-
-        Returns:
-        --------
-        jax.ArrayImpl
-            An array containing the growth rates of prey and predators, respectively.
-        """
-
-        params = self.preprocess_params()
-
+    
+    @staticmethod
+    def model(y, mlp, alpha, delta, ):
         prey, predator = y
         
-        dprey_dt_ode = params["alpha"] * prey 
-        dpredator_dt_ode = - params["delta"] * predator
-        dprey_dt_nn, dpredator_dt_nn = self.mlp(y) * jnp.array([jnp.tanh(prey).astype(float), jnp.tanh(predator).astype(float)])
+        dprey_dt_ode = alpha * prey 
+        dpredator_dt_ode = - delta * predator
+        dprey_dt_nn, dpredator_dt_nn = mlp(y) * jnp.array([jnp.tanh(prey).astype(float), jnp.tanh(predator).astype(float)])
 
         dprey_dt = dprey_dt_ode + dprey_dt_nn
         dpredator_dt = dpredator_dt_ode + dpredator_dt_nn
 
-        return jnp.array([dprey_dt.astype(float),dpredator_dt.astype(float)])
+        return dprey_dt, dpredator_dt
+
     
 class Func1D(UDEBase):
 
@@ -59,33 +37,10 @@ class Func1D(UDEBase):
 
     r: jax.Array
 
-    def __init__(self, params, weights=None, bias=None, *, key, **kwargs):
-        self.init_MLP(weights, bias, key=key)
-        self.init_params(params)
-        
-    def __call__(self, t, y):
-        """
-        Returns the growth rates of predator and prey depending on their current state.
-
-        Parameters
-        ----------
-        t : scalar
-            Just here to fulfill the requirements by diffeqsolve(). Has no effect and
-            can be set to None.
-        y : jax.ArrayImpl
-            Array containing two values: the current abundance of prey and predator,
-            respectively.
-
-        Returns:
-        --------
-        jax.ArrayImpl
-            An array containing the growth rates of prey and predators, respectively.
-        """
-
-        params = self.preprocess_params()
-
+    @staticmethod
+    def model(y, mlp, r):
         X = y
         
-        dX_dt = params["r"] * X + self.mlp(y)
+        dX_dt = r * X + mlp(y)
 
-        return jnp.array(dX_dt.astype(float))
+        return dX_dt

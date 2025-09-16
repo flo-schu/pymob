@@ -570,7 +570,7 @@ class SimulationBase:
                 if equinox is not None:
                     from pymob.solvers.diffrax import UDESolver
                     if self.solver == UDESolver:
-                        return_args = get_return_arguments(self.model.__call__)
+                        return_args = get_return_arguments(self.model.model)
                     else:
                         return_args = get_return_arguments(self.model)
                 else:

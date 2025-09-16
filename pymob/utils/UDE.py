@@ -237,6 +237,18 @@ class UDEBase(eqx.Module):
                 params[param[0]] = param[1]
         return params
     
+    def __init__(self, params, weights=None, bias=None, *, key, **kwargs):
+        self.init_MLP(weights, bias, key=key)
+        self.init_params(params)
+
+    def __call__(self, t, y):
+        params = self.preprocess_params()
+        derivatives = self.model(y, self.mlp, **params)
+        if type(derivatives) == tuple:
+            return jnp.array([der.astype(float) for der in derivatives])
+        else:
+            return jnp.array(derivatives)
+    
     @eqx.filter_jit
     def __hash__(self):
         dynamic, static = eqx.partition(self, eqx.is_array)
