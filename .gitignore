@@ -25,6 +25,8 @@ build
 
 .env
 
+hyperparams
+
 # linked case studies
 bufferguts
 guts_base

@@ -15,8 +15,10 @@ class Func(UDEBase):
     delta: jax.Array
     
     @staticmethod
-    def model(y, mlp, alpha, delta, ):
+    def model(t, y, mlp, alpha, delta, ):
         prey, predator = y
+
+        # input = x_in.evaluate(t)
         
         dprey_dt_ode = alpha * prey 
         dpredator_dt_ode = - delta * predator
@@ -26,7 +28,10 @@ class Func(UDEBase):
         dpredator_dt = dpredator_dt_ode + dpredator_dt_nn
 
         return dprey_dt, dpredator_dt
-
+    
+    @staticmethod
+    def loss(y_obs, y_pred):
+        return (y_obs - y_pred)**2
     
 class Func1D(UDEBase):
 
@@ -44,3 +49,7 @@ class Func1D(UDEBase):
         dX_dt = r * X + mlp(y)
 
         return dX_dt
+    
+    @staticmethod
+    def loss(y_obs, y_pred):
+        return (y_obs - y_pred)**2

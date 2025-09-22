@@ -2,3 +2,4 @@ __pycache__
 results
 *.code-workspace
 *.egg-info
+scripts/case_studies

@@ -197,7 +197,7 @@ class UDEBase(eqx.Module):
 
     def init_MLP(self, weights=None, bias=None, *, key, **kwargs):
 
-        super().__init__(**kwargs)
+        # super().__init__(**kwargs)
         mlp = eqx.nn.MLP(in_size=self.mlp_in_size, out_size=self.mlp_out_size, width_size=self.mlp_width, depth=self.mlp_depth, activation=jnn.softplus, key=key)
 
         is_linear = lambda x: isinstance(x, eqx.nn.Linear)
@@ -220,9 +220,9 @@ class UDEBase(eqx.Module):
 
         for (key, value) in params.items():
             if isinstance(value, tuple):
-                setattr(self, key, value[0])
+                setattr(self, key, jnp.array(value[0]))
             else:
-                setattr(self, key, value)
+                setattr(self, key, jnp.array(value))
             self.UDE_params.append((key, value))
 
     def preprocess_params(self):
@@ -241,13 +241,17 @@ class UDEBase(eqx.Module):
         self.init_MLP(weights, bias, key=key)
         self.init_params(params)
 
-    def __call__(self, t, y):
+    def __call__(self, t, y, x_in):
         params = self.preprocess_params()
-        derivatives = self.model(y, self.mlp, **params)
+        derivatives = self.model(t, y, *x_in, self.mlp, **params)
         if type(derivatives) == tuple:
             return jnp.array([der.astype(float) for der in derivatives])
         else:
             return jnp.array(derivatives)
+        
+    @staticmethod
+    def loss(y_obs, y_pred):
+        return (y_obs - y_pred)**2
     
     @eqx.filter_jit
     def __hash__(self):

@@ -368,7 +368,7 @@ class UDESolver(JaxSolver):
     @eqx.filter_jit
     def odesolve(self, model_params, y0, x_in):
         model = eqx.combine(self.model, model_params)
-        f = lambda t, y, interp: model(t, y, *interp)
+        f = lambda t, y, interp: model(t, y, interp)
 
         y0 = jnp.array([x[0] for x in jnp.array(y0)])
         interp = ()
@@ -507,7 +507,7 @@ class UDESolver(JaxSolver):
                 interp = ()
                 jumps = None
 
-        f = lambda t, y, x_in: model(t,y,*x_in)
+        f = lambda t, y, x_in: model(t,y,x_in)
 
         stepsize_controller = PIDController(
             rtol=self.rtol, atol=self.atol,
