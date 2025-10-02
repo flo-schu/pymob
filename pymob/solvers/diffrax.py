@@ -368,7 +368,6 @@ class UDESolver(JaxSolver):
     @eqx.filter_jit
     def odesolve(self, model_params, y0, x_in):
         model = eqx.combine(self.model, model_params)
-        f = lambda t, y, interp: model(t, y, interp)
 
         y0 = jnp.array([x[0] for x in jnp.array(y0)])
         interp = ()
@@ -400,7 +399,6 @@ class UDESolver(JaxSolver):
             interp = interp
             jumps = None
 
-        term = ODETerm(f)
         solver = self.diffrax_solver() # type: ignore (diffrax_solver is ensured
                                        # to be _MetaAbstractSolver type during 
                                        # post_init)
@@ -419,7 +417,7 @@ class UDESolver(JaxSolver):
             pass
 
         sol = diffeqsolve(
-            terms=term, 
+            terms=ODETerm(model), 
             solver=solver, 
             t0=t_min, 
             t1=t_max, 
@@ -507,8 +505,6 @@ class UDESolver(JaxSolver):
                 interp = ()
                 jumps = None
 
-        f = lambda t, y, x_in: model(t,y,x_in)
-
         stepsize_controller = PIDController(
             rtol=self.rtol, atol=self.atol,
             pcoeff=self.pcoeff, icoeff=self.icoeff, dcoeff=self.dcoeff, 
@@ -520,7 +516,7 @@ class UDESolver(JaxSolver):
             pass
 
         sol = diffrax.diffeqsolve(
-            diffrax.ODETerm(f),
+            diffrax.ODETerm(model),
             self.diffrax_solver(),
             t0=ts[0],
             t1=ts[-1],

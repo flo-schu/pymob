@@ -2,6 +2,7 @@ import equinox as eqx
 import jax.nn as jnn
 import jax.numpy as jnp
 import jax
+from typing import Callable
 from pymob.utils.UDE import UDEBase, transformBiasBackwards, transformWeightsBackwards
     
 class Func(UDEBase):
@@ -10,6 +11,8 @@ class Func(UDEBase):
     mlp_width: int = 3
     mlp_in_size: int = 2
     mlp_out_size: int = 2
+    mlp_activation: Callable = jnn.softplus
+    mlp_final_activation: Callable = lambda x: x
 
     alpha: jax.Array
     delta: jax.Array

@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import jax.tree_util as jtu
 import jax.nn as jnn
 import jax.lax as jl
+from typing import Callable
 from pymob.utils.errors import import_optional_dependency
 equinox = import_optional_dependency(
     "equinox", errors="raise", extra="set_inferer(backend='equinox') was not executed successfully, because "
@@ -194,11 +195,13 @@ class UDEBase(eqx.Module):
     mlp_width: int = 3
     mlp_in_size: int = 2
     mlp_out_size: int = 2
+    mlp_activation: Callable = jnn.softplus
+    mlp_final_activation: Callable = jnn.tanh
+
 
     def init_MLP(self, weights=None, bias=None, *, key, **kwargs):
 
-        # super().__init__(**kwargs)
-        mlp = eqx.nn.MLP(in_size=self.mlp_in_size, out_size=self.mlp_out_size, width_size=self.mlp_width, depth=self.mlp_depth, activation=jnn.softplus, key=key)
+        mlp = eqx.nn.MLP(in_size=self.mlp_in_size, out_size=self.mlp_out_size, width_size=self.mlp_width, depth=self.mlp_depth, activation=self.mlp_activation.__func__, final_activation=self.mlp_final_activation.__func__, key=key)
 
         is_linear = lambda x: isinstance(x, eqx.nn.Linear)
 
