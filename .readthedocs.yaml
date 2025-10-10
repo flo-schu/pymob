@@ -14,8 +14,12 @@ build:
     # nodejs: "19"
     # rust: "1.64"
     # golang: "1.19"
-  commands:
-    - jupyter nbconvert --to markdown --execute docs/source/user_guide/*.ipynb
+  jobs:
+    pre_build:
+    - bash ./docs/run_doctest.sh
+    post_build:
+    - bash ./docs/build_user_guide.sh
+    - bash ./docs/build_examples.sh
 
 
 # Build documentation in the "docs/" directory with Sphinx

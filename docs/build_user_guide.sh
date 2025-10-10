@@ -9,6 +9,3 @@ jupyter nbconvert --to markdown --execute docs/source/user_guide/quickstart.ipyn
 jupyter nbconvert --to markdown --execute docs/source/user_guide/Introduction.ipynb
 jupyter nbconvert --to markdown --execute docs/source/user_guide/advanced_tutorial_ODE_system.ipynb
 jupyter nbconvert --to markdown --execute docs/source/user_guide/framework_overview.ipynb
-
-# build the documentation
-sphinx-apidoc  -o docs/source/api pymob && sphinx-build -M html docs/source/ docs/build/
