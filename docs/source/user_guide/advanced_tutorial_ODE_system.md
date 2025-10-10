@@ -487,7 +487,7 @@ Coordinates:
   * time      (time) float64 0.0 0.5 1.0 1.5 2.0 ... 48.0 48.5 49.0 49.5 50.0
 Data variables:
     prey      (time) float64 10.17 11.36 11.85 11.33 ... 11.08 11.16 12.37 11.56
-    predator  (time) float64 5.431 5.33 6.397 7.604 ... 5.544 5.436 7.871 9.127</pre><div class='xr-wrap' style='display:none'><div class='xr-header'><div class='xr-obj-type'>xarray.Dataset</div></div><ul class='xr-sections'><li class='xr-section-item'><input id='section-2f3f0136-a516-484c-9a38-52a4898debbd' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-2f3f0136-a516-484c-9a38-52a4898debbd' class='xr-section-summary'  title='Expand/collapse section'>Dimensions:</label><div class='xr-section-inline-details'><ul class='xr-dim-list'><li><span class='xr-has-index'>time</span>: 101</li></ul></div><div class='xr-section-details'></div></li><li class='xr-section-item'><input id='section-3e2bee54-ac53-45b9-ad0f-b59ee753a775' class='xr-section-summary-in' type='checkbox'  checked><label for='section-3e2bee54-ac53-45b9-ad0f-b59ee753a775' class='xr-section-summary' >Coordinates: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>time</span></div><div class='xr-var-dims'>(time)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>0.0 0.5 1.0 1.5 ... 49.0 49.5 50.0</div><input id='attrs-8aefc53b-ee9f-4a14-914c-c498aa186708' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-8aefc53b-ee9f-4a14-914c-c498aa186708' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-c6eb6d7f-ea9e-4f71-a058-6a39c214c5d8' class='xr-var-data-in' type='checkbox'><label for='data-c6eb6d7f-ea9e-4f71-a058-6a39c214c5d8' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 0. ,  0.5,  1. ,  1.5,  2. ,  2.5,  3. ,  3.5,  4. ,  4.5,  5. ,  5.5,
+    predator  (time) float64 5.431 5.33 6.397 7.604 ... 5.544 5.436 7.871 9.127</pre><div class='xr-wrap' style='display:none'><div class='xr-header'><div class='xr-obj-type'>xarray.Dataset</div></div><ul class='xr-sections'><li class='xr-section-item'><input id='section-de54733d-a52d-4cca-afc9-914196f3d3e1' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-de54733d-a52d-4cca-afc9-914196f3d3e1' class='xr-section-summary'  title='Expand/collapse section'>Dimensions:</label><div class='xr-section-inline-details'><ul class='xr-dim-list'><li><span class='xr-has-index'>time</span>: 101</li></ul></div><div class='xr-section-details'></div></li><li class='xr-section-item'><input id='section-a377d993-9607-4bbd-952c-86dcd7d884eb' class='xr-section-summary-in' type='checkbox'  checked><label for='section-a377d993-9607-4bbd-952c-86dcd7d884eb' class='xr-section-summary' >Coordinates: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>time</span></div><div class='xr-var-dims'>(time)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>0.0 0.5 1.0 1.5 ... 49.0 49.5 50.0</div><input id='attrs-01104aef-1d22-4f7c-95bb-b8ba764d2f7f' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-01104aef-1d22-4f7c-95bb-b8ba764d2f7f' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-d3194128-2b70-41b5-b812-bf6bbade50a9' class='xr-var-data-in' type='checkbox'><label for='data-d3194128-2b70-41b5-b812-bf6bbade50a9' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 0. ,  0.5,  1. ,  1.5,  2. ,  2.5,  3. ,  3.5,  4. ,  4.5,  5. ,  5.5,
         6. ,  6.5,  7. ,  7.5,  8. ,  8.5,  9. ,  9.5, 10. , 10.5, 11. , 11.5,
        12. , 12.5, 13. , 13.5, 14. , 14.5, 15. , 15.5, 16. , 16.5, 17. , 17.5,
        18. , 18.5, 19. , 19.5, 20. , 20.5, 21. , 21.5, 22. , 22.5, 23. , 23.5,
@@ -495,7 +495,7 @@ Data variables:
        30. , 30.5, 31. , 31.5, 32. , 32.5, 33. , 33.5, 34. , 34.5, 35. , 35.5,
        36. , 36.5, 37. , 37.5, 38. , 38.5, 39. , 39.5, 40. , 40.5, 41. , 41.5,
        42. , 42.5, 43. , 43.5, 44. , 44.5, 45. , 45.5, 46. , 46.5, 47. , 47.5,
-       48. , 48.5, 49. , 49.5, 50. ])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-0c399b09-206e-4bfa-bbf4-1c3221b54c72' class='xr-section-summary-in' type='checkbox'  checked><label for='section-0c399b09-206e-4bfa-bbf4-1c3221b54c72' class='xr-section-summary' >Data variables: <span>(2)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span>prey</span></div><div class='xr-var-dims'>(time)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>10.17 11.36 11.85 ... 12.37 11.56</div><input id='attrs-8f26c21b-4ea1-4fe1-90df-88e09da0846b' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-8f26c21b-4ea1-4fe1-90df-88e09da0846b' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-e90c6867-57c4-43a7-8de3-ee2f90e4e0b1' class='xr-var-data-in' type='checkbox'><label for='data-e90c6867-57c4-43a7-8de3-ee2f90e4e0b1' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([10.1727921 , 11.36356787, 11.85133418, 11.32758206, 12.13024324,
+       48. , 48.5, 49. , 49.5, 50. ])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-277c8f4a-2e63-460c-88fd-67e1f046c6b3' class='xr-section-summary-in' type='checkbox'  checked><label for='section-277c8f4a-2e63-460c-88fd-67e1f046c6b3' class='xr-section-summary' >Data variables: <span>(2)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span>prey</span></div><div class='xr-var-dims'>(time)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>10.17 11.36 11.85 ... 12.37 11.56</div><input id='attrs-68249376-a42e-4cf3-906a-4b32baeda3e2' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-68249376-a42e-4cf3-906a-4b32baeda3e2' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-ff3284fb-e387-4d19-bd4f-9b91fc602018' class='xr-var-data-in' type='checkbox'><label for='data-ff3284fb-e387-4d19-bd4f-9b91fc602018' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([10.1727921 , 11.36356787, 11.85133418, 11.32758206, 12.13024324,
        11.03241642,  9.34444201,  8.70483115,  7.64174857,  6.98965608,
         6.57516732,  6.85312033,  6.49556603,  7.30309667,  7.87383721,
         9.31440432, 10.03074436, 10.83049243, 11.32881408, 11.88840763,
@@ -515,7 +515,7 @@ Data variables:
        11.26081546,  9.31381041,  8.35946656,  7.57995973,  6.95289035,
         6.87040252,  6.58466325,  6.70585993,  7.16553957,  8.58367122,
         7.87094733,  9.97407174, 11.08383673, 11.15598075, 12.37157364,
-       11.56283879])</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span>predator</span></div><div class='xr-var-dims'>(time)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>5.431 5.33 6.397 ... 7.871 9.127</div><input id='attrs-80e5c0ef-c0e0-4e3b-98a0-9e66ce04023f' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-80e5c0ef-c0e0-4e3b-98a0-9e66ce04023f' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-13b42065-af86-45af-8b21-72eb3dde7b2c' class='xr-var-data-in' type='checkbox'><label for='data-13b42065-af86-45af-8b21-72eb3dde7b2c' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 5.4312224 ,  5.33024327,  6.39672032,  7.60376055,  8.25824253,
+       11.56283879])</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span>predator</span></div><div class='xr-var-dims'>(time)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>5.431 5.33 6.397 ... 7.871 9.127</div><input id='attrs-163f1e5b-1937-4488-9b45-31439f3df0b2' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-163f1e5b-1937-4488-9b45-31439f3df0b2' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-daaaacec-0d52-48cf-9dc7-577fb4c88323' class='xr-var-data-in' type='checkbox'><label for='data-daaaacec-0d52-48cf-9dc7-577fb4c88323' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 5.4312224 ,  5.33024327,  6.39672032,  7.60376055,  8.25824253,
         8.59705194,  8.84949092, 10.49034665,  9.05239184,  7.94732558,
         7.45133951,  6.42920702,  6.24083527,  5.30774194,  4.97430678,
         4.50230252,  5.22067198,  4.85811968,  6.38407349,  7.75677694,
@@ -535,10 +535,10 @@ Data variables:
         8.77120917,  9.81951815,  8.99908534,  9.31052548,  8.12160111,
         7.99771137,  6.96905479,  4.39192311,  5.22164132,  4.0539337 ,
         5.30106873,  4.95572986,  5.54363339,  5.43624167,  7.87109895,
-        9.12710988])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-1d507124-981e-4b67-8c01-0c2e3e24c082' class='xr-section-summary-in' type='checkbox'  ><label for='section-1d507124-981e-4b67-8c01-0c2e3e24c082' class='xr-section-summary' >Indexes: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-index-name'><div>time</div></div><div class='xr-index-preview'>PandasIndex</div><div></div><input id='index-0700039a-818f-4754-9e51-49a0a21ab89b' class='xr-index-data-in' type='checkbox'/><label for='index-0700039a-818f-4754-9e51-49a0a21ab89b' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([ 0.0,  0.5,  1.0,  1.5,  2.0,  2.5,  3.0,  3.5,  4.0,  4.5,
+        9.12710988])</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-65e29c3d-18d1-4ec7-bd51-62acc1318f43' class='xr-section-summary-in' type='checkbox'  ><label for='section-65e29c3d-18d1-4ec7-bd51-62acc1318f43' class='xr-section-summary' >Indexes: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-index-name'><div>time</div></div><div class='xr-index-preview'>PandasIndex</div><div></div><input id='index-5898cb50-fc9e-4b28-b69f-2308158a6646' class='xr-index-data-in' type='checkbox'/><label for='index-5898cb50-fc9e-4b28-b69f-2308158a6646' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([ 0.0,  0.5,  1.0,  1.5,  2.0,  2.5,  3.0,  3.5,  4.0,  4.5,
        ...
        45.5, 46.0, 46.5, 47.0, 47.5, 48.0, 48.5, 49.0, 49.5, 50.0],
-      dtype=&#x27;float64&#x27;, name=&#x27;time&#x27;, length=101))</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-680ee3d1-92a1-4eb8-a378-11a52a5752b5' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-680ee3d1-92a1-4eb8-a378-11a52a5752b5' class='xr-section-summary'  title='Expand/collapse section'>Attributes: <span>(0)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><dl class='xr-attrs'></dl></div></li></ul></div></div>
+      dtype=&#x27;float64&#x27;, name=&#x27;time&#x27;, length=101))</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-5e08b1ab-70ef-4bb8-9952-4c96ac858c2d' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-5e08b1ab-70ef-4bb8-9952-4c96ac858c2d' class='xr-section-summary'  title='Expand/collapse section'>Attributes: <span>(0)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><dl class='xr-attrs'></dl></div></li></ul></div></div>
 
 
 
@@ -657,14 +657,14 @@ ax.plot(data_res.time, data_res.predator, color="black", label ="result")
 ax.legend()
 ```
 
-    /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/simulation.py:688: UserWarning: The number of ODE states was not specified in the config file [simulation] > 'n_ode_states = <n>'. Extracted the return arguments ['dXdt', 'dYdt'] from the source code. Setting 'n_ode_states=2.
+    /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/simulation.py:706: UserWarning: The number of ODE states was not specified in the config file [simulation] > 'n_ode_states = <n>'. Extracted the return arguments ['dXdt', 'dYdt'] from the source code. Setting 'n_ode_states=2.
       warnings.warn(
 
 
 
 
 
-    <matplotlib.legend.Legend at 0x70e8b2427410>
+    <matplotlib.legend.Legend at 0x73f9fca07150>
 
 
 
@@ -761,7 +761,7 @@ except XlaRuntimeError as e:
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/jax/_src/pjit.py(255): cache_miss
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/jax/_src/traceback_util.py(177): reraise_with_filtered_traceback
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/solvers/base.py(83): __call__
-      /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/sim/evaluator.py(351): __call__
+      /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/sim/evaluator.py(353): __call__
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/inference/numpyro_backend.py(274): evaluator
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/inference/numpyro_backend.py(498): model
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/numpyro/primitives.py(105): __call__
@@ -776,7 +776,7 @@ except XlaRuntimeError as e:
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/numpyro/infer/mcmc.py(634): run
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/inference/numpyro_backend.py(665): run_mcmc
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/inference/numpyro_backend.py(579): run
-      /tmp/ipykernel_105333/119426844.py(17): <module>
+      /tmp/ipykernel_132128/119426844.py(17): <module>
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/IPython/core/interactiveshell.py(3699): run_code
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/IPython/core/interactiveshell.py(3639): run_ast_nodes
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/IPython/core/interactiveshell.py(3394): run_cell_async
@@ -880,7 +880,7 @@ except XlaRuntimeError as e:
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/jax/_src/pjit.py(255): cache_miss
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/jax/_src/traceback_util.py(177): reraise_with_filtered_traceback
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/solvers/base.py(83): __call__
-      /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/sim/evaluator.py(351): __call__
+      /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/sim/evaluator.py(353): __call__
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/inference/numpyro_backend.py(274): evaluator
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/inference/numpyro_backend.py(498): model
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/numpyro/primitives.py(105): __call__
@@ -895,7 +895,7 @@ except XlaRuntimeError as e:
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/numpyro/infer/mcmc.py(634): run
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/inference/numpyro_backend.py(665): run_mcmc
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/inference/numpyro_backend.py(579): run
-      /tmp/ipykernel_105333/2085724305.py(10): <module>
+      /tmp/ipykernel_132128/2085724305.py(10): <module>
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/IPython/core/interactiveshell.py(3699): run_code
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/IPython/core/interactiveshell.py(3639): run_ast_nodes
       /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/IPython/core/interactiveshell.py(3394): run_cell_async
@@ -964,91 +964,77 @@ except XlaRuntimeError as e:
 
       0%|                                                                                                                                                                  | 0/3000 [00:00<?, ?it/s]
 
-    warmup:   0%|                                                                                                      | 1/3000 [00:02<2:29:41,  2.99s/it, 1 steps of size 1.87e+00. acc. prob=0.00]
+    warmup:   0%|                                                                                                      | 1/3000 [00:02<2:06:13,  2.53s/it, 1 steps of size 1.87e+00. acc. prob=0.00]
 
-    warmup:   2%|█▊                                                                                                    | 53/3000 [00:03<02:02, 23.98it/s, 87 steps of size 8.96e-04. acc. prob=0.73]
+    warmup:   2%|█▊                                                                                                   | 54/3000 [00:02<01:42, 28.67it/s, 255 steps of size 1.48e-03. acc. prob=0.73]
 
-    warmup:   3%|██▊                                                                                                  | 84/3000 [00:03<01:17, 37.63it/s, 147 steps of size 2.00e-03. acc. prob=0.75]
+    warmup:   3%|██▊                                                                                                  | 84/3000 [00:02<01:05, 44.86it/s, 147 steps of size 2.00e-03. acc. prob=0.75]
 
-    warmup:   4%|███▌                                                                                                  | 106/3000 [00:03<01:00, 48.10it/s, 3 steps of size 1.77e-01. acc. prob=0.76]
+    warmup:   4%|███▋                                                                                                  | 108/3000 [00:02<00:48, 59.22it/s, 3 steps of size 2.90e-02. acc. prob=0.76]
 
-    warmup:   4%|████▍                                                                                                | 132/3000 [00:03<00:42, 67.03it/s, 31 steps of size 1.33e-01. acc. prob=0.77]
+    warmup:   5%|████▊                                                                                                | 144/3000 [00:03<00:31, 91.06it/s, 47 steps of size 1.02e-01. acc. prob=0.77]
 
-    warmup:   6%|█████▉                                                                                              | 178/3000 [00:03<00:25, 111.69it/s, 19 steps of size 2.63e-01. acc. prob=0.78]
+    warmup:   6%|██████▌                                                                                             | 195/3000 [00:03<00:19, 145.95it/s, 23 steps of size 3.26e-01. acc. prob=0.78]
 
-    warmup:   7%|███████▍                                                                                             | 222/3000 [00:03<00:17, 157.37it/s, 7 steps of size 1.02e-01. acc. prob=0.78]
+    warmup:   8%|████████▍                                                                                            | 252/3000 [00:03<00:12, 212.86it/s, 1 steps of size 2.08e-01. acc. prob=0.78]
 
-    warmup:   9%|█████████                                                                                           | 271/3000 [00:03<00:12, 211.81it/s, 31 steps of size 2.56e-01. acc. prob=0.78]
+    warmup:  10%|██████████▎                                                                                          | 308/3000 [00:03<00:09, 276.43it/s, 7 steps of size 1.20e-01. acc. prob=0.78]
 
-    warmup:  11%|██████████▊                                                                                         | 326/3000 [00:04<00:09, 275.97it/s, 31 steps of size 2.16e-01. acc. prob=0.78]
+    warmup:  13%|████████████▌                                                                                       | 377/3000 [00:03<00:07, 361.86it/s, 15 steps of size 2.79e-01. acc. prob=0.78]
 
-    warmup:  13%|████████████▌                                                                                       | 376/3000 [00:04<00:08, 323.80it/s, 31 steps of size 2.00e-01. acc. prob=0.78]
+    warmup:  15%|██████████████▉                                                                                     | 448/3000 [00:03<00:05, 440.03it/s, 31 steps of size 2.22e-01. acc. prob=0.79]
 
-    warmup:  14%|██████████████▍                                                                                     | 432/3000 [00:04<00:06, 378.57it/s, 11 steps of size 2.41e-01. acc. prob=0.79]
+    warmup:  17%|█████████████████▏                                                                                  | 515/3000 [00:03<00:05, 496.52it/s, 15 steps of size 2.63e-01. acc. prob=0.79]
 
-    warmup:  16%|████████████████▌                                                                                    | 492/3000 [00:04<00:05, 433.70it/s, 7 steps of size 7.14e-01. acc. prob=0.79]
+    warmup:  20%|████████████████████▎                                                                                | 602/3000 [00:03<00:04, 593.11it/s, 3 steps of size 4.15e-01. acc. prob=0.79]
 
-    warmup:  18%|██████████████████▏                                                                                 | 544/3000 [00:04<00:05, 442.77it/s, 15 steps of size 3.24e-01. acc. prob=0.79]
+    warmup:  23%|███████████████████████                                                                             | 693/3000 [00:03<00:03, 677.58it/s, 15 steps of size 3.10e-01. acc. prob=0.79]
 
-    warmup:  21%|█████████████████████                                                                                | 627/3000 [00:04<00:04, 545.45it/s, 3 steps of size 2.22e-01. acc. prob=0.79]
+    warmup:  26%|██████████████████████████▍                                                                          | 785/3000 [00:03<00:02, 744.39it/s, 7 steps of size 4.54e-01. acc. prob=0.79]
 
-    warmup:  23%|███████████████████████▏                                                                             | 688/3000 [00:04<00:04, 549.99it/s, 1 steps of size 1.96e-01. acc. prob=0.79]
+    warmup:  29%|█████████████████████████████▋                                                                       | 883/3000 [00:04<00:02, 809.66it/s, 7 steps of size 3.72e-01. acc. prob=0.79]
 
-    warmup:  25%|█████████████████████████▍                                                                           | 756/3000 [00:04<00:03, 585.45it/s, 3 steps of size 7.20e-01. acc. prob=0.79]
+    warmup:  32%|████████████████████████████████▋                                                                    | 972/3000 [00:04<00:02, 831.13it/s, 7 steps of size 5.42e-01. acc. prob=0.79]
 
-    warmup:  28%|███████████████████████████▉                                                                         | 831/3000 [00:04<00:03, 631.87it/s, 7 steps of size 5.73e-01. acc. prob=0.79]
+    sample:  35%|███████████████████████████████████▍                                                                | 1063/3000 [00:04<00:02, 854.00it/s, 3 steps of size 4.50e-01. acc. prob=0.92]
 
-    warmup:  30%|██████████████████████████████▌                                                                      | 909/3000 [00:04<00:03, 674.42it/s, 7 steps of size 3.48e-01. acc. prob=0.79]
+    sample:  39%|██████████████████████████████████████▋                                                             | 1160/3000 [00:04<00:02, 885.94it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    warmup:  33%|█████████████████████████████████                                                                   | 993/3000 [00:05<00:02, 719.32it/s, 31 steps of size 2.32e-01. acc. prob=0.79]
+    sample:  42%|██████████████████████████████████████████                                                          | 1262/3000 [00:04<00:01, 924.73it/s, 7 steps of size 4.50e-01. acc. prob=0.94]
 
-    sample:  36%|███████████████████████████████████▋                                                                | 1071/3000 [00:05<00:02, 735.68it/s, 3 steps of size 4.50e-01. acc. prob=0.92]
+    sample:  46%|█████████████████████████████████████████████▌                                                      | 1368/3000 [00:04<00:01, 964.32it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  38%|██████████████████████████████████████▏                                                             | 1146/3000 [00:05<00:02, 739.35it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  49%|█████████████████████████████████████████████████                                                   | 1472/3000 [00:04<00:01, 986.57it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  41%|████████████████████████████████████████▋                                                           | 1221/3000 [00:05<00:02, 682.32it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  52%|████████████████████████████████████████████████████▍                                               | 1572/3000 [00:04<00:01, 981.95it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  44%|███████████████████████████████████████████▉                                                        | 1318/3000 [00:05<00:02, 760.71it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  56%|███████████████████████████████████████████████████████▏                                           | 1673/3000 [00:04<00:01, 989.68it/s, 15 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  47%|██████████████████████████████████████████████▉                                                     | 1407/3000 [00:05<00:02, 795.83it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  59%|███████████████████████████████████████████████████████████▏                                        | 1775/3000 [00:04<00:01, 996.40it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  50%|█████████████████████████████████████████████████▌                                                  | 1488/3000 [00:05<00:01, 764.02it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  63%|█████████████████████████████████████████████████████████████▉                                     | 1878/3000 [00:05<00:01, 1005.82it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  52%|████████████████████████████████████████████████████▌                                               | 1575/3000 [00:05<00:01, 793.94it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  66%|█████████████████████████████████████████████████████████████████▎                                 | 1979/3000 [00:05<00:01, 1006.19it/s, 1 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  55%|███████████████████████████████████████████████████████▏                                            | 1656/3000 [00:05<00:01, 772.57it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  70%|████████████████████████████████████████████████████████████████████                              | 2085/3000 [00:05<00:00, 1020.95it/s, 15 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  58%|██████████████████████████████████████████████████████████▏                                         | 1744/3000 [00:06<00:01, 802.61it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  73%|████████████████████████████████████████████████████████████████████████▏                          | 2189/3000 [00:05<00:00, 1025.19it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  61%|█████████████████████████████████████████████████████████████▏                                      | 1836/3000 [00:06<00:01, 836.01it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  76%|███████████████████████████████████████████████████████████████████████████▋                       | 2292/3000 [00:05<00:00, 1016.52it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  64%|████████████████████████████████████████████████████████████████                                    | 1921/3000 [00:06<00:01, 827.79it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  80%|███████████████████████████████████████████████████████████████████████████████▏                   | 2398/3000 [00:05<00:00, 1027.87it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  67%|███████████████████████████████████████████████████████████████████▏                                | 2016/3000 [00:06<00:01, 861.03it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  83%|██████████████████████████████████████████████████████████████████████████████████▌                | 2501/3000 [00:05<00:00, 1018.16it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  70%|██████████████████████████████████████████████████████████████████████                              | 2103/3000 [00:06<00:01, 847.84it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  87%|█████████████████████████████████████████████████████████████████████████████████████▉             | 2603/3000 [00:05<00:00, 1008.36it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  73%|████████████████████████████████████████████████████████████████████████▉                           | 2189/3000 [00:06<00:00, 842.88it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  90%|█████████████████████████████████████████████████████████████████████████████████████████▎         | 2707/3000 [00:05<00:00, 1015.93it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  76%|███████████████████████████████████████████████████████████████████████████▊                        | 2274/3000 [00:06<00:00, 824.70it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  94%|████████████████████████████████████████████████████████████████████████████████████████████▋      | 2809/3000 [00:06<00:00, 1011.86it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  79%|██████████████████████████████████████████████████████████████████████████████▌                     | 2358/3000 [00:06<00:00, 827.32it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  97%|████████████████████████████████████████████████████████████████████████████████████████████████   | 2911/3000 [00:06<00:00, 1010.50it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  81%|█████████████████████████████████████████████████████████████████████████████████▍                  | 2442/3000 [00:06<00:00, 829.80it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  84%|████████████████████████████████████████████████████████████████████████████████████▏               | 2526/3000 [00:06<00:00, 810.78it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  87%|███████████████████████████████████████████████████████████████████████████████████████             | 2612/3000 [00:07<00:00, 825.02it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  90%|█████████████████████████████████████████████████████████████████████████████████████████▊          | 2695/3000 [00:07<00:00, 784.78it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  93%|████████████████████████████████████████████████████████████████████████████████████████████▋       | 2779/3000 [00:07<00:00, 800.00it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  96%|███████████████████████████████████████████████████████████████████████████████████████████████▌    | 2867/3000 [00:07<00:00, 817.22it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  98%|██████████████████████████████████████████████████████████████████████████████████████████████████▌ | 2955/3000 [00:07<00:00, 832.91it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████| 3000/3000 [00:07<00:00, 397.95it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████| 3000/3000 [00:06<00:00, 484.68it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
     
 
@@ -1064,7 +1050,7 @@ except XlaRuntimeError as e:
 
 
     
-![png](advanced_tutorial_ODE_system_files/advanced_tutorial_ODE_system_26_47.png)
+![png](advanced_tutorial_ODE_system_files/advanced_tutorial_ODE_system_26_40.png)
     
 
 
@@ -1166,7 +1152,7 @@ sim2.solver = JaxSolver
     MinMaxScaler(variable=predator, min=4.053933700151413, max=10.925258075625722)
 
 
-    /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/simulation.py:1529: UserWarning: Using default initialize method, (load observations, define 'y0', define 'x_in'). This may be insufficient for more complex simulations.
+    /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/simulation.py:1548: UserWarning: Using default initialize method, (load observations, define 'y0', define 'x_in'). This may be insufficient for more complex simulations.
       warnings.warn(
 
 
@@ -1293,95 +1279,79 @@ sim2.posterior_predictive_checks(pred_hdi_style={"alpha": 0.1})
 
       0%|                                                                                                                                                                  | 0/3000 [00:00<?, ?it/s]
 
-    warmup:   0%|                                                                                                      | 1/3000 [00:02<2:29:36,  2.99s/it, 1 steps of size 1.87e+00. acc. prob=0.00]
+    warmup:   0%|                                                                                                      | 1/3000 [00:02<2:06:57,  2.54s/it, 1 steps of size 1.87e+00. acc. prob=0.00]
 
-    warmup:   2%|█▋                                                                                                   | 50/3000 [00:03<02:10, 22.54it/s, 127 steps of size 1.97e-03. acc. prob=0.73]
+    warmup:   2%|█▊                                                                                                   | 54/3000 [00:02<01:43, 28.45it/s, 255 steps of size 1.48e-03. acc. prob=0.73]
 
-    warmup:   3%|██▌                                                                                                   | 77/3000 [00:03<01:24, 34.73it/s, 63 steps of size 4.25e-03. acc. prob=0.75]
+    warmup:   3%|██▊                                                                                                  | 83/3000 [00:02<01:06, 44.06it/s, 103 steps of size 1.42e-03. acc. prob=0.75]
 
-    warmup:   3%|███▎                                                                                                  | 97/3000 [00:03<01:02, 46.27it/s, 51 steps of size 1.00e-03. acc. prob=0.75]
+    warmup:   4%|███▌                                                                                                  | 106/3000 [00:02<00:50, 57.84it/s, 3 steps of size 1.77e-01. acc. prob=0.76]
 
-    warmup:   4%|███▉                                                                                                  | 116/3000 [00:03<00:50, 56.79it/s, 7 steps of size 5.26e-02. acc. prob=0.76]
+    warmup:   5%|████▉                                                                                                 | 147/3000 [00:03<00:29, 95.15it/s, 5 steps of size 6.69e-02. acc. prob=0.77]
 
-    warmup:   5%|█████▎                                                                                              | 160/3000 [00:03<00:28, 100.09it/s, 63 steps of size 4.84e-02. acc. prob=0.77]
+    warmup:   7%|██████▌                                                                                             | 197/3000 [00:03<00:18, 148.02it/s, 95 steps of size 8.04e-02. acc. prob=0.77]
 
-    warmup:   7%|██████▊                                                                                              | 203/3000 [00:03<00:19, 145.94it/s, 3 steps of size 7.95e-02. acc. prob=0.78]
+    warmup:   9%|████████▋                                                                                           | 262/3000 [00:03<00:12, 226.80it/s, 47 steps of size 1.26e-01. acc. prob=0.78]
 
-    warmup:   8%|████████▌                                                                                           | 255/3000 [00:03<00:13, 207.57it/s, 31 steps of size 2.55e-01. acc. prob=0.78]
+    warmup:  11%|██████████▊                                                                                         | 324/3000 [00:03<00:08, 298.85it/s, 11 steps of size 9.91e-02. acc. prob=0.78]
 
-    warmup:  10%|██████████▏                                                                                         | 305/3000 [00:04<00:10, 263.36it/s, 15 steps of size 2.85e-01. acc. prob=0.78]
+    warmup:  13%|█████████████▏                                                                                      | 394/3000 [00:03<00:06, 381.26it/s, 11 steps of size 3.62e-01. acc. prob=0.78]
 
-    warmup:  12%|████████████                                                                                        | 362/3000 [00:04<00:08, 328.88it/s, 31 steps of size 1.44e-01. acc. prob=0.78]
+    warmup:  16%|███████████████▌                                                                                    | 468/3000 [00:03<00:05, 458.30it/s, 63 steps of size 1.21e-01. acc. prob=0.78]
 
-    warmup:  14%|██████████████                                                                                      | 420/3000 [00:04<00:06, 387.42it/s, 15 steps of size 3.83e-01. acc. prob=0.79]
+    warmup:  18%|██████████████████▏                                                                                  | 540/3000 [00:03<00:04, 522.01it/s, 7 steps of size 6.23e-01. acc. prob=0.79]
 
-    warmup:  16%|███████████████▋                                                                                    | 470/3000 [00:04<00:06, 378.09it/s, 15 steps of size 4.11e-01. acc. prob=0.79]
+    warmup:  21%|████████████████████▉                                                                               | 629/3000 [00:03<00:03, 614.50it/s, 15 steps of size 3.64e-01. acc. prob=0.79]
 
-    warmup:  17%|█████████████████▏                                                                                  | 516/3000 [00:04<00:06, 397.85it/s, 15 steps of size 3.91e-01. acc. prob=0.79]
+    warmup:  24%|████████████████████████▏                                                                            | 718/3000 [00:03<00:03, 686.70it/s, 7 steps of size 4.07e-01. acc. prob=0.79]
 
-    warmup:  19%|███████████████████▋                                                                                 | 583/3000 [00:04<00:05, 467.06it/s, 7 steps of size 6.61e-01. acc. prob=0.79]
+    warmup:  27%|███████████████████████████▍                                                                         | 815/3000 [00:03<00:02, 764.93it/s, 7 steps of size 3.42e-01. acc. prob=0.79]
 
-    warmup:  22%|█████████████████████▉                                                                               | 650/3000 [00:04<00:04, 521.70it/s, 7 steps of size 4.41e-01. acc. prob=0.79]
+    warmup:  30%|██████████████████████████████▋                                                                      | 911/3000 [00:04<00:02, 818.50it/s, 7 steps of size 4.18e-01. acc. prob=0.79]
 
-    warmup:  24%|████████████████████████▎                                                                            | 724/3000 [00:04<00:03, 581.84it/s, 3 steps of size 4.21e-01. acc. prob=0.79]
+    warmup:  33%|█████████████████████████████████▌                                                                   | 998/3000 [00:04<00:02, 829.82it/s, 1 steps of size 7.55e-01. acc. prob=0.79]
 
-    warmup:  26%|██████████████████████████▍                                                                          | 786/3000 [00:04<00:03, 583.09it/s, 5 steps of size 4.86e-01. acc. prob=0.79]
+    sample:  37%|████████████████████████████████████▌                                                               | 1098/3000 [00:04<00:02, 876.67it/s, 7 steps of size 4.50e-01. acc. prob=0.92]
 
-    warmup:  28%|████████████████████████████▌                                                                        | 850/3000 [00:04<00:03, 597.67it/s, 7 steps of size 2.79e-01. acc. prob=0.79]
+    sample:  40%|███████████████████████████████████████▋                                                            | 1189/3000 [00:04<00:02, 865.95it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    warmup:  31%|███████████████████████████████▎                                                                     | 929/3000 [00:05<00:03, 652.64it/s, 5 steps of size 5.49e-01. acc. prob=0.79]
+    sample:  43%|██████████████████████████████████████████▊                                                         | 1283/3000 [00:04<00:01, 885.58it/s, 3 steps of size 4.50e-01. acc. prob=0.94]
 
-    warmup:  33%|█████████████████████████████████▌                                                                   | 996/3000 [00:05<00:03, 653.77it/s, 5 steps of size 5.62e-01. acc. prob=0.79]
+    sample:  46%|██████████████████████████████████████████████                                                      | 1383/3000 [00:04<00:01, 917.21it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  36%|████████████████████████████████████                                                                | 1083/3000 [00:05<00:02, 714.20it/s, 5 steps of size 4.50e-01. acc. prob=0.92]
+    sample:  49%|█████████████████████████████████████████████████▍                                                  | 1484/3000 [00:04<00:01, 943.05it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  39%|██████████████████████████████████████▌                                                            | 1168/3000 [00:05<00:02, 753.06it/s, 15 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  53%|████████████████████████████████████████████████████▋                                               | 1581/3000 [00:04<00:01, 949.72it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  42%|█████████████████████████████████████████▊                                                          | 1255/3000 [00:05<00:02, 786.50it/s, 7 steps of size 4.50e-01. acc. prob=0.94]
+    sample:  56%|████████████████████████████████████████████████████████                                            | 1682/3000 [00:04<00:01, 966.09it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  44%|████████████████████████████████████████████                                                       | 1335/3000 [00:05<00:02, 781.47it/s, 11 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  59%|███████████████████████████████████████████████████████████▎                                        | 1780/3000 [00:05<00:01, 970.05it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  47%|██████████████████████████████████████████████▉                                                    | 1424/3000 [00:05<00:01, 809.74it/s, 15 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  63%|██████████████████████████████████████████████████████████████▋                                     | 1881/3000 [00:05<00:01, 981.37it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  50%|██████████████████████████████████████████████████▏                                                 | 1506/3000 [00:05<00:01, 776.30it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  66%|██████████████████████████████████████████████████████████████████                                  | 1980/3000 [00:05<00:01, 980.48it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  53%|████████████████████████████████████████████████████▊                                               | 1585/3000 [00:05<00:02, 658.71it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  69%|█████████████████████████████████████████████████████████████████████▍                              | 2083/3000 [00:05<00:00, 995.13it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  56%|███████████████████████████████████████████████████████▏                                           | 1673/3000 [00:06<00:01, 713.13it/s, 15 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  73%|████████████████████████████████████████████████████████████████████████▊                           | 2183/3000 [00:05<00:00, 989.86it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  58%|██████████████████████████████████████████████████████████▌                                         | 1755/3000 [00:06<00:01, 739.98it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  76%|████████████████████████████████████████████████████████████████████████████                        | 2283/3000 [00:05<00:00, 974.38it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  62%|█████████████████████████████████████████████████████████████▋                                      | 1849/3000 [00:06<00:01, 794.99it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  79%|███████████████████████████████████████████████████████████████████████████████▍                    | 2384/3000 [00:05<00:00, 982.99it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  64%|████████████████████████████████████████████████████████████████▎                                   | 1931/3000 [00:06<00:01, 766.41it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  83%|██████████████████████████████████████████████████████████████████████████████████▊                 | 2483/3000 [00:05<00:00, 981.15it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  67%|███████████████████████████████████████████████████████████████████                                 | 2010/3000 [00:06<00:01, 765.30it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  86%|██████████████████████████████████████████████████████████████████████████████████████              | 2582/3000 [00:05<00:00, 975.01it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  70%|█████████████████████████████████████████████████████████████████████▋                              | 2090/3000 [00:06<00:01, 774.63it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  89%|█████████████████████████████████████████████████████████████████████████████████████████▍          | 2682/3000 [00:05<00:00, 982.19it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  72%|████████████████████████████████████████████████████████████████████████▎                           | 2169/3000 [00:06<00:01, 770.46it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  93%|███████████████████████████████████████████████████████████████████████████████████████████▊       | 2781/3000 [00:06<00:00, 980.29it/s, 15 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  75%|██████████████████████████████████████████████████████████████████████████▉                         | 2249/3000 [00:06<00:00, 776.44it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  96%|████████████████████████████████████████████████████████████████████████████████████████████████    | 2882/3000 [00:06<00:00, 987.07it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  78%|█████████████████████████████████████████████████████████████████████████████▌                      | 2328/3000 [00:06<00:00, 766.63it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  99%|███████████████████████████████████████████████████████████████████████████████████████████████████▎| 2981/3000 [00:06<00:00, 986.01it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  80%|███████████████████████████████████████████████████████████████████████████████▋                   | 2413/3000 [00:06<00:00, 787.53it/s, 15 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  83%|███████████████████████████████████████████████████████████████████████████████████                 | 2493/3000 [00:07<00:00, 773.09it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  86%|█████████████████████████████████████████████████████████████████████████████████████▊              | 2576/3000 [00:07<00:00, 787.65it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  89%|████████████████████████████████████████████████████████████████████████████████████████▊           | 2663/3000 [00:07<00:00, 811.52it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  92%|███████████████████████████████████████████████████████████████████████████████████████████▌        | 2748/3000 [00:07<00:00, 822.12it/s, 5 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  94%|██████████████████████████████████████████████████████████████████████████████████████████████▍     | 2833/3000 [00:07<00:00, 827.54it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  97%|█████████████████████████████████████████████████████████████████████████████████████████████████▏  | 2916/3000 [00:07<00:00, 809.99it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████▉| 2998/3000 [00:07<00:00, 806.48it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████| 3000/3000 [00:07<00:00, 388.53it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████| 3000/3000 [00:06<00:00, 480.05it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
     
 
@@ -1397,7 +1367,7 @@ sim2.posterior_predictive_checks(pred_hdi_style={"alpha": 0.1})
 
 
     
-![png](advanced_tutorial_ODE_system_files/advanced_tutorial_ODE_system_44_50.png)
+![png](advanced_tutorial_ODE_system_files/advanced_tutorial_ODE_system_44_42.png)
     
 
 
@@ -1440,7 +1410,7 @@ sim3.initialize()
     MinMaxScaler(variable=predator, min=4.053933700151413, max=10.925258075625722)
 
 
-    /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/simulation.py:1529: UserWarning: Using default initialize method, (load observations, define 'y0', define 'x_in'). This may be insufficient for more complex simulations.
+    /export/home/fschunck/miniconda3/envs/pymob/lib/python3.11/site-packages/pymob/simulation.py:1548: UserWarning: Using default initialize method, (load observations, define 'y0', define 'x_in'). This may be insufficient for more complex simulations.
       warnings.warn(
 
 
@@ -1509,97 +1479,81 @@ sim3.posterior_predictive_checks(pred_hdi_style={"alpha": 0.1})
 
       0%|                                                                                                                                                                  | 0/3000 [00:00<?, ?it/s]
 
-    warmup:   0%|                                                                                                      | 1/3000 [00:03<3:10:02,  3.80s/it, 1 steps of size 1.87e+00. acc. prob=0.00]
+    warmup:   0%|                                                                                                      | 1/3000 [00:02<2:29:03,  2.98s/it, 1 steps of size 1.87e+00. acc. prob=0.00]
 
-    warmup:   2%|█▋                                                                                                   | 50/3000 [00:03<02:44, 17.97it/s, 127 steps of size 1.97e-03. acc. prob=0.73]
+    warmup:   2%|█▊                                                                                                   | 54/3000 [00:03<02:00, 24.43it/s, 255 steps of size 1.48e-03. acc. prob=0.73]
 
-    warmup:   3%|██▋                                                                                                    | 78/3000 [00:04<01:42, 28.57it/s, 3 steps of size 1.76e-03. acc. prob=0.75]
+    warmup:   3%|██▊                                                                                                  | 83/3000 [00:03<01:15, 38.46it/s, 103 steps of size 1.42e-03. acc. prob=0.75]
 
-    warmup:   3%|███▎                                                                                                 | 98/3000 [00:04<01:15, 38.35it/s, 255 steps of size 1.50e-03. acc. prob=0.75]
+    warmup:   4%|███▌                                                                                                  | 106/3000 [00:03<00:56, 51.38it/s, 3 steps of size 1.77e-01. acc. prob=0.76]
 
-    warmup:   4%|███▉                                                                                                 | 117/3000 [00:04<00:58, 49.22it/s, 63 steps of size 9.52e-02. acc. prob=0.76]
+    warmup:   5%|████▉                                                                                                | 148/3000 [00:03<00:33, 86.39it/s, 31 steps of size 1.07e-01. acc. prob=0.77]
 
-    warmup:   5%|█████▏                                                                                               | 154/3000 [00:04<00:35, 80.53it/s, 63 steps of size 6.49e-02. acc. prob=0.77]
+    warmup:   7%|██████▋                                                                                             | 199/3000 [00:03<00:20, 136.81it/s, 23 steps of size 1.71e-01. acc. prob=0.78]
 
-    warmup:   7%|██████▌                                                                                              | 196/3000 [00:04<00:22, 122.37it/s, 7 steps of size 4.86e-02. acc. prob=0.77]
+    warmup:   9%|████████▋                                                                                           | 262/3000 [00:03<00:13, 207.72it/s, 47 steps of size 1.26e-01. acc. prob=0.78]
 
-    warmup:   8%|████████                                                                                            | 241/3000 [00:04<00:16, 170.79it/s, 19 steps of size 1.65e-01. acc. prob=0.78]
+    warmup:  10%|██████████▍                                                                                         | 313/3000 [00:03<00:10, 258.86it/s, 23 steps of size 2.29e-01. acc. prob=0.78]
 
-    warmup:   9%|█████████▎                                                                                          | 280/3000 [00:04<00:13, 208.48it/s, 23 steps of size 2.13e-01. acc. prob=0.78]
+    warmup:  13%|████████████▋                                                                                       | 382/3000 [00:03<00:07, 342.61it/s, 15 steps of size 3.80e-01. acc. prob=0.78]
 
-    warmup:  11%|███████████                                                                                         | 332/3000 [00:04<00:09, 270.75it/s, 31 steps of size 1.34e-01. acc. prob=0.78]
+    warmup:  15%|███████████████▎                                                                                    | 459/3000 [00:04<00:05, 432.12it/s, 63 steps of size 9.65e-02. acc. prob=0.78]
 
-    warmup:  13%|█████████████                                                                                       | 393/3000 [00:05<00:07, 345.31it/s, 15 steps of size 3.08e-01. acc. prob=0.78]
+    warmup:  17%|█████████████████▍                                                                                  | 522/3000 [00:04<00:05, 477.64it/s, 23 steps of size 2.24e-01. acc. prob=0.79]
 
-    warmup:  15%|███████████████▎                                                                                    | 459/3000 [00:05<00:06, 418.76it/s, 63 steps of size 9.65e-02. acc. prob=0.78]
+    warmup:  20%|███████████████████▉                                                                                | 597/3000 [00:04<00:04, 545.70it/s, 15 steps of size 3.20e-01. acc. prob=0.79]
 
-    warmup:  17%|█████████████████                                                                                   | 511/3000 [00:05<00:05, 432.36it/s, 15 steps of size 3.97e-01. acc. prob=0.79]
+    warmup:  23%|███████████████████████▏                                                                             | 687/3000 [00:04<00:03, 637.95it/s, 7 steps of size 5.28e-01. acc. prob=0.79]
 
-    warmup:  19%|██████████████████▉                                                                                  | 563/3000 [00:05<00:05, 454.28it/s, 5 steps of size 2.62e-01. acc. prob=0.79]
+    warmup:  26%|██████████████████████████▎                                                                          | 780/3000 [00:04<00:03, 716.60it/s, 7 steps of size 3.83e-01. acc. prob=0.79]
 
-    warmup:  21%|█████████████████████                                                                                | 627/3000 [00:05<00:04, 503.25it/s, 3 steps of size 2.22e-01. acc. prob=0.79]
+    warmup:  29%|█████████████████████████████                                                                        | 863/3000 [00:04<00:02, 747.41it/s, 7 steps of size 6.42e-01. acc. prob=0.79]
 
-    warmup:  23%|██████████████████████▉                                                                              | 682/3000 [00:05<00:04, 481.24it/s, 3 steps of size 7.85e-01. acc. prob=0.79]
+    warmup:  32%|████████████████████████████████▎                                                                    | 961/3000 [00:04<00:02, 812.47it/s, 7 steps of size 6.86e-01. acc. prob=0.79]
 
-    warmup:  25%|████████████████████████▊                                                                            | 738/3000 [00:05<00:04, 498.26it/s, 7 steps of size 3.28e-01. acc. prob=0.79]
+    sample:  35%|██████████████████████████████████▉                                                                 | 1048/3000 [00:04<00:02, 829.06it/s, 3 steps of size 4.50e-01. acc. prob=0.92]
 
-    warmup:  27%|███████████████████████████▍                                                                         | 814/3000 [00:05<00:03, 569.25it/s, 3 steps of size 2.80e-01. acc. prob=0.79]
+    sample:  38%|██████████████████████████████████████▏                                                             | 1147/3000 [00:04<00:02, 875.35it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    warmup:  30%|██████████████████████████████                                                                       | 893/3000 [00:05<00:03, 631.36it/s, 3 steps of size 4.10e-01. acc. prob=0.79]
+    sample:  41%|█████████████████████████████████████████                                                          | 1244/3000 [00:04<00:01, 902.66it/s, 11 steps of size 4.50e-01. acc. prob=0.94]
 
-    warmup:  32%|████████████████████████████████▊                                                                    | 973/3000 [00:05<00:02, 679.77it/s, 3 steps of size 9.84e-01. acc. prob=0.79]
+    sample:  45%|████████████████████████████████████████████▊                                                       | 1344/3000 [00:05<00:01, 930.26it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  35%|██████████████████████████████████▊                                                                 | 1043/3000 [00:06<00:02, 680.24it/s, 7 steps of size 4.50e-01. acc. prob=0.91]
+    sample:  48%|████████████████████████████████████████████████                                                    | 1441/3000 [00:05<00:01, 940.69it/s, 1 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  38%|█████████████████████████████████████▊                                                              | 1133/3000 [00:06<00:02, 744.43it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  51%|███████████████████████████████████████████████████▏                                                | 1537/3000 [00:05<00:01, 946.35it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  40%|████████████████████████████████████████▎                                                           | 1211/3000 [00:06<00:02, 750.93it/s, 7 steps of size 4.50e-01. acc. prob=0.94]
+    sample:  55%|██████████████████████████████████████████████████████▌                                             | 1635/3000 [00:05<00:01, 956.03it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  43%|███████████████████████████████████████████▏                                                        | 1296/3000 [00:06<00:02, 777.91it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  58%|█████████████████████████████████████████████████████████▋                                          | 1731/3000 [00:05<00:01, 948.63it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  46%|█████████████████████████████████████████████▊                                                      | 1375/3000 [00:06<00:02, 757.28it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  61%|████████████████████████████████████████████████████████████▉                                       | 1827/3000 [00:05<00:01, 947.39it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  48%|████████████████████████████████████████████████▍                                                   | 1452/3000 [00:06<00:02, 752.42it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  64%|████████████████████████████████████████████████████████████████                                    | 1922/3000 [00:05<00:01, 914.81it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  51%|███████████████████████████████████████████████████                                                 | 1532/3000 [00:06<00:01, 765.95it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  67%|███████████████████████████████████████████████████████████████████▏                                | 2014/3000 [00:05<00:01, 905.66it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  54%|█████████████████████████████████████████████████████▋                                              | 1610/3000 [00:06<00:01, 768.62it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  70%|██████████████████████████████████████████████████████████████████████▏                             | 2105/3000 [00:05<00:00, 905.02it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  57%|████████████████████████████████████████████████████████▋                                           | 1699/3000 [00:06<00:01, 803.09it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  73%|█████████████████████████████████████████████████████████████████████████▏                          | 2196/3000 [00:05<00:00, 857.57it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  59%|███████████████████████████████████████████████████████████▎                                        | 1780/3000 [00:07<00:01, 784.78it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  76%|████████████████████████████████████████████████████████████████████████████                        | 2283/3000 [00:06<00:00, 764.44it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  62%|██████████████████████████████████████████████████████████████▏                                     | 1865/3000 [00:07<00:01, 803.01it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  79%|██████████████████████████████████████████████████████████████████████████████▊                     | 2364/3000 [00:06<00:00, 775.32it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  65%|████████████████████████████████████████████████████████████████▊                                   | 1946/3000 [00:07<00:01, 804.51it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  82%|█████████████████████████████████████████████████████████████████████████████████                  | 2457/3000 [00:06<00:00, 817.28it/s, 15 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  68%|███████████████████████████████████████████████████████████████████▌                                | 2027/3000 [00:07<00:01, 778.65it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  85%|████████████████████████████████████████████████████████████████████████████████████▉               | 2549/3000 [00:06<00:00, 845.94it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  70%|██████████████████████████████████████████████████████████████████████▍                             | 2113/3000 [00:07<00:01, 801.47it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  88%|████████████████████████████████████████████████████████████████████████████████████████            | 2642/3000 [00:06<00:00, 868.11it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  73%|█████████████████████████████████████████████████████████████████████████▏                          | 2194/3000 [00:07<00:01, 715.31it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  91%|███████████████████████████████████████████████████████████████████████████████████████████▎        | 2739/3000 [00:06<00:00, 895.88it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  76%|███████████████████████████████████████████████████████████████████████████▋                        | 2272/3000 [00:07<00:00, 731.94it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  94%|██████████████████████████████████████████████████████████████████████████████████████████████▌     | 2835/3000 [00:06<00:00, 914.48it/s, 1 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  78%|██████████████████████████████████████████████████████████████████████████████▏                     | 2347/3000 [00:07<00:00, 714.66it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample:  98%|█████████████████████████████████████████████████████████████████████████████████████████████████▌  | 2928/3000 [00:06<00:00, 903.37it/s, 1 steps of size 4.50e-01. acc. prob=0.93]
 
-    sample:  81%|█████████████████████████████████████████████████████████████████████████████████▏                  | 2435/3000 [00:07<00:00, 758.80it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  84%|███████████████████████████████████████████████████████████████████████████████████▊                | 2515/3000 [00:07<00:00, 770.50it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  86%|██████████████████████████████████████████████████████████████████████████████████████▍             | 2593/3000 [00:08<00:00, 757.40it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  89%|█████████████████████████████████████████████████████████████████████████████████████████           | 2670/3000 [00:08<00:00, 699.47it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  91%|███████████████████████████████████████████████████████████████████████████████████████████▍        | 2742/3000 [00:08<00:00, 653.84it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  94%|██████████████████████████████████████████████████████████████████████████████████████████████      | 2823/3000 [00:08<00:00, 693.93it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  97%|████████████████████████████████████████████████████████████████████████████████████████████████▋   | 2899/3000 [00:08<00:00, 711.52it/s, 3 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample:  99%|███████████████████████████████████████████████████████████████████████████████████████████████████▏| 2975/3000 [00:08<00:00, 724.79it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
-
-    sample: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████| 3000/3000 [00:08<00:00, 345.63it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
+    sample: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████| 3000/3000 [00:06<00:00, 433.96it/s, 7 steps of size 4.50e-01. acc. prob=0.93]
 
     
 
@@ -1615,6 +1569,6 @@ sim3.posterior_predictive_checks(pred_hdi_style={"alpha": 0.1})
 
 
     
-![png](advanced_tutorial_ODE_system_files/advanced_tutorial_ODE_system_48_51.png)
+![png](advanced_tutorial_ODE_system_files/advanced_tutorial_ODE_system_48_43.png)
     
 
