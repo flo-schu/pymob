@@ -14,6 +14,16 @@ build:
     # nodejs: "19"
     # rust: "1.64"
     # golang: "1.19"
+  jobs:
+    pre_build:
+    - bash ./docs/run_doctest.sh
+    - bash ./docs/build_user_guide.sh
+    # examples are too expensive for readthedocs.
+    # Readthedocs community has 15 min build limits. 
+    # examples should be uploaded as pre-built jupyter notebooks 
+    # on github.
+    - bash ./docs/build_examples.sh no-execute
+
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
