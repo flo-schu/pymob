@@ -84,7 +84,6 @@ class Evaluator:
             self,
             model: Callable,
             solver: type|Callable,
-            x_dim: str,
             dimensions: Sequence[str],
             dimension_sizes: Dict[str, int],
             parameter_dims: Dict[str, Tuple[str, ...]],
@@ -254,7 +253,6 @@ class Evaluator:
                     parameter_dims=frozendict(self.parameter_dims),
                     data_variables=tuple(self.data_variables),
                     data_structure_and_dimensionality=data_structure_dims,
-                    x_dim=x_dim,
 
                     indices=frozendict({k: tuple(v.values) for k, v in self.indices.items()}),
                     n_ode_states=self.n_ode_states,
