@@ -16,12 +16,12 @@ update_repo() {
   local DIRECTORY=$2
   local CWD=$PWD
 
-  if [ ! -d "$DIRECTORY" ]; then
+  if [ ! -d "$CASE_STUDY_DIR/$DIRECTORY" ]; then
     # clone if it does not exist
-    git clone "$REPO" "$DIRECTORY"
+    git clone "$REPO" $CASE_STUDY_DIR/"$DIRECTORY"
   else
     # update if it exists
-    cd $DIRECTORY
+    cd $CASE_STUDY_DIR/$DIRECTORY
     git pull
     cd $CWD
   fi
