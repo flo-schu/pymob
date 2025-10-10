@@ -9,7 +9,7 @@ can also be executed locally with a linux terminal.
 
 ```bash
 # run the doctests (pre_build)
-bash ./docs/run_doctests.sh
+bash ./docs/run_doctest.sh
 
 # build the documentation with sphinx (build)
 bash ./docs/build_documentation.sh
