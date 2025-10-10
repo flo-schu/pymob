@@ -444,18 +444,33 @@ class SimulationBase:
         ensuring correct path handling across different operating systems.
         - Before exporting attributes of the dataset are serialized to avoid
         export errors.
+        - Creates a data directory if it does not exist
         
         Examples
         --------
-        >>> # Save observations to the default data path with the default filename
-        >>> self.save_observations() 
 
-        >>> # Save observations to a specific directory with a custom filename
-        >>> self.save_observations(filename="my_obs.nc", directory="/path/to/my/data")
+        >>> # Create a simulation
+        >>> sim = SimulationBase()
+        >>> sim.config.case_study.name = "testing"
+
+        >>> # Save observations to the default data path with the default filename
+        >>> # 'case_studies/testing/data/observations.nc'
+        >>> sim.save_observations() 
+        >>> os.listdir("case_studies/testing/data/")
+        ['observations.nc']
 
         >>> # Overwrite an existing file without prompting
-        >>> self.save_observations(force=True)
+        >>> sim.save_observations(force=True)
+        >>> os.listdir("case_studies/testing/data/")
+        ['observations.nc']
+
+        >>> # Save observations to a specific directory with a custom filename
+        >>> sim.save_observations(filename="my_obs.nc", directory="case_studies/testing/data_mod/")
+        >>> os.listdir("case_studies/testing/data_mod/")
+        ['my_obs.nc']
+
         """
+
         if directory is None:
             directory = self.data_path
             
@@ -464,6 +479,9 @@ class SimulationBase:
             self.config.case_study.observations = filename
 
         self._serialize_attrs(self.observations)
+
+        if not os.path.exists(os.path.dirname(fp)):
+            os.makedirs(os.path.dirname(fp))
 
         if not os.path.exists(fp) or force:
             self.observations.drop_encoding().to_netcdf(fp)
