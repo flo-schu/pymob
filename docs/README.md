@@ -66,6 +66,11 @@ jupyter nbconvert --to markdown --execute --output_dir docs/source/examples/CASE
 # repeat last step for 2nd example, ...
 ```
 
+Case studies should be selected carefully. Not any case study should be taken up in the
+examples, because maintaining them with each pymob release (minor version), would become
+increasingly tedious. On the flip side, maintaining case studies and ensuring they are 
+always compatible to the latest pymob release would make experiences with pymob much more
+smooth.
 
 
 These commands should be integrated in pre-release CI pipelines. This is because more sophisticated notebooks, will take quite some time to compile. This is usually unnecessary when making development releases or pre-releases. But when updating the standard release available at `pip install pymob` (e.g. 0.4.1), then the examples in the documentation must be tested.
