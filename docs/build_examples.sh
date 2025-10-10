@@ -28,7 +28,7 @@ update_repo() {
 }
 
 
-CASE_STUDY_DIR="docs/source/examples/case_studies"
+CASE_STUDY_DIR="./docs/source/examples/case_studies"
 
 # lotka volterra
 REPO="https://github.com/flo-schu/lotka_volterra_case_study.git"
