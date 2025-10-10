@@ -135,6 +135,17 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
+    - name: Test doctests
+      if: env.full-test == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
+      # doctests are run early, because they are relatively fast
+      run: |
+        cd pymob
+        pytest --doctest-modules --disable-warnings \
+          --ignore=inference/interactive.py \
+          --ignore=inference/sbi \
+          --ignore=inference/optimization.py
+        cd ..
+
     - name: Test with pytest
       if: env.full-test == 'true' && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'
       run: |
