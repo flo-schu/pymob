@@ -1,5 +1,26 @@
 # Documentation developer documentation
 
+## Building the documentation
+
+The build process of the documentation is containerized in these commands.
+They are used in jobs that extend the build process configured in the `.readthedocs.yml` 
+config file (https://docs.readthedocs.com/platform/stable/build-customization.html) but 
+can also be executed locally with a linux terminal.
+
+```bash
+# run the doctests (pre_build)
+bash ./docs/run_doctests.sh
+
+# build the documentation with sphinx (build)
+bash ./docs/build_documentation.sh
+
+# this is a post_build job
+bash ./docs/build_user_guide.sh
+
+# this is a post_build job
+# can be run with the no-execute argument to disable executing the notebook
+bash ./docs/build_examples.sh
+```
 
 ## Executing and building examples.
 
@@ -26,6 +47,9 @@ pytest --doctest-modules --disable-warnings \
     --ignore=inference/optimization.py
 cd ..
 ```
+
+This is now implemented in `docs/run_doctests.sh`.
+
 ### Testing inference
 
 + LONG INFERENCE -> CASE STUDY
