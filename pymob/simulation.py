@@ -888,6 +888,7 @@ class SimulationBase:
             model=model,
             solver=solver,
             parameter_dims=self.parameter_dims,
+            x_dim=self.config.simulation.x_dimension,
             dimensions=self.dimensions,
             dimension_sizes=self.dimension_sizes,
             n_ode_states=self.config.simulation.n_ode_states,
