@@ -19,8 +19,21 @@ bash ./docs/build_user_guide.sh
 
 # this is a post_build job
 # can be run with the no-execute argument to disable executing the notebook
+# ATTENTION!! Make sure that the notebooks listed in the index of the docs/examples are matched by the names of the notebooks in the scripts folder of the case study 
 bash ./docs/build_examples.sh
 ```
+
+Testing the notebooks is thereby the responsibility of the case study provider.
+
+TODO: What I could do in the future is add a watermark, which version of pymob was used to gernerate the case-study. Or next level, build the examples on push and save as an artifact so they can be downloaded
+
+### Check list
+
+- [ ] If case studies were updated go to the respective branch
+      of the release (e.g. releases/0.5.x) and execute the jupyter notebooks locally with the latest pymob version and upload to the remote repository 
+- [ ] push to the pymob remote to trigger a documentation 
+      build. This will run doctests, execute the user guide pull the examples and convert them to notebooks
+
 
 ## Executing and building examples.
 
