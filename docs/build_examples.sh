@@ -25,6 +25,8 @@ update_repo() {
     git pull
     cd $CWD
   fi
+
+  pip install $CASE_STUDY_DIR/$DIRECTORY
 }
 
 
