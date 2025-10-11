@@ -19,7 +19,11 @@ build:
     - bash ./docs/run_doctest.sh
     post_build:
     - bash ./docs/build_user_guide.sh
-    - bash ./docs/build_examples.sh
+    # examples are too expensive for readthedocs.
+    # Readthedocs community has 15 min build limits. 
+    # examples should be uploaded as pre-built jupyter notebooks 
+    # on github.
+    - bash ./docs/build_examples.sh no-execute
 
 
 # Build documentation in the "docs/" directory with Sphinx
