@@ -26,7 +26,14 @@ update_repo() {
     cd $CWD
   fi
 
-  pip install $CASE_STUDY_DIR/$DIRECTORY
+  # Check the value of the environmental variable
+  if [ "$EXECUTE_NOTEBOOKS" == "no-execute" ]; then
+      echo "Not installing case study: $DIRECTORY"
+  else
+      echo "Installing case study: $DIRECTORY"
+      pip install "$CASE_STUDY_DIR/$DIRECTORY"
+  fi
+
 }
 
 
