@@ -105,13 +105,12 @@ def get_data(dataset_size, theta, max, min, t_end, datapoints, noisiness, *, key
 
 @click.command()
 @click.option("-length", "--length_strategy", type=(float, float, float, float), default=(0.1, 1, -1, -1))
-@click.option("-steps", "--steps_strategy", type=(int, int, int, int), default=(500, 500, -1, -1))
 @click.option("-lr", "--lr_strategy", type=(float, float, float, float), default=(3e-3, 3e-3, -1, -1))
 @click.option("-clip", "--clip_strategy", type=(float, float, float, float), default=(0.1, 0.1, -1, -1))
-def main(length_strategy, steps_strategy, lr_strategy, clip_strategy):
-
-    data_size = 50
-    batch_size = 20
+@click.option("-batch", "--batch_size", type=int, default=20)
+@click.option("-points", "--data_points", type=int, default=51)
+@click.option("-noise", "--data_noise", type=float, default=0.0)
+def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, data_noise):
 
     sim = SimulationBase()
     sim.config.case_study.name = "lotka_volterra_UDE_case_study"
@@ -121,8 +120,8 @@ def main(length_strategy, steps_strategy, lr_strategy, clip_strategy):
     data_key, model_key, loader_key = jrandom.split(key, 3)
     sim.model = Func({"alpha":jnp.array(1.3), "delta":jnp.array(1.8)},key=model_key)
 
-    ts,ys = get_data(data_size, [0.65,0.45,0.4,0.9], 5, 1, 20, 201, 0, key=jr.PRNGKey(0))
-    datasets = jnp.linspace(0, data_size-1, data_size)
+    ts,ys = get_data(50, [1.3,0.9,0.8,1.8], 5, 0.1, 50, data_points, data_noise, key=jr.PRNGKey(0))
+    datasets = jnp.linspace(0, 49, 50)
     test_data1 = xr.DataArray(ys[:,:,0], coords={"batch_id": datasets, "time": ts}).to_dataset(name="prey")
     test_data2 = xr.DataArray(ys[:,:,1], coords={"batch_id": datasets, "time": ts}).to_dataset(name="predator")
     test_data = xr.merge([test_data1, test_data2])
@@ -144,17 +143,17 @@ def main(length_strategy, steps_strategy, lr_strategy, clip_strategy):
     sim.config.inference_optax.MLP_bias_dist = "normal()"
     sim.config.inference_optax.batch_size = batch_size
     sim.config.inference_optax.data_split = 0.8
-    sim.config.inference_optax.multiple_runs_target = 2
-    sim.config.inference_optax.multiple_runs_limit = 10
+    sim.config.inference_optax.multiple_runs_target = 10
+    sim.config.inference_optax.multiple_runs_limit = 50
 
     sim.config.inference_optax.length_strategy = [i for i in length_strategy if i != -1]
-    sim.config.inference_optax.steps_strategy = [i for i in steps_strategy if i != -1]
+    sim.config.inference_optax.steps_strategy = [1000 for i in length_strategy if i != -1]
     sim.config.inference_optax.lr_strategy = [i for i in lr_strategy if i != -1]
     sim.config.inference_optax.clip_strategy = [i for i in clip_strategy if i != -1]
     sim.set_inferer("optax")
     sim.inferer.run()
 
-    sim.config.case_study.output_path = sim.config.case_study.data_path = f"hyperparams/combination_{str(sim.config.inference_optax.length_strategy)}_{str(sim.config.inference_optax.steps_strategy)}_{str(sim.config.inference_optax.lr_strategy)}_{str(sim.config.inference_optax.clip_strategy)}"
+    sim.config.case_study.output_path = sim.config.case_study.data_path = f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}"
     sim.config.create_directory("scenario", force=True)
     sim.config.create_directory("results", force=True)
     os.makedirs(sim.data_path, exist_ok=True)
@@ -162,7 +161,10 @@ def main(length_strategy, steps_strategy, lr_strategy, clip_strategy):
 
     sim.save_observations(force=True)
     sim.config.save(force=True)
-    sim.report()
+    try:
+        sim.report()
+    except AttributeError:
+        pass
     sim.inferer.store_results()
     sim.inferer.store_loss_evolution()
 

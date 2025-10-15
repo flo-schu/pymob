@@ -11,8 +11,8 @@ class Func(UDEBase):
     mlp_width: int = 3
     mlp_in_size: int = 2
     mlp_out_size: int = 2
-    mlp_activation: Callable = jnn.softplus
-    mlp_final_activation: Callable = lambda x: x
+    mlp_activation: Callable = staticmethod(jnn.softplus)
+    mlp_final_activation: Callable = staticmethod(lambda x: x)
 
     alpha: jax.Array
     delta: jax.Array
@@ -33,8 +33,9 @@ class Func(UDEBase):
         return dprey_dt, dpredator_dt
     
     @staticmethod
+    @eqx.filter_jit
     def loss(y_obs, y_pred):
-        return (y_obs - y_pred)**2
+        return (y_obs - y_pred)**2 + 1e-2*(y_pred**-1)
     
 class Func1D(UDEBase):
 

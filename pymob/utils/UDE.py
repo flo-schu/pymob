@@ -195,13 +195,12 @@ class UDEBase(eqx.Module):
     mlp_width: int = 3
     mlp_in_size: int = 2
     mlp_out_size: int = 2
-    mlp_activation: Callable = jnn.softplus
-    mlp_final_activation: Callable = jnn.tanh
-
+    mlp_activation: Callable = staticmethod(jnn.softplus)
+    mlp_final_activation: Callable = staticmethod(jnn.tanh)
 
     def init_MLP(self, weights=None, bias=None, *, key, **kwargs):
 
-        mlp = eqx.nn.MLP(in_size=self.mlp_in_size, out_size=self.mlp_out_size, width_size=self.mlp_width, depth=self.mlp_depth, activation=self.mlp_activation.__func__, final_activation=self.mlp_final_activation.__func__, key=key)
+        mlp = eqx.nn.MLP(in_size=self.mlp_in_size, out_size=self.mlp_out_size, width_size=self.mlp_width, depth=self.mlp_depth, activation=self.mlp_activation, final_activation=self.mlp_final_activation, key=key)
 
         is_linear = lambda x: isinstance(x, eqx.nn.Linear)
 
