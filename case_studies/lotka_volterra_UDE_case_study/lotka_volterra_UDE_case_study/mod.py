@@ -33,7 +33,6 @@ class Func(UDEBase):
         return dprey_dt, dpredator_dt
     
     @staticmethod
-    @eqx.filter_jit
     def loss(y_obs, y_pred):
         return (y_obs - y_pred)**2 + 1e-2*(y_pred**-1)
     

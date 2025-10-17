@@ -255,7 +255,6 @@ class UDEBase(eqx.Module):
     def loss(y_obs, y_pred):
         return (y_obs - y_pred)**2
     
-    @eqx.filter_jit
     def __hash__(self):
         dynamic, static = eqx.partition(self, eqx.is_array)
         hash1 = static.mlp.__hash__()

@@ -153,14 +153,14 @@ def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, d
     sim.set_inferer("optax")
     sim.inferer.run()
 
-    sim.config.case_study.output_path = sim.config.case_study.data_path = f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}"
-    sim.config.create_directory("scenario", force=True)
+    sim.config.case_study.output_path = f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}"
+    sim.config.case_study.data_path = f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}"
     sim.config.create_directory("results", force=True)
     os.makedirs(sim.data_path, exist_ok=True)
     os.makedirs(sim.output_path, exist_ok=True)
 
     sim.save_observations(force=True)
-    sim.config.save(force=True)
+    sim.config.save(fp = sim.data_path+"/settings.cfg", force=True)
     try:
         sim.report()
     except AttributeError:
