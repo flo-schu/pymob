@@ -196,7 +196,7 @@ class UDEBase(eqx.Module):
     mlp_in_size: int = 2
     mlp_out_size: int = 2
     mlp_activation: Callable = staticmethod(jnn.softplus)
-    mlp_final_activation: Callable = staticmethod(jnn.tanh)
+    mlp_final_activation: Callable = staticmethod(jnn.identity)
 
     def init_MLP(self, weights=None, bias=None, *, key, **kwargs):
 
@@ -243,7 +243,7 @@ class UDEBase(eqx.Module):
         self.init_MLP(weights, bias, key=key)
         self.init_params(params)
 
-    def __call__(self, t, y, x_in):
+    def __call__(self, t, y, x_in, t_thresh):
         params = self.preprocess_params()
         derivatives = self.model(t, y, *x_in, self.mlp, **params)
         if type(derivatives) == tuple:

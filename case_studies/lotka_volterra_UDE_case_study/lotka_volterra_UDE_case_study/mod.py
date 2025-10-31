@@ -12,7 +12,7 @@ class Func(UDEBase):
     mlp_in_size: int = 2
     mlp_out_size: int = 2
     mlp_activation: Callable = staticmethod(jnn.softplus)
-    mlp_final_activation: Callable = staticmethod(lambda x: x)
+    mlp_final_activation: Callable = staticmethod(jnn.identity)
 
     alpha: jax.Array
     delta: jax.Array
@@ -34,7 +34,7 @@ class Func(UDEBase):
     
     @staticmethod
     def loss(y_obs, y_pred):
-        return (y_obs - y_pred)**2 + 1e-2*(y_pred**-1)
+        return (y_obs - y_pred)**2 + 0.01*(y_pred**-1)
     
 class Func1D(UDEBase):
 

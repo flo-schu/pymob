@@ -350,7 +350,6 @@ class UDESolver(JaxSolver):
     # @partial(eqx.filter_jit, static_argnames=["self"])
     @eqx.filter_jit
     def preprocess_parameters(self, model_params, parameters, num_backend: ModuleType = jnp):
-        model = eqx.combine(self.model, model_params)
         pp_args = mappar(
             self.post_processing, 
             parameters, 
@@ -368,9 +367,10 @@ class UDESolver(JaxSolver):
     @eqx.filter_jit
     def odesolve(self, model_params, y0, x_in):
         model = eqx.combine(self.model, model_params)
+        f = lambda t, y, args: model(t, y, *args)
 
         y0 = jnp.array([x[0] for x in jnp.array(y0)])
-        interp = ()
+        args = ((), self.x[-1])
         
         if len(x_in) > 0:
             if len(x_in) > 2:
@@ -392,11 +392,11 @@ class UDESolver(JaxSolver):
                     "x dimension (e.g. time) after the batch dimension and before "+
                     "any other dimension."
                 )
-            interp = tuple([LinearInterpolation(ts=x_in[0], ys=x_in[1])])
+            args = tuple([LinearInterpolation(ts=x_in[0], ys=x_in[1]), self.x[-1]])
             # jumps = x_in[0][self.coordinates_input_vars["x_in"][self.x_dim] < self.x[-1]]
             jumps = jnp.array(self.x_in_jumps, dtype=float)
         else:
-            interp = interp
+            args = ((), self.x[-1])
             jumps = None
 
         solver = self.diffrax_solver() # type: ignore (diffrax_solver is ensured
@@ -417,13 +417,13 @@ class UDESolver(JaxSolver):
             pass
 
         sol = diffeqsolve(
-            terms=ODETerm(model), 
+            terms=ODETerm(f), 
             solver=solver, 
             t0=t_min, 
             t1=t_max, 
             dt0=self.x[1]-self.x[0], 
             y0=y0, 
-            args=interp,
+            args=args,
             saveat=saveat, 
             stepsize_controller=stepsize_controller,
             adjoint=RecursiveCheckpointAdjoint(),
@@ -436,7 +436,7 @@ class UDESolver(JaxSolver):
 
         sol_y = tuple([sol.ys[:,i] for i in jnp.arange(sol.ys.shape[1])])
 
-        return tuple(sol_y), interp
+        return tuple(sol_y), args[0]
     
     # @partial(eqx.filter_jit, static_argnames=["self", "odestates", "n_odeargs", "n_ppargs", "n_xin"])
     @eqx.filter_jit
@@ -451,7 +451,9 @@ class UDESolver(JaxSolver):
 
         return self.post_processing(res_dict, jnp.array(self.x), interp, *ppargs)
     
-    def standalone_solver(self, model, ts, y0, x_in):
+    @eqx.filter_jit
+    def standalone_solver(self, model, ts, y0, x_in, t_end=None):
+        f = lambda t, y, args: model(t, y, *args)
         """
         Returns a time series (evaluated at the time points defined by ts) of the model 
         defined in Func starting from an initial condition y0.
@@ -474,8 +476,13 @@ class UDESolver(JaxSolver):
         else:
             y0 = jnp.array([x for x in jnp.array(y0)])
 
+        if t_end == None:
+            t_thresh = ts[-1]
+        else:
+            t_thresh = t_end
+
         if x_in == None:
-            interp = ()
+            args = ((), t_thresh)
             jumps = None
         else:
             if len(x_in) > 0:
@@ -498,11 +505,11 @@ class UDESolver(JaxSolver):
                         "x dimension (e.g. time) after the batch dimension and before "+
                         "any other dimension."
                     )
-                interp = tuple([LinearInterpolation(ts=x_in[0], ys=x_in[1])])
+                args = tuple([LinearInterpolation(ts=x_in[0], ys=x_in[1]), t_thresh])
                 # jumps = x_in[0][self.coordinates_input_vars["x_in"][self.x_dim] < self.x[-1]]
                 jumps = jnp.array(self.x_in_jumps, dtype=float)
             else:
-                interp = ()
+                args = ((), t_thresh)
                 jumps = None
 
         stepsize_controller = PIDController(
@@ -515,17 +522,21 @@ class UDESolver(JaxSolver):
         else:
             pass
 
+        def cond_fn(t, y, args, **kwargs):
+            return t > args[-1]
+
         sol = diffrax.diffeqsolve(
-            diffrax.ODETerm(model),
+            diffrax.ODETerm(f),
             self.diffrax_solver(),
             t0=ts[0],
             t1=ts[-1],
             dt0=ts[1] - ts[0],
             y0=y0,
-            args=interp,
+            args=args,
             stepsize_controller=stepsize_controller,
             adjoint=RecursiveCheckpointAdjoint(),
             saveat=diffrax.SaveAt(ts=ts),
+            event=diffrax.Event(cond_fn),
             max_steps=int(self.max_steps),
             throw = self.throw_exception
         )
