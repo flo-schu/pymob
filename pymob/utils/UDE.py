@@ -232,11 +232,11 @@ class UDEBase(eqx.Module):
         params = {}
         for param in self.UDE_params:
             if isinstance(param[1], tuple) and param[1][1] == False:
-                params[param[0]] = jl.stop_gradient(param[1][0])
-            elif isinstance(param[1], tuple):
-                params[param[0]] = param[1][0]
+                params[param[0]] = jl.stop_gradient(getattr(self, param[0]))
+            # elif isinstance(param[1], tuple):
+            #     params[param[0]] = param[1][0]
             else:
-                params[param[0]] = param[1]
+                params[param[0]] = getattr(self, param[0])
         return params
     
     def __init__(self, params, weights=None, bias=None, *, key, **kwargs):
