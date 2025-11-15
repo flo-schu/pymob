@@ -12,6 +12,8 @@ import diffrax
 import jax.random as jr
 import jax
 
+jax.config.update('jax_enable_x64', True)
+
 def _get_data(ts, theta, max, min, noisiness, *, key):
     """
     Returns a single time series (evaluated at the time points defined by ts) of the 
@@ -133,7 +135,6 @@ def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, d
     sim.config.model_parameters.delta.prior = "uniform(loc=1.0,scale=2.0)"
 
     sim.solver = UDESolver
-    sim.config.jaxsolver.max_steps = 100000
     sim.config.jaxsolver.throw_exception = False
 
     sim.dispatch_constructor()
@@ -144,10 +145,12 @@ def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, d
     sim.config.inference_optax.batch_size = batch_size
     sim.config.inference_optax.data_split = 0.8
     sim.config.inference_optax.multiple_runs_target = 10
-    sim.config.inference_optax.multiple_runs_limit = 100
+    sim.config.inference_optax.multiple_runs_limit = 200
+    sim.config.inference_optax.time_limit = 1200
+    sim.config.inference_optax.indepth = True
 
     sim.config.inference_optax.length_strategy = [i for i in length_strategy if i != -1]
-    sim.config.inference_optax.steps_strategy = 1000
+    sim.config.inference_optax.steps_strategy = [4000/len(sim.config.inference_optax.length_strategy) for i in sim.config.inference_optax.length_strategy]
     sim.config.inference_optax.lr_strategy = lr_strategy
     sim.config.inference_optax.clip_strategy = clip_strategy
     sim.set_inferer("optax")
@@ -167,6 +170,9 @@ def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, d
         pass
     sim.inferer.store_results()
     sim.inferer.store_loss_evolution()
+
+    with open(f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}/timeouts.txt","w") as variable_name:
+        variable_name.write(str(sim.inferer.timeouts))
 
 if __name__ == "__main__":
     main()

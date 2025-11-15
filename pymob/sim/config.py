@@ -831,7 +831,7 @@ class Optax(PymobModel):
     MLP_weight_dist: OptionRV = to_rv("normal()")
     MLP_bias_dist: OptionRV = to_rv("normal()")
     length_strategy: Annotated[list, BeforeValidator(string_to_floatlist), serialize_list_to_string] = [0.1, 1]
-    steps_strategy: Annotated[int, to_str] = 1000
+    steps_strategy: Annotated[list, BeforeValidator(string_to_intlist), serialize_list_to_string] = [1000, 1000]
     lr_strategy: float = 1e-3
     clip_strategy: float = 0.1
     batch_size: Annotated[int, to_str] = 1
@@ -839,6 +839,7 @@ class Optax(PymobModel):
     multiple_runs_target: Annotated[int, to_str] = 10
     multiple_runs_limit: Annotated[int, to_str] = 50
     time_limit: Annotated[int, to_str] = 600
+    indepth: Annotated[bool, to_str] = False
 
 class Report(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
