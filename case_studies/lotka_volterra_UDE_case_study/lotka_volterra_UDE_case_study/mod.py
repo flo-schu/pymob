@@ -34,7 +34,7 @@ class Func(UDEBase):
     
     @staticmethod
     def loss(y_obs, y_pred):
-        return (y_obs - y_pred)**2 + 0.01*(y_pred**-1)
+        return (y_obs - y_pred)**2 + 0.001*(y_pred**-1)
     
 class Func1D(UDEBase):
 
@@ -46,7 +46,7 @@ class Func1D(UDEBase):
     r: jax.Array
 
     @staticmethod
-    def model(y, mlp, r):
+    def model(t, y, mlp, r):
         X = y
         
         dX_dt = r * X + mlp(y)
