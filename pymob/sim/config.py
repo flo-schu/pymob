@@ -839,7 +839,7 @@ class Optax(PymobModel):
     multiple_runs_target: Annotated[int, to_str] = 10
     multiple_runs_limit: Annotated[int, to_str] = 50
     time_limit: Annotated[int, to_str] = 600
-    indepth: Annotated[bool, to_str] = False
+    indepth: Literal["off", "partial", "full"] = "off"
 
 class Report(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="ignore")

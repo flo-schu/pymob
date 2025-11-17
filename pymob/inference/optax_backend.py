@@ -123,7 +123,10 @@ class OptaxBackend(InferenceBackend):
     def run(self, return_losses = False):
         make_step_compiled = self.compile_make_step()
         self.optimized_models, self.failed_models, success, timeouts, lossev = self.optimize_multiple_runs(make_step_compiled)
-        losses = [self.global_loss(model) for model in self.optimized_models]
+        if self.config.inference_optax.indepth == "full":
+            losses = [self.global_loss(model[-1]) for model in self.optimized_models]
+        else:
+            losses = [self.global_loss(model) for model in self.optimized_models]
 
         i = 0
         print("\nrun number\tsuccessful?\tloss\n")
@@ -135,7 +138,7 @@ class OptaxBackend(InferenceBackend):
                 print(f"run {j+1}\t\tno\t\t---")
 
         self.idata, self.idata_f = self.create_idata()  
-        if self.config.inference_optax.indepth:
+        if self.config.inference_optax.indepth != "off":
             self.lossev = xr.DataArray(lossev, coords={"run": jnp.arange(1, lossev.shape[0]+1), "step": jnp.arange(1, lossev.shape[1]+1)}).to_dataset(name="losses")
             self.timeouts = timeouts
     
@@ -450,8 +453,9 @@ class OptaxBackend(InferenceBackend):
         # optimize model
         loader_key = jr.PRNGKey(np.random.randint(0,10000,()))
 
-        if self.config.inference_optax.indepth:
+        if self.config.inference_optax.indepth == "full":
             model_list = [model]
+        if self.config.inference_optax.indepth != "off":
             lossev_single_model = []
 
         def loss_func(y_obs, y_pred):
@@ -492,13 +496,16 @@ class OptaxBackend(InferenceBackend):
                     range(steps), dataloader((ys,), batch_size, key=loader_key)
                 ):
                     loss, model, opt_state = make_step(ts, yi, x_in, mask, t_thresh, model, optim, opt_state, loss_func)
-                    if self.config.inference_optax.indepth:
+                    if self.config.inference_optax.indepth == "full":
                         model_list.append(model)
+                    if self.config.inference_optax.indepth != "off":
                         lossev_single_model.append(loss)
                     pbar.update(1)
                     current_time = time.time()
                     if not jnp.isfinite(loss).all() or current_time - start_time > self.config.inference_optax.time_limit:
-                        if self.config.inference_optax.indepth:
+                        if self.config.inference_optax.indepth == "partial":
+                            return model, False, (current_time - start_time > self.config.inference_optax.time_limit), lossev_single_model
+                        elif self.config.inference_optax.indepth == "full":
                             return model_list, False, (current_time - start_time > self.config.inference_optax.time_limit), lossev_single_model
                         else:
                             return None, False, (current_time - start_time > self.config.inference_optax.time_limit), None
@@ -515,12 +522,16 @@ class OptaxBackend(InferenceBackend):
                     pbar.update(1)
                     current_time = time.time()
                     if not jnp.isfinite(loss).all() or current_time - start_time > self.config.inference_optax.time_limit:
-                        if self.config.inference_optax.indepth:
+                        if self.config.inference_optax.indepth == "partial":
+                            return model, False, (current_time - start_time > self.config.inference_optax.time_limit), lossev_single_model
+                        elif self.config.inference_optax.indepth == "full":
                             return model_list, False, (current_time - start_time > self.config.inference_optax.time_limit), lossev_single_model
                         else:
                             return None, False, (current_time - start_time > self.config.inference_optax.time_limit), None
 
-        if self.config.inference_optax.indepth:
+        if self.config.inference_optax.indepth == "full":
+            return model_list, True, False, lossev_single_model
+        elif self.config.inference_optax.indepth == "partial":
             return model, True, False, lossev_single_model
         else:
             return model, True, False, None
@@ -631,12 +642,12 @@ class OptaxBackend(InferenceBackend):
                     successful_runs += 1
                     pbar.set_description(f"{successful_runs} of {self.multiple_runs_target} runs completed")
                     success.append(True)
-                    if cfg.indepth:
+                    if cfg.indepth != "off":
                         lossev.append(lossev_single_run)
                         timeouts += timeout
                 else:
                     success.append(False)
-                    if cfg.indepth:
+                    if cfg.indepth != "off":
                         failed_models.append(optimized_model)
                         lossev_single_run = lossev_single_run + [jnp.nan] * (jnp.sum(jnp.array(cfg.steps_strategy)).item() - len(lossev_single_run))
                         lossev.append(lossev_single_run)
@@ -666,7 +677,7 @@ class OptaxBackend(InferenceBackend):
                 f"allowed total number of runs. Only {successful_runs} optimized models were returned."
             )
 
-        if cfg.indepth:
+        if cfg.indepth != "off":
             return models, failed_models, success, timeouts, jnp.array(lossev)
         else:
             return models, None, success, None, None
@@ -823,7 +834,70 @@ class OptaxBackend(InferenceBackend):
         batch_ids = jnp.arange(self.n_datasets)
         chain_ids = jnp.arange(1)
 
-        if len(self.optimized_models) > 0:
+        if self.config.inference_optax.indepth == "full" and len(self.optimized_models) > 0:
+
+            dict = {}
+            for entry in list:
+                dict[entry] = np.array([[[getattr(model, entry) for model in models] + [np.nan]*(sum(self.config.inference_optax.steps_strategy) + 1 - len(models)) for models in self.optimized_models]])
+
+            reference_model = self.simulation.model
+            mlp_size = (reference_model.mlp.in_size, reference_model.mlp.out_size, reference_model.mlp.width_size, reference_model.mlp.depth)
+
+            len_weights = mlp_size[0]*mlp_size[2] + (mlp_size[3] - 1)*mlp_size[2]**2 + mlp_size[2]*mlp_size[1]
+            len_bias = mlp_size[3]*mlp_size[2] + mlp_size[1]
+
+            dict["weights"] = np.array([[[transformWeights(getFuncWeights(model))[4] for model in self.optimized_models[i]] + [[np.nan] * len_weights] * (sum(self.config.inference_optax.steps_strategy) + 1 - len(self.optimized_models[i])) for i in np.arange(len(self.optimized_models))]])
+            dict["bias"] = np.array([[[transformBias(getFuncBias(model))[3] for model in self.optimized_models[i]] + [[np.nan] * len_bias] * (sum(self.config.inference_optax.steps_strategy) + 1 - len(self.optimized_models[i])) for i in np.arange(len(self.optimized_models))]])
+
+            dims = {entry: ["draw","step"] for entry in list}
+            dims["weights"] = ["chain","draw","step","n_weight"]
+            dims["bias"] = ["chain","draw","step","n_bias"]
+
+            idata = az.convert_to_inference_data(
+                dict,
+                dims = dims,
+                coords = {"n_weight": np.arange(len(dict["weights"][0,0,0])), "n_bias": np.arange(len(dict["bias"][0,0,0])), "step": np.arange(sum(self.config.inference_optax.steps_strategy) + 1)}
+            )
+
+            post_pred = {}
+            losses = {}
+            data_vars = self.simulation.observations.data_vars
+            evaluator = self.simulation.dispatch()
+            for x in data_vars:
+                post_pred[x] = []
+                losses[x] = []
+
+            for model in self.optimized_models:
+                sol = jnp.array([evaluator._solver.standalone_solver(model[-1], ts, y0[0], (), ts[-1]) for y0 in ys])
+                for i, x in enumerate(data_vars):
+                    post_pred[x].append(sol[:,i])
+                    losses[x].append(self.simulation.model.loss(self.simulation.observations[x].values, sol[:,i]))
+
+            for x in data_vars:
+                post_pred[x] = jnp.array(post_pred[x])
+                post_pred[x] = jnp.expand_dims(post_pred[x], 0)
+                losses[x] = jnp.array(losses[x])
+                losses[x] = jnp.expand_dims(losses[x], 0)
+
+            post_pred_xr = []
+            losses_xr = []
+
+            model_ids = jnp.arange(len(self.optimized_models))
+
+            for x in data_vars:
+                # if self.n_datasets == 1:
+                #     post_pred[x] = jnp.expand_dims(post_pred[x], 2)
+                #     losses[x] = jnp.expand_dims(losses[x], 2)
+                post_pred_xr.append(xr.DataArray(post_pred[x], coords={"chain": chain_ids, "draw": model_ids, "data_batch": batch_ids, "time": ts}).to_dataset(name=x))
+                losses_xr.append(xr.DataArray(losses[x], coords={"chain": chain_ids, "draw": model_ids, "data_batch": batch_ids, "time": ts}).to_dataset(name=x))
+
+            post_pred_xr = xr.merge([x for x in post_pred_xr])
+            losses_xr = xr.merge([x for x in losses_xr])
+
+            idata.add_groups({"observed_data": self.simulation.observations, "posterior_model_fits": post_pred_xr, "losses": losses_xr})
+            idata.add_groups({"posterior_predictive": idata.posterior_model_fits, "log_likelihood": idata.losses})
+
+        elif len(self.optimized_models) > 0:
 
             dict = {list[j]: np.array([getattr(self.optimized_models[i], list[j]) for i in np.arange(len(self.optimized_models))]) for j in np.arange(len(list))}
             dict["weights"] = np.array([[transformWeights(getFuncWeights(model))[4] for model in self.optimized_models]])
@@ -877,11 +951,61 @@ class OptaxBackend(InferenceBackend):
 
             idata = None
 
-        if self.config.inference_optax.indepth and len(self.failed_models) > 0:
+        if self.config.inference_optax.indepth == "partial" and len(self.failed_models) > 0:
+
+            dict_f = {list[j]: np.array([getattr(self.failed_models[i], list[j]) for i in np.arange(len(self.failed_models))]) for j in np.arange(len(list))}
+            dict_f["weights"] = np.array([[transformWeights(getFuncWeights(model))[4] for model in self.failed_models]])
+            dict_f["bias"] = np.array([[transformBias(getFuncBias(model))[3] for model in self.failed_models]])
+
+            idata_f = az.convert_to_inference_data(
+                dict_f,
+                dims = {"weights": ["chain","draw","n_weight"], "bias": ["chain","draw","n_bias"]},
+                coords = {"n_weight": np.arange(len(dict_f["weights"][0,0])), "n_bias": np.arange(len(dict_f["bias"][0,0]))}
+            )
+
+            # post_pred_f = {}
+            # losses_f = {}
+            # data_vars = self.simulation.observations.data_vars
+            # evaluator = self.simulation.dispatch()
+            # for x in data_vars:
+            #     post_pred_f[x] = []
+            #     losses_f[x] = []
+            
+            # for model in self.failed_models:
+            #     sol = jnp.array([evaluator._solver.standalone_solver(model, ts, y0[0], (), ts[-1]) for y0 in ys])
+            #     for i, x in enumerate(data_vars):
+            #         post_pred_f[x].append(sol[:,i])
+            #         losses_f[x].append(self.simulation.model.loss(self.simulation.observations[x].values, sol[:,i]))
+
+            # for x in data_vars:
+            #     post_pred_f[x] = jnp.array(post_pred_f[x])
+            #     post_pred_f[x] = jnp.expand_dims(post_pred_f[x], 0)
+            #     losses_f[x] = jnp.array(losses_f[x])
+            #     losses_f[x] = jnp.expand_dims(losses_f[x], 0)
+
+            # post_pred_f_xr = []
+            # losses_f_xr = []
+
+            # model_f_ids = jnp.arange(len(self.failed_models))
+
+            # for x in data_vars:
+            #     if self.n_datasets == 1:
+            #         post_pred_f[x] = jnp.expand_dims(post_pred_f[x], 2)
+            #         losses_f[x] = jnp.expand_dims(losses_f[x], 2)
+            #     post_pred_f_xr.append(xr.DataArray(post_pred_f[x], coords={"chain": chain_ids, "draw": model_f_ids, "data_batch": batch_ids, "time": ts}).to_dataset(name=x))
+            #     losses_f_xr.append(xr.DataArray(losses_f[x], coords={"chain": chain_ids, "draw": model_f_ids, "data_batch": batch_ids, "time": ts}).to_dataset(name=x))
+
+            # post_pred_f_xr = xr.merge([x for x in post_pred_f_xr])
+            # losses_f_xr = xr.merge([x for x in losses_f_xr])
+
+            # idata_f.add_groups({"observed_data": self.simulation.observations, "posterior_model_fits": post_pred_f_xr, "losses": losses_f_xr})
+            # idata_f.add_groups({"posterior_predictive": idata_f.posterior_model_fits, "log_likelihood": idata_f.losses})
+
+        elif self.config.inference_optax.indepth == "full" and len(self.failed_models) > 0:
 
             dict_f = {}
             for entry in list:
-                dict_f[entry] = np.array([[[getattr(model, entry) for model in models] + [np.nan]*(sum(self.config.inference_optax.steps_strategy) + 1 - len(models))] for models in self.failed_models])
+                dict_f[entry] = np.array([[[getattr(model, entry) for model in models] + [np.nan]*(sum(self.config.inference_optax.steps_strategy) + 1 - len(models)) for models in self.failed_models]])
 
             reference_model = self.simulation.model
             mlp_size = (reference_model.mlp.in_size, reference_model.mlp.out_size, reference_model.mlp.width_size, reference_model.mlp.depth)
@@ -892,7 +1016,7 @@ class OptaxBackend(InferenceBackend):
             dict_f["weights"] = np.array([[[transformWeights(getFuncWeights(model))[4] for model in self.failed_models[i]] + [[np.nan] * len_weights] * (sum(self.config.inference_optax.steps_strategy) + 1 - len(self.failed_models[i])) for i in np.arange(len(self.failed_models))]])
             dict_f["bias"] = np.array([[[transformBias(getFuncBias(model))[3] for model in self.failed_models[i]] + [[np.nan] * len_bias] * (sum(self.config.inference_optax.steps_strategy) + 1 - len(self.failed_models[i])) for i in np.arange(len(self.failed_models))]])
 
-            dims_f = {entry: ["chain","draw","step"] for entry in list}
+            dims_f = {entry: ["draw","step"] for entry in list}
             dims_f["weights"] = ["chain","draw","step","n_weight"]
             dims_f["bias"] = ["chain","draw","step","n_bias"]
 
