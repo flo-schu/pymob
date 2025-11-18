@@ -3,6 +3,7 @@ from pymob.utils.errors import import_optional_dependency
 from . import analysis
 from . import base
 from . import scipy_backend
+from . import error_models
 
 pyabc = import_optional_dependency("pyabc", errors="ignore")
 if pyabc is not None:
