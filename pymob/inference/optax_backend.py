@@ -120,9 +120,9 @@ class OptaxBackend(InferenceBackend):
         else:
             self.multiple_runs_target = simulation.config.inference_optax.multiple_runs_target
         
-    def run(self, return_losses = False):
-        make_step_compiled = self.compile_make_step()
-        self.optimized_models, self.failed_models, success, timeouts, lossev = self.optimize_multiple_runs(make_step_compiled)
+    def run(self, return_losses = False, key=jr.PRNGKey(0)):
+        make_step_compiled = self.compile_make_step(key)
+        self.optimized_models, self.failed_models, success, timeouts, lossev = self.optimize_multiple_runs(make_step_compiled, key)
         if self.config.inference_optax.indepth == "full":
             losses = [self.global_loss(model[-1]) for model in self.optimized_models]
         else:
@@ -297,7 +297,7 @@ class OptaxBackend(InferenceBackend):
         datasets = jnp.arange(ys.shape[0]) + 1
         return xr.Dataset({var: xr.DataArray(ys[:,:,i], coords={"batch_id": datasets, "time": ts}) for var, i in zip(data_vars, range(len(data_vars)))})
     
-    def compile_make_step(self):
+    def compile_make_step(self, key):
         @eqx.filter_value_and_grad
         def grad_loss(model, ti, yi, mask, t_thresh, x_in, loss_func):
             y_pred = jnp.array(jax.vmap(self.simulation.evaluator._solver.standalone_solver, in_axes=(None, None, 0, None, None))(model, ti, yi[:, 0], x_in, t_thresh))
@@ -326,7 +326,7 @@ class OptaxBackend(InferenceBackend):
         else:
             x_in = None
 
-        model = self.construct_model()
+        model = self.construct_model(key)
 
         clip = self.config.inference_optax.clip_strategy
         lr = self.config.inference_optax.lr_strategy
@@ -391,23 +391,23 @@ class OptaxBackend(InferenceBackend):
     class StopOptimizing(Exception):
         pass
 
-    def construct_model(self):
+    def construct_model(self, key):
         cfg = self.config
         params = {}
 
-        for key in cfg.model_parameters.fixed:
-            params[key] = (jnp.array(cfg.model_parameters[key].value), False)
+        for param in cfg.model_parameters.fixed:
+            params[param] = (jnp.array(cfg.model_parameters[param].value), False)
 
-        for key in cfg.model_parameters.free:
+        for param in cfg.model_parameters.free:
             dist = OptaxBackend._distribution(
-                name=key, 
-                random_variable=cfg.model_parameters[key].prior,
+                name=param, 
+                random_variable=cfg.model_parameters[param].prior,
                 dims=(),
                 shape=()
             )
 
-            sample = dist.construct(context=None, extra_kwargs={"key": jr.PRNGKey(np.random.randint(0,10000,()))})
-            params[key] = (sample, True)
+            sample = dist.construct(context=None, extra_kwargs={"key": key})
+            params[param] = (sample, True)
 
         dist = OptaxBackend._distribution(
             name="weights", 
@@ -419,7 +419,7 @@ class OptaxBackend(InferenceBackend):
         reference_model = self.simulation.model
         mlp_size = (reference_model.mlp.in_size, reference_model.mlp.out_size, reference_model.mlp.width_size, reference_model.mlp.depth)
 
-        weights = dist.construct(context=None, extra_kwargs={"shape": (mlp_size[0]*mlp_size[2] + (mlp_size[3] - 1)*mlp_size[2]**2 + mlp_size[2]*mlp_size[1]), "key": jr.PRNGKey(np.random.randint(0,10000,()))})
+        weights = dist.construct(context=None, extra_kwargs={"shape": (mlp_size[0]*mlp_size[2] + (mlp_size[3] - 1)*mlp_size[2]**2 + mlp_size[2]*mlp_size[1]), "key": key})
 
         dist = OptaxBackend._distribution(
             name="bias", 
@@ -428,13 +428,13 @@ class OptaxBackend(InferenceBackend):
             shape=()
         )
 
-        bias = dist.construct(context=None, extra_kwargs={"shape": (mlp_size[3]*mlp_size[2] + mlp_size[1]), "key": jr.PRNGKey(np.random.randint(0,10000,()))})
+        bias = dist.construct(context=None, extra_kwargs={"shape": (mlp_size[3]*mlp_size[2] + mlp_size[1]), "key": key})
 
         model_type = type(reference_model)
 
-        return model_type(params, weights, bias, key=jr.PRNGKey(0))
+        return model_type(params, weights, bias, key=key)
     
-    def optimize_model(self, model, pbar, make_step):
+    def optimize_model(self, model, pbar, make_step, key):
         start_time = time.time()
         # transform observations to suitable format
         ts, ys, data_vars = self.transform_observations(self.simulation.observations)
@@ -451,7 +451,7 @@ class OptaxBackend(InferenceBackend):
             x_in = None
 
         # optimize model
-        loader_key = jr.PRNGKey(np.random.randint(0,10000,()))
+        loader_key = key
 
         if self.config.inference_optax.indepth == "full":
             model_list = [model]
@@ -514,10 +514,10 @@ class OptaxBackend(InferenceBackend):
                 for step, (yi,) in zip(
                     range(steps), [[ys]] * steps
                 ):
-                    last_model = model
                     loss, model, opt_state = make_step(ts, yi, x_in, mask, t_thresh, model, optim, opt_state, loss_func)
-                    if self.config.inference_optax.indepth:
+                    if self.config.inference_optax.indepth == "full":
                         model_list.append(model)
+                    if self.config.inference_optax.indepth != "off":
                         lossev_single_model.append(loss)
                     pbar.update(1)
                     current_time = time.time()
@@ -609,10 +609,11 @@ class OptaxBackend(InferenceBackend):
 
         return model, True, lossev_single_model
     
-    def optimize_multiple_runs(self, make_step):
+    def optimize_multiple_runs(self, make_step, key):
         cfg = self.config.inference_optax
 
         tried_runs = successful_runs = 0
+        key = key
 
         models = []
         success = []
@@ -634,8 +635,8 @@ class OptaxBackend(InferenceBackend):
                 
                 # try:
 
-                optimizable_model = self.construct_model()
-                optimized_model, success_run, timeout, lossev_single_run = self.optimize_model(optimizable_model, pbar, make_step)
+                optimizable_model = self.construct_model(key)
+                optimized_model, success_run, timeout, lossev_single_run = self.optimize_model(optimizable_model, pbar, make_step, key)
 
                 if success_run:
                     models.append(optimized_model)
@@ -654,6 +655,8 @@ class OptaxBackend(InferenceBackend):
                         timeouts += timeout
                     pbar.n = successful_runs * jnp.sum(jnp.array(cfg.steps_strategy)).item()
                     pbar.last_print_n = successful_runs * jnp.sum(jnp.array(cfg.steps_strategy)).item()
+
+                key = key+1
 
                 # except self.StopOptimizing:
 
