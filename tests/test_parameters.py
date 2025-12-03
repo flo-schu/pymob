@@ -124,7 +124,12 @@ def test_prior_parsing():
     )
 
     inferer = ScipyBackend(SimulationBase())
-    inferer.prior = parsed_params
+
+    # The API for scipy is different than numpyros API. Since scipy uses a class based
+    # inference model, the parsed parameters go to another site.
+    inferer.inference_model.prior_model.prior_model = parsed_params
+
+
     samples = inferer.sample_distribution()
     np.testing.assert_equal(samples["k"].shape, (100, 2))
 
