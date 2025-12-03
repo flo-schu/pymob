@@ -144,9 +144,11 @@ jobs:
       # if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
       shell: bash
       run: |
-        mkdir -p test_results/ 
-        # locally store a file of test results for each test in the matrix
-        echo "TEST:OK" > test_results/${{ env.branch_name }}_${{ matrix.os }}_${{ matrix.python-version }}.txt
+        mkdir -p test_results/
+        # replace any forward slashes in the branch name with hyphens to form a safe filename
+        branch="${{ env.branch_name }}"
+        branch="${branch//\//-}"
+        echo "TEST:OK" > test_results/${branch}_${{ matrix.os }}_${{ matrix.python-version }}.txt
 
     # - name: Save test results (windows)
     #   if: matrix.os == 'windows-latest'
