@@ -12,6 +12,18 @@ from pymob.utils.config import lookup
 from pymob.inference.error_models import ErrorModel
 
 class ScipyDistribution(Distribution):
+    """Distribution wrapper for SciPy random variables.
+
+    This subclass of :class:`~pymob.inference.base.Distribution` provides a thin
+    wrapper around SciPy's continuous and discrete distributions. It maps a
+    distribution name to the corresponding SciPy ``rv_continuous`` or
+    ``rv_discrete`` object using the ``scipy_to_scipy`` dictionary. The class
+    also defines a ``parameter_converter`` that converts parameter arrays to
+    NumPy ``ndarray`` objects.
+
+    The primary purpose of this class is to expose a ``dist_name`` property that
+    returns the name of the underlying SciPy distribution.
+    """
     distribution_map: Dict[str,Tuple[Union[rv_continuous,rv_discrete],Dict[str,str]]] = scipy_to_scipy
     parameter_converter = staticmethod(lambda x: np.array(x))
     
@@ -22,6 +34,21 @@ class ScipyDistribution(Distribution):
 
     
 class ScipyBackend(InferenceBackend):
+    """Backend that uses SciPy distributions for inference.
+
+    The backend implements the abstract :class:`~pymob.inference.base.InferenceBackend`
+    interface using SciPy probability distributions. It parses the model priors
+    and error models from the simulation configuration, builds a
+    :class:`ProbabilisticModel` that can generate prior predictive samples,
+    compute likelihoods, and sample from the prior distribution.
+
+    Attributes
+    ----------
+    inference_model : ProbabilisticModel
+        The assembled probabilistic model used for all inference operations.
+    random_state : numpy.random.Generator
+        Random number generator seeded from the simulation configuration.
+    """
     _distribution = ScipyDistribution
     distribution: Union[rv_continuous,rv_discrete]
 
@@ -55,12 +82,49 @@ class ScipyBackend(InferenceBackend):
     def sample_distribution(self):
         return self.inference_model.prior_model()
     
-    def create_log_likelihood(self) -> Tuple[Errorfunction,Errorfunction]:
-        # TODO: define
-        return 
+    def create_log_likelihood(self) -> Tuple[Errorfunction, Errorfunction]:
+        """Create log-likelihood and (optional) gradient functions.
+
+        Returns
+        -------
+        tuple
+            A pair ``(log_likelihood, gradient)`` where each element is a
+            callable conforming to the :class:`Errorfunction` protocol.
+            The current backend does not implement a gradient, so both callables
+            simply return ``None``. This stub satisfies the type checker and can be
+            extended in the future.
+        """
+        # Simple placeholder implementations
+        def _log_likelihood(theta):
+            # Placeholder: actual implementation not provided
+            return None
+
+        def _gradient(theta):
+            # Placeholder: gradient not implemented
+            return None
+
+        return _log_likelihood, _gradient
 
 
 class ScipyPriorModel:
+    """Helper class for sampling from prior distributions and computing log-probabilities.
+
+    Instances maintain a reference to the prior model definition, the index
+    variables, and observations. The ``__call__`` method forwards to either
+    ``forward`` (when no parameters are supplied) or ``reverse`` (when a
+    parameter dictionary is provided), enabling a uniform callable interface.
+
+    Parameters
+    ----------
+    prior_model : dict
+        Mapping of parameter names to :class:`Distribution` objects.
+    indices : dict
+        Index arrays for each indexed dimension of the simulation.
+    observations : xarray.Dataset
+        Observed data used for conditioning (currently not used in the prior).
+    seed : int
+        Seed for the underlying NumPy random generator.
+    """
     def __init__(self, prior_model, indices, observations, seed):
         self.prior_model = prior_model
         self.random_state = Generator(PCG64(seed))
@@ -122,6 +186,26 @@ class ScipyPriorModel:
 
 
 class ScipyErrorModel(ErrorModel):
+    """Error model that generates observation noise using SciPy distributions.
+
+    The class builds a set of random variables based on the user-specified error
+    model expressions. It can draw synthetic noisy observations from the model
+    (``forward``) or compute the log-probability of observed data given a set of
+    latent variables (``reverse``).
+
+    Parameters
+    ----------
+    eps : float
+        Small constant added to scales to avoid division by zero.
+    error_model : dict
+        Mapping of data variable names to error model :class:`Distribution` objects.
+    indices : dict
+        Index arrays for the simulation.
+    observations : xarray.Dataset
+        Observed data used for likelihood evaluation.
+    seed : int
+        Seed for the random number generator.
+    """
     def __init__(self, eps, error_model, indices, observations, seed):
         extra = {"EPS": eps, "np": np}
         self.error_model = error_model
@@ -175,6 +259,13 @@ class ScipyErrorModel(ErrorModel):
     
 
 class ScipyTransModel:
+    """Transformation model that runs the deterministic simulation.
+
+    This lightweight wrapper forwards the ``theta`` (parameter values) to the
+    simulation's ``dispatch`` method, executes the model, and returns the
+    resulting simulated state ``Y``. It is used by the probabilistic model to
+    generate latent system states from sampled parameters.
+    """
     def __init__(self, simulation):
         self.simulation = simulation
 
@@ -188,6 +279,20 @@ class ScipyTransModel:
 
 
 class ProbabilisticModel:
+    """Combined prior, transformation, and error model for inference.
+
+    The class orchestrates three components:
+
+    * **Prior model** - draws parameter samples and evaluates their log-probability.
+    * **Transformation model** - runs the deterministic simulation to obtain latent
+      system states.
+    * **Error model** - generates synthetic observations or evaluates the likelihood
+      of observed data.
+
+    The ``__call__`` method implements four usage modes (prior predictive,
+    likelihood, sampling, posterior predictive) as described in the docstring of
+    ``ScipyBackend``.
+    """
 
     def __init__(
         self,
