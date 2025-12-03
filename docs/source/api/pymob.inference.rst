@@ -20,6 +20,14 @@ pymob.inference.numpyro\_backend module
    :undoc-members:
    :show-inheritance:
 
+pymob.inference.scipy\_backend module
+---------------------------------------
+
+.. automodule:: pymob.inference.scipy_backend
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. pymob.inference.optimization module
 .. -----------------------------------
 
