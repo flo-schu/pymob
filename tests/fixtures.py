@@ -10,11 +10,11 @@ from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
 from pymob.examples import linear_model
 
-from lotka_volterra_case_study.sim import Simulation
-
 rng = np.random.default_rng(1)
 
 def init_simulation_casestudy_api(scenario="test_scenario"):
+    from lotka_volterra_case_study.sim import Simulation # type: ignore
+
     config = prepare_casestudy(
         case_study=("lotka_volterra_case_study", scenario),
         config_file="settings.cfg",

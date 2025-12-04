@@ -10,6 +10,7 @@ from typing import List, Optional, Union, Dict, Literal, Callable, Tuple, TypedD
 from typing_extensions import Annotated
 from types import ModuleType
 import tempfile
+import click
 
 import numpy as np
 import xarray as xr
@@ -23,6 +24,7 @@ from pydantic.functional_validators import BeforeValidator, AfterValidator
 from pydantic.functional_serializers import PlainSerializer
 
 import pymob
+from pymob.sim.casestudy_registry import get_case_study_model, _registry
 from pymob.utils.store_file import scenario_file, converters
 from pymob.sim.parameters import Param, NumericArray, OptionRV
 # this loads at the import of the module
@@ -886,10 +888,21 @@ class Config(BaseModel):
 
         if _cfg_fp is not None: _config.set("case-study", "settings_path", _cfg_fp)
         cfg_dict = {k:dict(s) for k, s in dict(_config).items() if k != "DEFAULT"}
+        
+        # initalize case_study separately and import modules
+        _case_study_raw = cfg_dict.get("case-study", {})
+        _case_study_instance = Casestudy.model_validate(_case_study_raw)
+        _modules = {}
+        _modules = self._import_casestudy_modules(case_study=_case_study_instance, reset_path=True)
+
+        # initialize submodels
         super().__init__(**cfg_dict)
 
         self._config = _config
-        self._modules = {}
+        self._modules = _modules
+
+        # Load any case‑study‑specific configuration after generic sections are parsed
+        self._load_case_study_section()
 
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
     simulation: Simulation = Field(default=Simulation())
@@ -1010,10 +1023,29 @@ class Config(BaseModel):
         of the case study (typically: sim, mod, stats, plot, data, prior)
         and imports them with import_module(...)
         """
+        modules = self._import_casestudy_modules(
+            case_study=self.case_study, 
+            reset_path=reset_path
+        )
+        
+        self._modules.update(modules)
+
+    @staticmethod
+    def _import_casestudy_modules(case_study: Casestudy, reset_path=False) -> Dict:
+        _modules = {}
+
+
+        # reset the path to avoid importing modules form case-studies used
+        # before in the same session
+        if reset_path:
+            # default path needs to be copied, otherwise it will be updated
+            # when setting sys.path
+            sys.path = default_path.copy()
+
 
         # potential BUG: This is not safe. It is not guaranteed that the 
         # case study has the same name as the package. But it might be in the future
-        package = self.case_study.name
+        package = case_study.name
 
         if "-" in package or " " in package:
             warnings.warn(
@@ -1032,7 +1064,7 @@ class Config(BaseModel):
 
         spec = importlib.util.find_spec(_package)
         if spec is not None:
-            for module in self.case_study.modules:
+            for module in case_study.modules:
                 try:
                     # TODO: Consider importing modules as a nested dictionary 
                     # with the indexing key being the package. The package
@@ -1042,7 +1074,7 @@ class Config(BaseModel):
                     # object is used, it would resolve to the package of the
                     # higher level case-study
                     m = importlib.import_module(f"{_package}.{module}")
-                    self._modules.update({module: m})
+                    _modules.update({module: m})
                 except ModuleNotFoundError:
                     warnings.warn(
                         f"Module {module}.py not found in {_package}."
@@ -1052,52 +1084,47 @@ class Config(BaseModel):
                         f"{module} import *` to import all objects from "
                         "the parent case study."
                     )
-            return
-
-        # reset the path to avoid importing modules form case-studies used
-        # before in the same session
-        if reset_path:
-            # default path needs to be copied, otherwise it will be updated
-            # when setting sys.path
-            sys.path = default_path.copy()
+            return _modules
 
         # append relevant paths to sys
         package = os.path.join(
-            self.case_study.root, 
-            self.case_study.package
+            case_study.root, 
+            case_study.package
         )
         if package not in sys.path:
             sys.path.insert(0, package)
             print(f"Inserted '{package}' in PATH at index=0")
     
-        case_study = os.path.join(
-            self.case_study.root, 
-            self.case_study.package,
-            self.case_study.name,
+        case_study_path = os.path.join(
+            case_study.root, 
+            case_study.package,
+            case_study.name,
             # Account for package architecture 
-            self.case_study.name
+            case_study.name
         )
-        if case_study not in sys.path:
-            sys.path.insert(0, case_study)
-            print(f"Inserted '{case_study}' in PATH at index=0")
+        if case_study_path not in sys.path:
+            sys.path.insert(0, case_study_path)
+            print(f"Inserted '{case_study_path}' in PATH at index=0")
 
-        for module in self.case_study.modules:
+        for module in case_study.modules:
             # remove modules of a different case study that might have been
             # loaded in the same session.
             if module in sys.modules:
                 _ = sys.modules.pop(module)
 
-        for module in self.case_study.modules:
+        for module in case_study.modules:
             try:
-                m = importlib.import_module(module, package=case_study)
-                self._modules.update({module: m})
+                m = importlib.import_module(module, package=case_study_path)
+                _modules.update({module: m})
             except ModuleNotFoundError:
                 warnings.warn(
-                    f"Module {module}.py not found in {case_study}."
+                    f"Module {module}.py not found in {case_study_path}."
                     f"Missing modules can lead to unexpected behavior."
                     "If a module is not imported, you can specify it in the "
                     "Config 'config.case_study.modules = [...]'"
                 )
+
+        return _modules
 
     def import_simulation_from_case_study(self):
         try:
@@ -1126,8 +1153,47 @@ class Config(BaseModel):
         else:
             sect[option] = value
 
+    def _load_case_study_section(self) -> None:
+        """
+        Parse a registered case-study-specific INI section and expose it as an attribute.
+        The section name must match ``case_study.name``.
+        """
+        # Ensure the model has extra sections
+        if self.model_extra is None:
+            return
 
-import click
+        # parse the config sections if they are defined in the settings.cfg
+        # this overwrites the default definitions
+        for section, options in self.model_extra.items():
+            # get the model from the registry
+            model_cls = get_case_study_model(section)
+
+            if model_cls is None:
+                warnings.warn(
+                    f"Config section {section} could not be parsed. " +
+                    "You need to register a the Config Model like that:\n\n" +
+                    ">>> from pymob.sim.casestudy_registry import register_case_study_config\n" +
+                    ">>> from pymob.sim.config import PymobModel\n" +
+                    ">>> # define your pydantic config model here\n" +
+                    f">>> class {section.capitalize()}Config(PymobModel):\n" +
+                    f">>>     option_a: float = 1.0\n" +
+                    f">>> register_case_study_config({section.capitalize()}Config)\n"
+                )
+
+            else:
+                # Pydantic parses/validates the raw strings
+                instance = model_cls.model_validate(options, strict=False)
+                # Store on the Config object – attribute name equals the case‑study name
+                self.model_extra.update({section: instance})
+
+        global _registry
+        # add default sections in case the sections are not defined in the settings.cfg
+        for section, model_cls in _registry.items():
+            if section not in self.model_extra:
+                default_instance = model_cls.model_validate({}, strict=False)
+                self.model_extra.update({section: default_instance})
+            
+
 
 @click.command
 @click.option("--file", "-f", type=str, nargs=1, help="Path to the config file (usually in scenario/.../settings.cfg)")
