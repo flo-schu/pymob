@@ -123,6 +123,7 @@ def init_lotka_volterra_case_study_hierarchical_from_settings(
         "test_hierarchical",
         "test_hierarchical_presimulated",
         "lotka_volterra_hierarchical_presimulated_v1",
+        "lotka_volterra_hierarchical_final",
     ] = "test_hierarchical_presimulated"
 ) -> SimulationBase:
     config = Config(f"case_studies/lotka_volterra_case_study/scenarios/{scenario}/settings.cfg")
