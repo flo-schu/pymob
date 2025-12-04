@@ -889,10 +889,13 @@ class Config(BaseModel):
         if _cfg_fp is not None: _config.set("case-study", "settings_path", _cfg_fp)
         cfg_dict = {k:dict(s) for k, s in dict(_config).items() if k != "DEFAULT"}
         
-        # initalize case_study separately and import modules
+        # initalize case_study separately and import modules. This is done here,
+        # so that the configuration sections from the registry are discoverable
+        # this can only happen once the respective case studies are imported and with them
+        # their settings models are defined registered (this of course must be done with the
+        # register_case_study_config utility.
         _case_study_raw = cfg_dict.get("case-study", {})
         _case_study_instance = Casestudy.model_validate(_case_study_raw)
-        _modules = {}
         _modules = self._import_casestudy_modules(case_study=_case_study_instance, reset_path=True)
 
         # initialize submodels
@@ -1186,7 +1189,6 @@ class Config(BaseModel):
                 # Store on the Config object – attribute name equals the case‑study name
                 self.model_extra.update({section: instance})
 
-        global _registry
         # add default sections in case the sections are not defined in the settings.cfg
         for section, model_cls in _registry.items():
             if section not in self.model_extra:
