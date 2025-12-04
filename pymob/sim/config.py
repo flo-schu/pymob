@@ -5,6 +5,7 @@ from ast import literal_eval as make_tuple
 import configparser
 import warnings
 import importlib
+import importlib.util
 import multiprocessing as mp
 from typing import List, Optional, Union, Dict, Literal, Callable, Tuple, TypedDict, Any
 from typing_extensions import Annotated
@@ -14,48 +15,51 @@ import click
 
 import numpy as np
 import xarray as xr
-from numpy.typing import ArrayLike
 
 from pydantic import (
-    BaseModel, Field, computed_field, field_validator, model_validator, 
-    ConfigDict, TypeAdapter, ValidationError, validator
+    BaseModel, Field, computed_field, model_validator, field_validator,
+    ConfigDict, TypeAdapter, ValidationError
 )
-from pydantic.functional_validators import BeforeValidator, AfterValidator
+from pydantic.functional_validators import BeforeValidator
 from pydantic.functional_serializers import PlainSerializer
 
-import pymob
 from pymob.sim.casestudy_registry import get_case_study_model, _registry
 from pymob.utils.store_file import scenario_file, converters
 from pymob.sim.parameters import Param, NumericArray, OptionRV
 # this loads at the import of the module
 default_path = sys.path.copy()
 
-# class FloatParam(BaseModel):
-#     name: Optional[str] = None
-#     value: float = 0.0
-#     min: Optional[float] = None
-#     max: Optional[float] = None
-#     step: Optional[float] = None
-#     prior: Optional[str] = None
-#     free: bool = True
-
-
-# class ArrayParam(BaseModel):
-#     name: Optional[str] = None
-#     value: List[float] = [0.0]
-#     min: Optional[List[float]] = None
-#     max: Optional[List[float]] = None
-#     step: Optional[List[float]] = None
-#     prior: Optional[str] = None
-#     free: bool = True
 
 class PymobModel(BaseModel):
-    def __getitem__(self, key: str):
-        """Allow getting attribute by key (like a dict)"""
+    """
+    Base class for all configuration models used in *pymob*.
+
+    This class inherits from :class:`pydantic.BaseModel` and provides
+    dictionary-style access to its fields.
+
+    Parameters
+    ----------
+    **kwargs : dict
+        Field values passed to the underlying :class:`BaseModel`.
+
+    Examples
+    --------
+    >>> class MyModel(PymobModel):
+    ...     a: int = 1
+    ...     b: str = "x"
+    >>> m = MyModel()
+    >>> m["a"]
+    1
+    >>> m["b"] = "y"
+    >>> m.b
+    'y'
+    """
+    def __getitem__(self, key: str) -> Any:
+        """Allow getting attribute by key (like a dict)."""
         return getattr(self, key)
 
-    def __setitem__(self, key: str, value):
-        """Allow setting attribute by key (like a dict), with validation"""
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Allow setting attribute by key (like a dict), with validation."""
         if key not in self.__annotations__:
             raise KeyError(f"Key '{key}' not found")
 
@@ -69,43 +73,53 @@ class PymobModel(BaseModel):
         except ValidationError as e:
             raise ValueError(f"Validation failed: {e}")
 
+
 class ModelParameterDict(TypedDict):
-    parameters: Dict[str, float|str|int]
+    """
+    Typed dictionary used for model parameters.
+
+    Attributes
+    ----------
+    parameters : dict
+        Mapping of parameter names to values (float, str or int).
+    y0 : xr.Dataset
+        Initial conditions for the ODE system.
+    x_in : xr.Dataset
+        Input exposure time series.
+    """
+    parameters: Dict[str, float | str | int]
     y0: xr.Dataset
     x_in: xr.Dataset
 
+
 class DataVariable(BaseModel):
-    """Describe a data variable
+    """
+    Describe a data variable used in a case study.
 
     Parameters
     ----------
-    dimensions: List[str]
-        Specifies the dimensions, which have to be found in the observations and 
-        the dimensional order of the data variable
-    
-    min: float
-        The possible minimum of a data variable, is used to construct scalers.
-        Defaults to 'nan', which sets the minimum to the minimum of the 
-        observations
+    dimensions : List[str]
+        Dimensions that must be present in the observations and the
+        dimensional order of the data variable.
+    min : float, optional
+        Minimum value used for scaling. ``np.nan`` means the minimum is taken
+        from the observations. Default is ``np.nan``.
+    max : float, optional
+        Maximum value used for scaling. ``np.nan`` means the maximum is taken
+        from the observations. Default is ``np.nan``.
+    observed : bool, optional
+        Whether the variable was observed. Default is ``True``.
+    dimensions_evaluator : List[str] or None, optional
+        Order of dimensions returned by the evaluator. If ``None`` the order
+        of ``dimensions`` is used.
 
-    min: float
-        The possible maxmimum of a data variable, is used to construct scalers
-        Defaults to 'nan', which sets the maximum to the maximum of the 
-        observations
-
-    observed: bool
-        If the data-variable was observed or not. Defaults to True
-
-    dimensions_evaluator: List[str]
-        Specifies the dimensions and their order returned by the evaluator.
-        This is necessary to bring observations and results together, if for some
-        reason the returned simulation results from the evaluator have a different
-        dimensional order than the observations
-
-    Returns
-    -------
-    None
-
+    Examples
+    --------
+    >>> dv = DataVariable(dimensions=["time", "species"])
+    >>> dv.dimensions
+    ['time', 'species']
+    >>> dv.min = 0.0
+    >>> dv.max = 1.0
     """
     model_config = ConfigDict(
         validate_assignment=True,
@@ -118,51 +132,56 @@ class DataVariable(BaseModel):
     dimensions_evaluator: Optional[List[str]] = None
 
     @model_validator(mode="after")
-    def post_update(self):
+    def post_update(self) -> "DataVariable":
+        """Validate that ``dimensions_evaluator`` matches ``dimensions``."""
         if self.dimensions_evaluator is not None:
             if len(self.dimensions_evaluator) != len(self.dimensions):
                 self.dimensions_evaluator = None
-
         return self
-        
-        
+
     @field_validator("dimensions_evaluator", mode="after")
-    def set_data_variable_bounds(cls, v, info, **kwargs):
-        # For conditionally updating values (e.g. when data variables change)
-        # see https://github.com/pydantic/pydantic/discussions/7127
+    def set_data_variable_bounds(cls, v, info, **kwargs) -> Optional[List[str]]:
+        """
+        Ensure that ``dimensions_evaluator`` has the same length and names as
+        ``dimensions``.
+
+        Raises
+        ------
+        AssertionError
+            If the lengths differ or the sets of names differ.
+        """
         dimensions = info.data.get("dimensions")
         if v is not None:
             if len(v) != len(dimensions):
                 raise AssertionError(
-                    f"Evaluator dimensions {v} must have the "
+                    f"Evaluator dimensions {v} must have the " +
                     f"same length as observations {dimensions} dimensions."
                 )
-
             elif set(v) != set(dimensions):
                 raise AssertionError(
-                    f"Evaluator dimensions {set(v)} must have the "
+                    f"Evaluator dimensions {set(v)} must have the " +
                     f"same names as observations {set(dimensions)} dimensions."
                 )
-
             else:
                 return v
         else:
             return None
-    
-    def __eq__(self, value):
+
+    def __eq__(self, value: "DataVariable") -> bool:
+        """Equality comparison that respects ``np.nan`` handling."""
         smin, smax = self.min, self.max
         vmin, vmax = value.min, value.max
 
         if np.all(np.isnan([smin, vmin])):
             min_equal = True
         else:
-            min_equal = all(vmin == smax)
-        
+            min_equal = vmin == smin
+
         if np.all(np.isnan([smax, vmax])):
             max_equal = True
         else:
-            max_equal = all(vmax == smax)
-            
+            max_equal = vmax == smax
+
         return all([
             self.dimensions == value.dimensions,
             self.observed == value.observed,
@@ -171,25 +190,62 @@ class DataVariable(BaseModel):
             max_equal,
         ])
 
+
 class ParameterDict(dict):
+    """
+    Dictionary that triggers a callback on mutation.
+
+    This is used to keep the configuration in sync with the underlying
+    simulation objects.
+
+    Parameters
+    ----------
+    callback : Callable, optional
+        Function called with the dictionary after each mutation.
+    **kwargs : dict
+        Initial key/value pairs.
+    """
     def __init__(self, *args, **kwargs):
         self.callback: Callable = kwargs.pop('callback', None)
         super().__init__(*args, **kwargs)
-    
-    def __setitem__(self, key, value):
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        """Set ``key`` to ``value`` and invoke the callback."""
         super().__setitem__(key, value)
         if self.callback:
             self.callback(self)
-    
-    def update(self, *args, **kwargs):
+
+    def update(self, *args, **kwargs) -> None:
+        """Update the dictionary and invoke the callback."""
         super().update(*args, **kwargs)
         if self.callback:
             self.callback(self)
 
+
 def string_to_list(option: Union[List, str]) -> List:
+    """
+    Convert a string or list/tuple to a list of strings.
+
+    Parameters
+    ----------
+    option : Union[List, str]
+        Input that may already be a list/tuple or a space-separated string.
+
+    Returns
+    -------
+    List[str]
+        List of strings.
+
+    Examples
+    --------
+    >>> string_to_list("a b c")
+    ['a', 'b', 'c']
+    >>> string_to_list(["x", "y"])
+    ['x', 'y']
+    """
     if isinstance(option, (list, tuple)):
         return list(option)
-    
+
     if len(option) == 0:
         return []
     elif " " not in option:
@@ -199,18 +255,48 @@ def string_to_list(option: Union[List, str]) -> List:
 
 
 def string_to_tuple(option: Union[List, str]) -> Tuple:
+    """
+    Convert a string or list/tuple to a tuple of strings.
+
+    Parameters
+    ----------
+    option : Union[List, str]
+
+    Returns
+    -------
+    Tuple[str, ...]
+    """
     return tuple(string_to_list(option))
 
 
 def string_to_dict(
-        option: Union[Dict[str,str|float|int|List[float|int|str]], str]
-    ) -> Dict[str,str|float|int|List[float|int|str]]:
-    """Expects a string of this form 
-    e.g. 'value=1 max=10 min=0 prior=Lognormal(loc=2,scale=1)'
+        option: Union[Dict[str, str | float | int | List[float | int | str]], str]
+    ) -> Dict[str, str | float | int | List[float | int | str]]:
+    """
+    Parse a configuration string into a dictionary.
+
+    The string must consist of space-separated ``key=value`` pairs.
+    Values are interpreted as ``float``, ``NumericArray`` or Python literals
+    when possible.
+
+    Parameters
+    ----------
+    option : Union[dict, str]
+        Either an existing dictionary or a string to be parsed.
+
+    Returns
+    -------
+    dict
+        Mapping of keys to parsed values.
+
+    Examples
+    --------
+    >>> string_to_dict("a=1 b=2")
+    {'a': 1.0, 'b': 2.0}
     """
     if isinstance(option, Dict):
         return option
-    
+
     retdict = {}
     if len(option) == 0:
         return retdict
@@ -227,8 +313,6 @@ def string_to_dict(
 
         if not parsed:
             try:
-                # v_ = np.array(ast.literal_eval(v))
-                # _cfg = ConfigDict(arbitrary_types_allowed=True)
                 parsed_value = TypeAdapter(NumericArray).validate_json(v)
                 parsed = True
             except ValueError:
@@ -257,28 +341,65 @@ def string_to_dict(
         if not parsed:
             parsed_value = v
 
-        retdict.update({k:parsed_value})
-            
+        retdict.update({k: parsed_value})
+
     return retdict
 
 
-def string_to_param(option:str|Param) -> Param:
+def string_to_param(option: str | Param) -> Param:
+    """
+    Convert a string or :class:`Param` instance to a :class:`Param`.
+
+    Parameters
+    ----------
+    option : str | Param
+
+    Returns
+    -------
+    Param
+    """
     if isinstance(option, Param):
         return option
     else:
         param_dict = string_to_dict(option)
         return Param.model_validate(param_dict, strict=False)
-        
 
-def string_to_datavar(option:str|DataVariable) -> DataVariable:
+
+def string_to_datavar(option: str | DataVariable) -> DataVariable:
+    """
+    Convert a string or :class:`DataVariable` instance to a
+    :class:`DataVariable`.
+
+    Parameters
+    ----------
+    option : str | DataVariable
+
+    Returns
+    -------
+    DataVariable
+    """
     if isinstance(option, DataVariable):
         return option
     else:
         param_dict = string_to_dict(option)
         return DataVariable.model_validate(param_dict, strict=False)
-        
 
-def dict_to_string(dct: Dict, replace_whitespace=""):
+
+def dict_to_string(dct: Dict, replace_whitespace="") -> str:
+    """
+    Serialize a dictionary to a space-separated ``key=value`` string.
+
+    Parameters
+    ----------
+    dct : dict
+        Dictionary to serialize.
+    replace_whitespace : str, optional
+        Replacement for whitespace inside values.
+
+    Returns
+    -------
+    str
+    """
     string_items = []
     for k, v in dct.items():
         if isinstance(v, np.ndarray):
@@ -290,14 +411,48 @@ def dict_to_string(dct: Dict, replace_whitespace=""):
     return " ".join(string_items)
 
 
-def list_to_string(lst: List):
-    return " ".join([str(l).replace(" ", "") for l in lst])
+def list_to_string(lst: List) -> str:
+    """
+    Serialize a list to a space-separated string.
+
+    Parameters
+    ----------
+    lst : List
+
+    Returns
+    -------
+    str
+    """
+    return " ".join([str(_l).replace(" ", "") for _l in lst])
 
 
-def param_to_string(prm: Param):
+def param_to_string(prm: Param) -> str:
+    """
+    Serialize a :class:`Param` to a ``key=value`` string.
+
+    Parameters
+    ----------
+    prm : Param
+
+    Returns
+    -------
+    str
+    """
     return dict_to_string(prm.model_dump(exclude_none=True, mode="json"))
 
-def datavar_to_string(prm: DataVariable):
+
+def datavar_to_string(prm: DataVariable) -> str:
+    """
+    Serialize a :class:`DataVariable` to a ``key=value`` string.
+
+    Parameters
+    ----------
+    prm : DataVariable
+
+    Returns
+    -------
+    str
+    """
     return dict_to_string(prm.model_dump(exclude_none=True))
 
 
@@ -343,7 +498,7 @@ OptionTupleStr = Annotated[
 ]
 
 OptionDictStr = Annotated[
-    Dict[str,str|float|int|List[float|int]], 
+    Dict[str, str | float | int | List[float | int]], 
     BeforeValidator(string_to_dict), 
     serialize_dict_to_string
 ]
@@ -361,18 +516,38 @@ OptionParam = Annotated[
 ]
 
 
-# OptionListFloat = Annotated[
-#     List[float], 
-#     BeforeValidator(string_to_list), 
-#     serialize_list_to_string
-# ]
-
-        
 class Casestudy(PymobModel):
+    """
+    Configuration model for a case study.
+
+    Attributes
+    ----------
+    init_root : str
+        Working directory at the time of creation (excluded from serialization).
+    root : str
+        Root directory of the repository.
+    name : str
+        Name of the case study.
+    version : Optional[str]
+        Optional version string.
+    pymob_version : Optional[str]
+        Version of *pymob* used.
+    scenario : str
+        Scenario name.
+    package : str
+        Package containing the case study.
+    modules : List[str]
+        List of modules to import for the case study.
+    simulation : str
+        Name of the simulation class defined in ``sim.py``.
+    output, data, scenario_path_override, observations : Optional[str]
+        Paths data, scenario overrides and observation files.
+    logging, logfile : str
+        Logging level and optional logfile.
+    """
     model_config = {"validate_assignment" : True}
     init_root: str = Field(default=os.getcwd(), exclude=True)
     root: str = "."
-
     name: str = "unnamed_case_study"
     version: Optional[str] = None
     pymob_version: Optional[str] = None
@@ -393,6 +568,13 @@ class Casestudy(PymobModel):
     @computed_field
     @property
     def output_path(self) -> str:
+        """
+        Path where results are stored.
+
+        Returns
+        -------
+        str
+        """
         if self.output is not None:
             return self.output
         else:
@@ -404,12 +586,19 @@ class Casestudy(PymobModel):
             )
     
     @output_path.setter
-    def output_path(self, value) -> None:
+    def output_path(self, value: str) -> None:
         self.output = value
 
     @computed_field
     @property
     def data_path(self) -> str:
+        """
+        Path where case-study data files are stored.
+
+        Returns
+        -------
+        str
+        """
         if self.data is not None:
             return self.data
         else:
@@ -420,12 +609,19 @@ class Casestudy(PymobModel):
             )
         
     @data_path.setter
-    def data_path(self, value) -> None:
+    def data_path(self, value: str) -> None:
         self.data = value
     
     @computed_field
     @property
     def default_settings_path(self) -> str:
+        """
+        Default location of the ``settings.cfg`` file for the case study.
+
+        Returns
+        -------
+        str
+        """
         return os.path.join(
             os.path.relpath(self.package),
             os.path.relpath(self.name),
@@ -435,7 +631,14 @@ class Casestudy(PymobModel):
         )
         
     @property
-    def scenario_path(self):
+    def scenario_path(self) -> str:
+        """
+        Path to the scenario directory, taking overrides into account.
+
+        Returns
+        -------
+        str
+        """
         if self.scenario_path_override is not None:
             return self.scenario_path_override
 
@@ -457,9 +660,20 @@ class Casestudy(PymobModel):
             )
     
     @field_validator("root", mode="after")
-    def set_root(cls, new_value, info, **kwargs):
-        # For conditionally updating values (e.g. when data variables change)
-        # see https://github.com/pydantic/pydantic/discussions/7127
+    def set_root(cls, new_value, info, **kwargs) -> str:
+        """
+        Validate and possibly change the working directory based on ``root``.
+
+        Returns
+        -------
+        str
+            The absolute path that becomes the new working directory.
+
+        Note
+        ----
+        For conditionally updating values (e.g. when data variables change)
+        see https://github.com/pydantic/pydantic/discussions/7127
+        """
         os.chdir(info.data.get("init_root"))  # this resets the root to the original value
         package = info.data.get("package")
         name = info.data.get("name")
@@ -467,14 +681,14 @@ class Casestudy(PymobModel):
         if root != os.getcwd():
             if not os.path.exists(os.path.join(root, package)):
                 raise FileNotFoundError(
-                    f"Case study collection-directory '{package}' does not "
-                    f"exist in {root}. If the root is the case study. Set "
-                    f"sim.config.package = '.'"
+                    f"Case study collection-directory '{package}' does not " +
+                    f"exist in {root}. If the root is the case study. Set " +
+                    "sim.config.package = '.'"
                 )
             else:
                 if not os.path.exists(os.path.join(root, package, name)):
                     raise FileNotFoundError(
-                        f"Case study '{name}' "
+                        f"Case study '{name}' " +
                         f"does not exist in {os.path.join(root, package)}. "
                     )   
                 else:
@@ -486,9 +700,25 @@ class Casestudy(PymobModel):
             return root
 
 
-
-
 class Simulation(PymobModel):
+    """
+    Configuration model for a simulation.
+
+    Attributes
+    ----------
+    model, solver : Optional[str]
+        Names of the deterministic model and solver to use.
+    y0, x_in, input_files : List[str]
+        Lists of initial condition files, exposure files and other input files.
+    n_ode_states : int
+        Number of ODE states; ``-1`` means autodetect.
+    batch_dimension, x_dimension : str
+        Names of the batch and time dimensions.
+    modeltype : Literal["stochastic", "deterministic"]
+        Type of model.
+    seed : int
+        Random seed.
+    """
     model_config = {"validate_assignment" : True, "extra": "allow"}
 
     model: Optional[str] = Field(default=None, validate_default=True, description="The deterministic model")
@@ -506,15 +736,21 @@ class Simulation(PymobModel):
     solver_post_processing: Optional[str] = Field(default=None, validate_default=True)
     seed: Annotated[int, to_str] = 1
 
+
 class Datastructure(PymobModel):
-    __pydantic_extra__: Dict[str,OptionDataVariable]
+    """
+    Container for data-variable definitions.
+
+    The class stores ``DataVariable`` objects in ``__pydantic_extra__``.
+    """
+    __pydantic_extra__: Dict[str, OptionDataVariable]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
-    def remove(self, key) -> None:
-        """Removes a data variable from the data structure"""
+    def remove(self, key: str) -> None:
+        """Removes a data variable from the data structure."""
         if key not in self.__pydantic_extra__:
             warnings.warn(
-                f"'{key}' is not a data-variable. Data variables are: "
+                f"'{key}' is not a data-variable. Data variables are: " +
                 f"{self.data_variables}."
             )
             return
@@ -522,22 +758,34 @@ class Datastructure(PymobModel):
         deleted_var = self.__pydantic_extra__.pop(key)
         print(f"Deleted '{key}' DataVariable({deleted_var}).")
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> OptionDataVariable:
         return self.__pydantic_extra__[key]
 
     @property
     def data_variables(self) -> List[str]:
+        """List of all data-variable names."""
         return [k for k in self.__pydantic_extra__.keys()]
     
     @property
     def observed_data_variables(self) -> List[str]:
+        """List of observed data-variable names."""
         return [k for k, v in self.__pydantic_extra__.items() if v.observed]
     
     @property
     def dimensions(self) -> List[str]:
-        # TODO: Remove when dimensions is not accessed any longer
+        """
+        Legacy method returning the union of all dimensions.
+
+        Returns
+        -------
+        List[str]
+
+        Note
+        ----
+        TODO: Remove when dimensions is not accessed any longer
+        """
         warnings.warn(
-            "Legacy method, will be deprecated soon. This works only if all "
+            "Legacy method, will be deprecated soon. This works only if all " +
             "Data variables have the same dimension",
             category=DeprecationWarning
         )
@@ -550,19 +798,29 @@ class Datastructure(PymobModel):
     
     @property
     def all(self) -> Dict[str, DataVariable]:
+        """Dictionary of all data variables."""
         return {k: v for k, v in self.__pydantic_extra__.items()}
 
     @property
     def dimdict(self) -> Dict[str, List[str]]:
+        """Mapping of variable name to its dimensions."""
         return {k: v.dimensions for k, v in self.__pydantic_extra__.items()}
 
     @property
     def observed_dimdict(self) -> Dict[str, List[str]]:
+        """Mapping of observed variable name to its dimensions."""
         return {k: v.dimensions for k, v in self.__pydantic_extra__.items() if v.observed}
 
 
     @property
     def var_dim_mapper(self) -> Dict[str, List[str]]:
+        """
+        Mapping from variable name to evaluator dimension indices.
+
+        Returns
+        -------
+        Dict[str, List[int]]
+        """
         var_dim_mapper = {}
         for k, v in self.all.items():
             if v.dimensions_evaluator is None:
@@ -578,9 +836,19 @@ class Datastructure(PymobModel):
     
     @property
     def evaluator_dim_order(self) -> List[str]:
-        # TODO: Remove when dimensions is not accessed any longer
+        """
+        Legacy method returning the order of dimensions used by the evaluator.
+
+        Returns
+        -------
+        List[str]
+
+        Note
+        ----
+        TODO: Remove when dimensions is not accessed any longer
+        """
         warnings.warn(
-            "Legacy method, will be deprecated soon. This works only if all "
+            "Legacy method, will be deprecated soon. This works only if all " +
             "Data variables have the same dimension",
             category=DeprecationWarning
         )
@@ -597,22 +865,37 @@ class Datastructure(PymobModel):
         return dims
     
     @property
-    def data_variables_min(self):
+    def data_variables_min(self) -> List[float]:
+        """List of ``min`` values for all data variables."""
         return [v.min for v in self.__pydantic_extra__.values()]
 
     @property
-    def data_variables_max(self):
+    def data_variables_max(self) -> List[float]:
+        """List of ``max`` values for all data variables."""
         return [v.max for v in self.__pydantic_extra__.values()]
 
     @property
-    def observed_data_variables_min(self):
+    def observed_data_variables_min(self) -> List[float]:
+        """List of ``min`` values for observed data variables."""
         return [v.min for v in self.__pydantic_extra__.values() if v.observed]
 
     @property
-    def observed_data_variables_max(self):
+    def observed_data_variables_max(self) -> List[float]:
+        """List of ``max`` values for observed data variables."""
         return [v.max for v in self.__pydantic_extra__.values() if v.observed]
 
+
 class Solverbase(PymobModel):
+    """
+    Base configuration for solvers.
+
+    Attributes
+    ----------
+    x_dim : str
+        Name of the time dimension.
+    exclude_kwargs_model, exclude_kwargs_postprocessing : Tuple[str, ...]
+        Keyword arguments to exclude when passing to the model or post-processing.
+    """
     model_config = ConfigDict(
         validate_assignment=True, 
         extra="forbid"
@@ -621,7 +904,22 @@ class Solverbase(PymobModel):
     exclude_kwargs_model: OptionTupleStr = ("t", "time", "x_in", "y", "x", "Y", "X")
     exclude_kwargs_postprocessing: OptionTupleStr = ("t", "time", "interpolation", "results")
 
+
 class Jaxsolver(PymobModel):
+    """
+    Configuration for the JAX solver.
+
+    Attributes
+    ----------
+    diffrax_solver : str
+        Name of the Diffrax solver to use.
+    rtol, atol : float
+        Relative and absolute tolerances.
+    pcoeff, icoeff, dcoeff, max_steps : float or int
+        Coefficients for the solver.
+    throw_exception : bool
+        Whether to raise an exception on solver failure.
+    """
     diffrax_solver: str = "Dopri5"
     rtol: float = 1e-6
     atol: float = 1e-7
@@ -631,7 +929,30 @@ class Jaxsolver(PymobModel):
     max_steps: int = int(1e5)
     throw_exception: bool = True
 
+
 class Inference(PymobModel):
+    """
+    Configuration for inference settings.
+
+    Attributes
+    ----------
+    eps : float
+        Numerical epsilon for convergence.
+    objective_function : str
+        Name of the objective function.
+    n_objectives : int
+        Number of objectives.
+    objective_names : List[str]
+        Names of the objectives.
+    backend : Optional[str]
+        Inference backend to use.
+    extra_vars : List[str]
+        Additional variables to monitor.
+    plot : Optional[Callable]
+        Plotting function.
+    n_predictions : int
+        Number of posterior predictive draws.
+    """
     model_config = {"validate_assignment" : True}
 
     eps: float = 1e-8
@@ -640,10 +961,19 @@ class Inference(PymobModel):
     objective_names: OptionListStr = []
     backend: Optional[str] = None
     extra_vars: OptionListStr = []
-    plot: Optional[str|Callable] = None
+    plot: Optional[str | Callable] = None
     n_predictions: Annotated[int, to_str] = 100
 
+
 class Multiprocessing(PymobModel):
+    """
+    Configuration for multiprocessing.
+
+    Attributes
+    ----------
+    cores : int
+        Number of cores to use. ``1`` means no parallelism.
+    """
     _name = "multiprocessing"
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
 
@@ -652,54 +982,84 @@ class Multiprocessing(PymobModel):
     
     @property
     def n_cores(self) -> Annotated[int, to_str]:
+        """
+        Compute the effective number of cores.
+
+        Returns
+        -------
+        int
+        """
         cpu_avail = mp.cpu_count()
         cpu_set = self.cores
         if cpu_set <= 0:
             return cpu_avail + cpu_set
         else: 
             return cpu_set
-        
+
+
 class Modelparameters(PymobModel):
-    __pydantic_extra__: Dict[str,OptionParam]
+    """
+    Container for model parameters.
+
+    Parameters are stored in ``__pydantic_extra__`` as :class:`Param` objects.
+    """
+    __pydantic_extra__: Dict[str, OptionParam]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
     @property
-    def all(self) -> Dict[str,OptionParam]:
+    def all(self) -> Dict[str, OptionParam]:
+        """All parameters."""
         return self.__pydantic_extra__
     
     @all.setter
-    def all(self, value):
+    def all(self, value: Dict[str, OptionParam]) -> None:
         self.__pydantic_extra__ = value
 
     @property
-    def free(self) -> Dict[str,OptionParam]:
-        return {k:v for k, v in self.all.items() if v.free}
+    def free(self) -> Dict[str, OptionParam]:
+        """Parameters marked as free."""
+        return {k: v for k, v in self.all.items() if v.free}
 
     @property
-    def fixed(self) -> Dict[str,OptionParam]:
-        return {k:v for k, v in self.all.items() if not v.free}
+    def fixed(self) -> Dict[str, OptionParam]:
+        """Parameters marked as fixed."""
+        return {k: v for k, v in self.all.items() if not v.free}
 
     @property
     def n_free(self) -> int:
+        """Number of free parameters."""
         return len(self.free)
     
     @property
-    def free_value_dict(self) -> Dict[str,float|NumericArray]:
-        return {k:v.value for k, v in self.free.items()}
+    def free_value_dict(self) -> Dict[str, float | NumericArray]:
+        """Dictionary of free parameter values."""
+        return {k: v.value for k, v in self.free.items()}
     
     @property
-    def fixed_value_dict(self) -> Dict[str,float|NumericArray]:
-        return {k:v.value for k, v in self.fixed.items()}
+    def fixed_value_dict(self) -> Dict[str, float | NumericArray]:
+        """Dictionary of fixed parameter values."""
+        return {k: v.value for k, v in self.fixed.items()}
     
     @property
-    def value_dict(self) -> Dict[str,float|NumericArray]:
-        return {k:v.value for k, v in self.all.items()}
+    def value_dict(self) -> Dict[str, float | NumericArray]:
+        """Dictionary of all parameter values."""
+        return {k: v.value for k, v in self.all.items()}
     
     @property
     def dimensions(self) -> List[str]:
-        # TODO: Remove when dimensions is not accessed any longer
+        """
+        Legacy method returning the union of all parameter dimensions.
+
+        Returns
+        -------
+        List[str]
+
+        Note
+        ----
+        TODO: Remove when dimensions is not accessed any longer
+        """
         warnings.warn(
-            "Legacy method, will be deprecated soon. This works only if all "
+            "Legacy method, will be deprecated soon. This works only if all " +
             "Data variables have the same dimension",
             category=DeprecationWarning
         )
@@ -710,11 +1070,11 @@ class Modelparameters(PymobModel):
                     dims.append(d)
         return dims
 
-    def remove(self, key) -> None:
-        """Removes a Parameter"""
+    def remove(self, key: str) -> None:
+        """Removes a Parameter."""
         if key not in self.all:
             warnings.warn(
-                f"'{key}' is not a parameter. Parameters are: "
+                f"'{key}' is not a parameter. Parameters are: " +
                 f"{list(self.all.keys())}."
             )
             return
@@ -722,33 +1082,55 @@ class Modelparameters(PymobModel):
         deleted_par = self.all.pop(key)
         print(f"Deleted '{key}' Param({deleted_par}).")
 
-    def reorder(self, keys: List[str]):
-        """Reorders model parameters. This may be necessary for hierarchical 
+    def reorder(self, keys: List[str]) -> None:
+        """
+        Reorders model parameters. This may be necessary for hierarchical 
         models, because priors take draws from hyperpriors to parameterize their
         distributions. Hence, they must be available earlier.
 
         Parameters
         ----------
-
         keys : List[str]
-            A list of model parameters to sort the model_parameter dictionary 
-            after. If the keys list is smaller than the list of model parameters,
-            unlisted parameters will be appended to the keys list in order.
+            Desired order of parameter keys. Unlisted keys are appended.
         """
         if len(keys) < len(self.all):
             keys = keys + [k for k in self.all.keys() if k not in keys]
             
-        self.all = {k:self.all[k] for k in keys} 
+        self.all = {k: self.all[k] for k in keys} 
+
 
 class Errormodel(PymobModel):
-    __pydantic_extra__: Dict[str,OptionRV]
+    """
+    Container for error-model specifications.
+
+    Each entry is an :class:`OptionRV` describing a random variable.
+    """
+    __pydantic_extra__: Dict[str, OptionRV]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
     
     @property
-    def all(self) -> Dict[str,OptionRV]:
+    def all(self) -> Dict[str, OptionRV]:
+        """All error-model random variables."""
         return self.__pydantic_extra__
 
+
 class Pyabc(PymobModel):
+    """
+    Configuration for the pyABC inference backend.
+
+    Attributes
+    ----------
+    sampler : str
+        Sampler class name.
+    population_size : int
+        Number of particles per population.
+    minimum_epsilon, min_eps_diff : float
+        Epsilon settings.
+    max_nr_populations : int
+        Maximum number of populations.
+    database_path : str
+        Path to the SQLite database used by pyABC.
+    """
     model_config = {"validate_assignment" : True}
 
     sampler: str = "SingleCoreSampler"
@@ -760,7 +1142,20 @@ class Pyabc(PymobModel):
     # database configuration
     database_path: str = f"{tempfile.gettempdir()}/pyabc.db"
 
+
 class Redis(PymobModel):
+    """
+    Configuration for the Redis backend used by pyABC.
+
+    Attributes
+    ----------
+    password : str
+        Redis password.
+    port : int
+        Port number.
+    n_predictions, history_id, model_id : int
+        Evaluation settings.
+    """
     model_config = {"validate_assignment" : True, "protected_namespaces": ()}
 
     _name = "inference.pyabc.redis"
@@ -776,6 +1171,20 @@ class Redis(PymobModel):
 
 
 class Pymoo(PymobModel):
+    """
+    Configuration for the pymoo multi-objective optimisation backend.
+
+    Attributes
+    ----------
+    algortihm : str
+        Optimisation algorithm.
+    population_size, max_nr_populations : int
+        Population settings.
+    ftol, xtol, cvtol : float
+        Tolerances.
+    verbose : bool
+        Verbosity flag.
+    """
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
 
     algortihm: str = "UNSGA3"
@@ -787,6 +1196,28 @@ class Pymoo(PymobModel):
     verbose: Annotated[bool, to_str] = True
     
 class Numpyro(PymobModel):
+    """
+    Configuration for the NumPyro inference backend.
+
+    Attributes
+    ----------
+    user_defined_probability_model, user_defined_error_model,
+    user_defined_preprocessing : Optional[str]
+        Paths to user-defined modules.
+    gaussian_base_distribution : bool
+        Whether to use a Gaussian base distribution.
+    kernel, init_strategy : str
+        MCMC kernel and initialisation strategy.
+    chains, draws, warmup, thinning : int
+        MCMC sampling parameters.
+    nuts_draws, nuts_step_size, nuts_max_tree_depth,
+    nuts_target_accept_prob, nuts_dense_mass,
+    nuts_adapt_step_size, nuts_adapt_mass_matrix : bool or float
+        NUTS sampler settings.
+    sa_adapt_state_size : Optional        Simulated annealing state size.
+    svi_iterations, svi_learning_rate : int, float
+        SVI settings.
+    """
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
     user_defined_probability_model: Optional[str] = None
     user_defined_error_model: Optional[str] = None
@@ -806,7 +1237,7 @@ class Numpyro(PymobModel):
     # nuts arguments
     nuts_draws: Annotated[int, to_str] = 2000
     nuts_step_size: Annotated[float, to_str] = 0.8
-    nuts_max_tree_depth: Annotated[int, to_str] = 10
+    nuts_max_tree_depth: int = 10
     nuts_target_accept_prob: Annotated[float, to_str] = 0.8
     nuts_dense_mass: Annotated[bool, to_str] = True
     nuts_adapt_step_size: Annotated[bool, to_str] = True
@@ -815,11 +1246,25 @@ class Numpyro(PymobModel):
     # sa parameters
     sa_adapt_state_size: Optional[int] = None
 
-    # svi parameters
+    # parameters
     svi_iterations: Annotated[int, to_str] = 10_000
     svi_learning_rate: Annotated[float, to_str] = 0.0001
 
+
 class Report(PymobModel):
+    """
+    Configuration for report generation.
+
+    Attributes
+    ----------
+    debug_report : bool
+        Include debug information.
+    pandoc_output_format : Literal["html", "latex-si", "latex", "pdf"]
+        Output format for the generated report.
+    model, parameters, diagnostics, goodness_of_fit,
+    table_parameter_estimates, plot_trace, plot_parameter_pairs : bool
+        Flags controlling which sections are included.
+    """
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
     
     debug_report: Annotated[bool, to_str] = False
@@ -849,11 +1294,22 @@ class Report(PymobModel):
     plot_trace: Annotated[bool, to_str] = True
     plot_parameter_pairs: Annotated[bool, to_str] = True
 
+
 class Config(BaseModel):
-    """Configuration manager for pymob."""
+    """
+    Configuration manager for *pymob*.
+
+    This class loads a ``settings.cfg`` file, validates it against the
+    pydantic models defined above and provides convenient accessors.
+
+    Parameters
+    ----------
+    config : str or configparser.ConfigParser, optional
+        Path to a configuration file or an already parsed ``ConfigParser``.
+    """
     model_config = {"validate_assignment" : True, "extra": "allow", "protected_namespaces": ()}
     _config: configparser.ConfigParser
-    _modules: Dict[str,ModuleType]
+    _modules: Dict[str, ModuleType]
 
     def __init__(
         self,
@@ -886,7 +1342,8 @@ class Config(BaseModel):
 
         # pass arguments to config
 
-        if _cfg_fp is not None: _config.set("case-study", "settings_path", _cfg_fp)
+        if _cfg_fp is not None: 
+            _config.set("case-study", "settings_path", _cfg_fp)
         cfg_dict = {k:dict(s) for k, s in dict(_config).items() if k != "DEFAULT"}
         
         # initalize case_study separately and import modules. This is done here,
@@ -904,7 +1361,7 @@ class Config(BaseModel):
         self._config = _config
         self._modules = _modules
 
-        # Load any case‑study‑specific configuration after generic sections are parsed
+        # Load any case-study-specific configuration after generic sections are parsed
         self._load_case_study_section()
 
     case_study: Casestudy = Field(default=Casestudy(), alias="case-study")
@@ -923,7 +1380,14 @@ class Config(BaseModel):
     report: Report = Field(default=Report(), alias="report")
         
     @property
-    def input_file_paths(self) -> list:
+    def input_file_paths(self) -> List[str]:
+        """
+        List of all input files required for the simulation.
+
+        Returns
+        -------
+        List[str]
+        """
         paths_input_files = []
         for file in self.simulation.input_files:
             fp = scenario_file(file, self.case_study.name, self.case_study.scenario, pkg_dir=self.case_study.package)
@@ -942,7 +1406,8 @@ class Config(BaseModel):
 
             return paths_input_files
 
-    def print(self):
+    def print(self) -> None:
+        """Print a summary of the configuration."""
         print("Simulation configuration", end="\n")
         print("========================")
         for section, field_info in self.model_fields.items():
@@ -950,9 +1415,10 @@ class Config(BaseModel):
 
         print("========================", end="\n")
 
-    def save(self, fp: Optional[str]=None, force=False):
-        """Saves the configuration to a settings.cfg file
-        
+    def save(self, fp: Optional[str]=None, force: bool=False) -> None:
+        """
+        Save the configuration to a ``settings.cfg`` file.
+
         Uses serializers defined at the top, which parse the options to str
         so they can be processed by configfile. 
 
@@ -963,11 +1429,12 @@ class Config(BaseModel):
 
         Parameters
         ----------
-        fp: Optiona[str] file path to write the settings file to
-        force: [bool] should the settings file be overwritten without asking
-            for user confirmation (default: False)
+        fp : Optional[str]
+            File path to write the settings file to. If ``None`` the default
+            location derived from the case study is used.
+        force : bool, optional
+            Overwrite without prompting. Default is ``False``.
         """
-
         settings = self.model_dump(
             by_alias=True, 
             mode="json", 
@@ -993,15 +1460,25 @@ class Config(BaseModel):
             with open(file_path, "w") as f:
                 self._config.write(f)
 
-    def create_directory(self, directory: Literal["results", "scenario"], force=False):
+    def create_directory(self, directory: Literal["results", "scenario"], force: bool=False) -> None:
+        """
+        Create a results or scenario directory if it does not exist.
+
+        Parameters
+        ----------
+        directory : Literal["results", "scenario"]
+            Which directory to create.
+        force : bool, optional
+            If ``True`` create without prompting.
+        """
         if directory == "results":
             p = os.path.abspath(self.case_study.output_path)
         elif directory == "scenario":
             p = os.path.abspath(self.case_study.scenario_path)
         else:
             raise NotImplementedError(
-                f"{directory.capitalize()} is not an expected directory in the "
-                "case study logic. Use one of 'results' or 'scenario'."
+                f"{directory.capitalize()} is not an expected directory in the " +
+                "case study logic. Use one of 'results' and 'scenario'."
             )
 
         if os.path.exists(p):
@@ -1019,12 +1496,20 @@ class Config(BaseModel):
             else:
                 print(f"No {directory} directory created.")
 
-    def import_casestudy_modules(self, reset_path=False):
+    def import_casestudy_modules(self, reset_path: bool=False) -> None:
         """
+        Import all modules of the current case study.
+
         this script handles the import of a case study without the typical 
-        __init__.py file. It iterates through all .py files in the root directory
+        __init__.py file. It iterates over all .py files in the root directory
         of the case study (typically: sim, mod, stats, plot, data, prior)
         and imports them with import_module(...)
+
+        Parameters
+        ----------
+        reset_path : bool, optional
+            Reset ``sys.path`` before importing. Default is ``False``.
+
         """
         modules = self._import_casestudy_modules(
             case_study=self.case_study, 
@@ -1034,14 +1519,29 @@ class Config(BaseModel):
         self._modules.update(modules)
 
     @staticmethod
-    def _import_casestudy_modules(case_study: Casestudy, reset_path=False) -> Dict:
+    def _import_casestudy_modules(case_study: Casestudy, reset_path: bool=False) -> Dict[str, ModuleType]:
+        """
+        Import modules for a given case study.
+
+        Parameters
+        ----------
+        case_study : Casestudy
+            The case-study configuration.
+        reset_path : bool, optional
+            Whether to reset ``sys.path`` before importing.
+
+        Returns
+        -------
+        Dict[str, ModuleType]
+            Mapping of module name to imported module.
+        """
         _modules = {}
 
 
         # reset the path to avoid importing modules form case-studies used
         # before in the same session
         if reset_path:
-            # default path needs to be copied, otherwise it will be updated
+            # default path needs be copied, otherwise it will be updated
             # when setting sys.path
             sys.path = default_path.copy()
 
@@ -1057,7 +1557,7 @@ class Config(BaseModel):
                 "The characters will be replaced with underscores ('_') for "+
                 "importing the package modules. " +
                 "In the future, the name of the case study should be the same as " +
-                "as the package where the modules are located. This name must not "
+                "as the package where the modules are located. This name must not " +
                 "contain hyphens ('-') or whitespace characters (' '),",
                 category=UserWarning
             )
@@ -1080,11 +1580,11 @@ class Config(BaseModel):
                     _modules.update({module: m})
                 except ModuleNotFoundError:
                     warnings.warn(
-                        f"Module {module}.py not found in {_package}."
-                        f"Missing modules can lead to unexpected behavior. "
-                        f"Does your case study have a {module}.py file? "
-                        f"It should have the line `from PARENT_CASE_STUDY."
-                        f"{module} import *` to import all objects from "
+                        f"Module {module}.py not found in {_package}." +
+                        "Missing modules can lead to unexpected behavior. " +
+                        f"Does your case study have a {module}.py file? " +
+                        "It should have the line `from PARENT_CASE_STUDY." +
+                        f"{module} import *` to import all objects from " +
                         "the parent case study."
                     )
             return _modules
@@ -1121,30 +1621,57 @@ class Config(BaseModel):
                 _modules.update({module: m})
             except ModuleNotFoundError:
                 warnings.warn(
-                    f"Module {module}.py not found in {case_study_path}."
-                    f"Missing modules can lead to unexpected behavior."
-                    "If a module is not imported, you can specify it in the "
+                    f"Module {module}.py not found in {case_study_path}." +
+                    "Missing modules can lead to unexpected behavior." +
+                    "If a module is not imported, you can specify it in the " +
                     "Config 'config.case_study.modules = [...]'"
                 )
 
         return _modules
 
-    def import_simulation_from_case_study(self):
+    def import_simulation_from_case_study(self) -> Any:
+        """
+        Retrieve the ``Simulation`` class defined in the case-study.
+
+        Returns
+        -------
+        Any
+            The ``Simulation`` class object.
+
+        Raises
+        ------
+        ImportError
+            If the class cannot be found.
+        """
         try:
             Simulation = getattr(self._modules["sim"], self.case_study.simulation)
-        except:
+        except Exception as e:
             raise ImportError(
-                f"Simulation class '{self.case_study.simulation}' "
-                "could not be found. Make sure the simulaton option is spelled "
-                "correctly or specify an class that exists in sim.py"
-                "If you are using pymob to work on different case-studies in "
-                "the same session, make sure to reset the path by "
-                "using `import_casestudy_modules(reset_path=True)`"
+                f"Simulation class '{self.case_study.simulation}' " +
+                "could not be found. Make sure the simulaton option is spelled " +
+                "correctly or specify a class that exists in sim.py" +
+                "If you are using pymob to work on different case-studies in " +
+                "the same session, make sure to reset the path by " +
+                "using `import_casestudy_modules(reset_path=True)`" +
+                f"\nOriginal exception: {e}"
             )
         
         return Simulation
 
-    def set_option(self, section: str, option: str, value: str):
+    def set_option(self, section: str, option: str, value: str) -> None:
+        """
+        Set a configuration option.
+
+        Parameters
+        ----------
+        section : str
+            Name of the configuration section (e.g. ``simulation``).
+        option : str
+            Option name within the section.
+        value : str
+            New value as a string; will be parsed according to the section's
+            type definitions.
+        """
         sect = getattr(self, section)
         if isinstance(sect, Modelparameters):
             if (value == "" or value == "None") and option in sect.all:
@@ -1159,7 +1686,6 @@ class Config(BaseModel):
     def _load_case_study_section(self) -> None:
         """
         Parse a registered case-study-specific INI section and expose it as an attribute.
-        The section name must match ``case_study.name``.
         """
         # Ensure the model has extra sections
         if self.model_extra is None:
@@ -1177,16 +1703,15 @@ class Config(BaseModel):
                     "You need to register a the Config Model like that:\n\n" +
                     ">>> from pymob.sim.casestudy_registry import register_case_study_config\n" +
                     ">>> from pymob.sim.config import PymobModel\n" +
-                    ">>> # define your pydantic config model here\n" +
                     f">>> class {section.capitalize()}Config(PymobModel):\n" +
-                    f">>>     option_a: float = 1.0\n" +
+                    ">>>     option_a: float = 1.0\n" +
                     f">>> register_case_study_config({section.capitalize()}Config)\n"
                 )
 
             else:
                 # Pydantic parses/validates the raw strings
                 instance = model_cls.model_validate(options, strict=False)
-                # Store on the Config object – attribute name equals the case‑study name
+                # Store on the Config object – attribute name equals the case-study name
                 self.model_extra.update({section: instance})
 
         # add default sections in case the sections are not defined in the settings.cfg
@@ -1196,11 +1721,25 @@ class Config(BaseModel):
                 self.model_extra.update({section: default_instance})
             
 
-
 @click.command
 @click.option("--file", "-f", type=str, nargs=1, help="Path to the config file (usually in scenario/.../settings.cfg)")
 @click.option("--options", "-o", type=str, multiple=True, help="The option or options to configure. Combine sections and option like this 'simulation.seed=1' options that have spaces need to be wraped in quotes")
-def configure(file, options: Tuple[str, ...]):
+def configure(file: str, options: Tuple[str, ...]) -> None:
+    """
+    Command-line entry point to modify a configuration file.
+
+    Parameters
+    ----------
+    file : str
+        Path to the configuration file.
+    options : Tuple[str, ...]
+        List of ``section.option=value`` strings.
+
+    Examples
+    --------
+    >>> # Change the seed of the simulation
+    >>> configure("-f", "scenario/settings.cfg", "-o", "simulation.seed=42")
+    """
     config = Config(file)
     for opt in options:
         key, val = opt.split("=", 1)
@@ -1210,7 +1749,7 @@ def configure(file, options: Tuple[str, ...]):
         section = section.replace("-","_").replace(".","_")
 
         if section == "jax_solver":
-            section == "jaxsolver"
+            section = "jaxsolver"
 
         value = val.strip(" ")
         config.set_option(section, option, value)
