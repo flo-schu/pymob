@@ -1,12 +1,14 @@
 import os
 import re
 import sys
+import json
 from ast import literal_eval as make_tuple
 import warnings
 import multiprocessing as mp
 from typing import List, Optional, Union, Dict, Literal, Callable, Tuple, TypedDict, Any
 from typing_extensions import Annotated
 import tempfile
+from functools import partial
 
 import numpy as np
 import xarray as xr
@@ -267,7 +269,9 @@ def string_to_tuple(option: Union[List, str]) -> Tuple:
 
 
 def string_to_dict(
-        option: Union[Dict[str, str | float | int | List[float | int | str]], str]
+        option: Union[Dict[str, str | float | int | List[float | int | str]], str],
+        split_str=" ",
+        sep_str="="
     ) -> Dict[str, str | float | int | List[float | int | str]]:
     """
     Parse a configuration string into a dictionary.
@@ -298,8 +302,8 @@ def string_to_dict(
     if len(option) == 0:
         return retdict
 
-    for i in option.split(" "):
-        k, v = i.strip().split(sep="=", maxsplit=1)
+    for i in option.split(split_str):
+        k, v = i.strip().split(sep=sep_str, maxsplit=1)
         parsed = False
         if not parsed:
             try:
@@ -343,6 +347,29 @@ def string_to_dict(
     return retdict
 
 
+def to_nested_dict(
+    option: str| Dict[str, str | Dict[str, float|None]],
+    dict_model: PymobModel
+) -> Dict[str,Dict[str,float|None]]:
+    parsed_dict = {}
+    if isinstance(option, str):
+        option_dict = string_to_dict(option)
+    else:
+        option_dict = option
+
+    for key, value in option_dict.items():
+        if isinstance(value, dict):
+            validated_value = dict_model.model_validate(value).model_dump(mode="python")
+            parsed_dict.update({key: validated_value})
+        else:
+            value_dict = string_to_dict(value, split_str=",", sep_str=":")
+            validated_value = dict_model.model_validate(value_dict).model_dump(mode="python")
+
+            parsed_dict.update({key:validated_value})
+
+    return parsed_dict
+
+
 def string_to_param(option: str | Param) -> Param:
     """
     Convert a string or :class:`Param` instance to a :class:`Param`.
@@ -382,7 +409,7 @@ def string_to_datavar(option: str | DataVariable) -> DataVariable:
         return DataVariable.model_validate(param_dict, strict=False)
 
 
-def dict_to_string(dct: Dict, replace_whitespace="") -> str:
+def dict_to_string(dct: Dict, replace_whitespace="", join_str=" ", sep_str="=") -> str:
     """
     Serialize a dictionary to a space-separated ``key=value`` string.
 
@@ -402,10 +429,10 @@ def dict_to_string(dct: Dict, replace_whitespace="") -> str:
         if isinstance(v, np.ndarray):
             v = v.tolist()
 
-        expr = f"{k}={v}".replace(" ", replace_whitespace)
+        expr = f"{k}{sep_str}{v}".replace(" ", replace_whitespace)
         string_items.append(expr)
 
-    return " ".join(string_items)
+    return join_str.join(string_items)
 
 
 def list_to_string(lst: List) -> str:
@@ -453,6 +480,14 @@ def datavar_to_string(prm: DataVariable) -> str:
     return dict_to_string(prm.model_dump(exclude_none=True))
 
 
+def nested_dict_to_string(nested_dict: Dict[str,Dict[str,float|None]], dict_model: PymobModel) -> str:
+    dict_of_strings = {
+        k: dict_to_string(dict_model.model_validate(v).model_dump(exclude_none=True), join_str=",", sep_str=":") 
+        for k, v in nested_dict.items()
+    }
+    return dict_to_string(dict_of_strings)
+
+
 serialize_list_to_string = PlainSerializer(
     list_to_string, 
     return_type=str, 
@@ -461,7 +496,7 @@ serialize_list_to_string = PlainSerializer(
 
 
 serialize_dict_to_string = PlainSerializer(
-    dict_to_string, 
+    partial(dict_to_string, replace_whitespace=""),  
     return_type=str, 
     when_used="json"
 )
@@ -496,7 +531,7 @@ OptionTupleStr = Annotated[
 
 OptionDictStr = Annotated[
     Dict[str, str | float | int | List[float | int] | Dict[str,float]], 
-    BeforeValidator(string_to_dict), 
+    BeforeValidator(partial(string_to_dict, split_str=" ", sep_str="=")), 
     serialize_dict_to_string
 ]
 

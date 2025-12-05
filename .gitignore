@@ -23,6 +23,7 @@ config/settings.json
 docs/build
 build
 
+.vscode
 .env
 
 # linked case studies

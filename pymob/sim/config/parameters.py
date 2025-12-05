@@ -107,7 +107,7 @@ class RandomVariable(BaseModel):
     @model_serializer(when_used="json", mode="plain")
     def model_ser(self) -> str:
         distribution = self.distribution
-        parameters = dict_to_string(self.parameters, jstr=",")
+        parameters = _dict_to_string(self.parameters, jstr=",")
         if self.obs is None:
             pass
         else:
@@ -202,13 +202,13 @@ def to_rv(option: Union[str,RandomVariable,Dict]) -> RandomVariable:
     return RandomVariable.model_validate(prior_dict, strict=False)
 
 
-def dict_to_string(dct: Dict, jstr=" "):
+def _dict_to_string(dct: Dict, jstr=" ", sstr="="):
     string_items = []
     for k, v in dct.items():
         if isinstance(v, np.ndarray):
             v = v.tolist()
 
-        expr = f"{k}={v}".replace(" ", "")
+        expr = f"{k}{sstr}{v}".replace(" ", "")
         string_items.append(expr)
 
     return jstr.join(string_items)
