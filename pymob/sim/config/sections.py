@@ -5,7 +5,7 @@ import json
 from ast import literal_eval as make_tuple
 import warnings
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Literal, Callable, Tuple, TypedDict, Any
+from typing import List, Optional, Union, Dict, Literal, Type, Callable, Tuple, TypedDict, Any
 from typing_extensions import Annotated
 import tempfile
 from functools import partial
@@ -349,7 +349,7 @@ def string_to_dict(
 
 def to_nested_dict(
     option: str| Dict[str, str | Dict[str, float|None]],
-    dict_model: PymobModel
+    dict_model: Type[PymobModel]
 ) -> Dict[str,Dict[str,float|None]]:
     parsed_dict = {}
     if isinstance(option, str):
@@ -480,7 +480,7 @@ def datavar_to_string(prm: DataVariable) -> str:
     return dict_to_string(prm.model_dump(exclude_none=True))
 
 
-def nested_dict_to_string(nested_dict: Dict[str,Dict[str,float|None]], dict_model: PymobModel) -> str:
+def nested_dict_to_string(nested_dict: Dict[str,Dict[str,float|None]], dict_model: Type[PymobModel]) -> str:
     dict_of_strings = {
         k: dict_to_string(dict_model.model_validate(v).model_dump(exclude_none=True), join_str=",", sep_str=":") 
         for k, v in nested_dict.items()
