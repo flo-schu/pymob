@@ -5,7 +5,7 @@ import pytest
 
 from pymob.solvers.diffrax import JaxSolver
 from pymob.sim.config import Config, DataVariable, Modelparameters
-from pymob.sim.parameters import Param, RandomVariable, Expression, OptionRV
+from pymob.sim.config import Param, RandomVariable, Expression, OptionRV
 from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
 from pymob.examples import linear_model

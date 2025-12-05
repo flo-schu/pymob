@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import norm
 
 from pymob.inference.scipy_backend import ScipyBackend
-from pymob.sim.parameters import Param
+from pymob.sim.config import Param
 from pymob.solvers.diffrax import JaxSolver
 
 from tests.fixtures import init_lotka_volterra_case_study_hierarchical_from_script

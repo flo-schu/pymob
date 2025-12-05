@@ -6,7 +6,7 @@ from jax._src.interpreters.partial_eval import DynamicJaxprTracer
 
 from pymob.solvers.diffrax import JaxSolver
 from pymob.inference.numpyro_backend import NumpyroBackend
-from pymob.sim.parameters import Param
+from pymob.sim.config import Param
 
 from tests.fixtures import (
     init_simulation_casestudy_api, 
