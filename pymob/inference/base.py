@@ -22,7 +22,7 @@ import itertools as it
 import tqdm
 
 from pymob.simulation import SimulationBase
-from pymob.sim.parameters import Param, RandomVariable, Expression
+from pymob.sim.config import Param, RandomVariable, Expression
 from pymob.sim.config import Datastructure
 from pymob.utils.config import lookup_from
 from pymob.inference.analysis import plot_pairs, plot_trace

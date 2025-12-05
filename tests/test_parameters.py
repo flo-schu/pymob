@@ -12,7 +12,7 @@ from pymob.sim.config import Datastructure, Modelparameters
 from pymob.inference.scipy_backend import ScipyBackend
 from pymob.inference.numpyro_backend import NumpyroBackend
 from pymob.inference.numpyro_dist_map import inv_transform
-from pymob.sim.parameters import Param, RandomVariable, Expression
+from pymob.sim.config import Param, RandomVariable, Expression
 
 from tests.fixtures import (
     init_simulation_casestudy_api, 

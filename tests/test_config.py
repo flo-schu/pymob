@@ -3,8 +3,10 @@ from pathlib import Path
 from click.testing import CliRunner
 import tempfile
 from pymob.simulation import SimulationBase, Config
-from pymob.sim.config import DataVariable, Datastructure, configure
-from pymob.sim.parameters import Param, RandomVariable, Expression
+from pymob.sim.config import (
+    DataVariable, Datastructure, configure,
+    Param, RandomVariable, Expression
+)
 from pymob.solvers.scipy import solve_ivp_1d
 from sympy import Function
 import xarray as xr

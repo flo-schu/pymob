@@ -1,8 +1,7 @@
 import os
 import configparser
 import pytest
-from pymob.sim.config import Config
-from pymob.sim.casestudy_registry import register_case_study_config
+from pymob.sim.config import Config, register_case_study_config
 from pydantic import BaseModel, Field
 from click.testing import CliRunner
 

@@ -18,7 +18,7 @@ from arviz.data.inference_data import SUPPORTED_GROUPS_ALL
 
 import pymob
 from pymob.simulation import SimulationBase
-from pymob.sim.parameters import Expression, NumericArray
+from pymob.sim.config import Expression, NumericArray
 from pymob.inference.base import Errorfunction, InferenceBackend, Distribution
 from pymob.inference.analysis import (
     cluster_chains, rename_extra_dims, plot_posterior_samples,

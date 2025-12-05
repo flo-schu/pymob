@@ -5,7 +5,7 @@ import numpy as np
 from numpy.random import Generator, PCG64
 from scipy.stats._distn_infrastructure import rv_continuous, rv_discrete, rv_generic, rv_continuous_frozen, rv_discrete_frozen
 
-from pymob.sim.parameters import scipy_to_scipy
+from pymob.sim.config import scipy_to_scipy
 from pymob.inference.base import Distribution, Errorfunction, InferenceBackend
 from pymob.simulation import SimulationBase
 from pymob.utils.config import lookup

@@ -27,7 +27,8 @@ from pymob.utils.store_file import parse_config_section, is_number
 from pymob.utils.misc import benchmark
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
-from pymob.sim.config import Config, ParameterDict, DataVariable, Param, NumericArray
+
+from pymob.sim.config import ParameterDict, DataVariable, Param, NumericArray, Config
 from pymob.sim.plot import SimulationPlot
 from pymob.sim.report import Report
 
