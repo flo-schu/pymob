@@ -6,7 +6,7 @@ import textwrap
 import tempfile
 import importlib
 from copy import deepcopy
-from typing import Optional, List, Union, Literal, Any, Tuple, Sequence, Mapping
+from typing import Optional, List, Union, Literal, Any, Tuple, Sequence, Mapping, TypeVar
 from types import ModuleType
 import configparser
 from functools import partial
@@ -34,6 +34,8 @@ from pymob.sim.report import Report
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
+
+_SimulationType = TypeVar("_SimulationType", bound="SimulationBase")
 
 def is_iterable(x):
     try:
@@ -534,6 +536,16 @@ class SimulationBase:
     @property
     def all_model_parameters(self) -> Dict[str, Param]:
         return self.config.model_parameters.all
+
+    @property
+    def _model_class(self):
+        if self.config.simulation.model_class is not None:
+            module, attr = self.config.simulation.model_class.rsplit(".", 1)
+            _module = importlib.import_module(module)
+            return getattr(_module, attr)
+        else:
+            return None
+
 
     def __repr__(self) -> str:
         return (
@@ -2113,7 +2125,7 @@ class SimulationBase:
         cls, 
         directory: str,
         mode: Literal["import", "copy"] = "import",
-    ) -> "SimulationBase":
+    ) -> _SimulationType:
         """Imports a SimulationBase from a directory where the simulation had been 
         exported to with sim.export()
 
@@ -2171,7 +2183,7 @@ class SimulationBase:
 
         return sim
 
-    def copy(self):
+    def copy(self: _SimulationType) -> _SimulationType:
         """Creates a copy of a SimulationBase object by exporting to a temporary directory
         in the output path and importing again from that directoy. The temporary directory
         is destroyed directly afterwards
@@ -2184,6 +2196,6 @@ class SimulationBase:
             os.makedirs(tmp_basedir, exist_ok=True)
             with tempfile.TemporaryDirectory(dir=tmp_basedir) as name:
                 self.export(directory=name, mode="copy")
-                sim_copy = type(self).from_directory(name, mode="copy")
+                sim_copy: _SimulationType = type(self).from_directory(name, mode="copy")
 
         return sim_copy
