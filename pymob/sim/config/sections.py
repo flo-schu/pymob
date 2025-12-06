@@ -1,14 +1,14 @@
 import os
 import re
 import sys
-import json
 from ast import literal_eval as make_tuple
 import warnings
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Literal, Type, Callable, Tuple, TypedDict, Any
+from typing import List, Optional, Union, Dict, Literal, Type, Callable, Tuple, TypedDict, Any, Mapping
 from typing_extensions import Annotated
 import tempfile
 from functools import partial
+
 
 import numpy as np
 import xarray as xr
@@ -269,10 +269,10 @@ def string_to_tuple(option: Union[List, str]) -> Tuple:
 
 
 def string_to_dict(
-        option: Union[Dict[str, str | float | int | List[float | int | str]], str],
+        option: Union[Dict[str, str | float | int ], str],
         split_str=" ",
         sep_str="="
-    ) -> Dict[str, str | float | int | List[float | int | str]]:
+    ) -> Dict[str, str | float | int ]:
     """
     Parse a configuration string into a dictionary.
 
@@ -362,6 +362,7 @@ def to_nested_dict(
             validated_value = dict_model.model_validate(value).model_dump(mode="python")
             parsed_dict.update({key: validated_value})
         else:
+            assert isinstance(value, str)
             value_dict = string_to_dict(value, split_str=",", sep_str=":")
             validated_value = dict_model.model_validate(value_dict).model_dump(mode="python")
 
@@ -530,7 +531,7 @@ OptionTupleStr = Annotated[
 ]
 
 OptionDictStr = Annotated[
-    Dict[str, str | float | int | List[float | int] | Dict[str,float]], 
+    Mapping[str, str | float | int | List[float | int] ], 
     BeforeValidator(partial(string_to_dict, split_str=" ", sep_str="=")), 
     serialize_dict_to_string
 ]
@@ -755,6 +756,14 @@ class Simulation(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="allow")
 
     model: Optional[str] = Field(default=None, validate_default=True, description="The deterministic model")
+    model_class: Optional[str] = Field(
+        default=None, 
+        validate_default=True, 
+        description=(
+            "A class that holds the mechanistic model. This is the path to the module " +
+            "class, e.g. `lotka_volterra_case_study.mod.Model`."
+        )
+    )
     solver: Optional[str] = Field(default=None, validate_default=True)
     
     y0: OptionListStr = []
