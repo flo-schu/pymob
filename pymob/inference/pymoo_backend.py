@@ -1,12 +1,14 @@
 import json
 
+import arviz as az
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from matplotlib import pyplot as plt
 
 from pymob.simulation import SimulationBase
-from pymob.inference.base import InferenceBackend
+from pymob.inference.base import InferenceBackend, PymobInferenceData
 from pymob.utils.errors import import_optional_dependency
+
 
 extra = "'pymoo' dependencies can be installed with pip install pymob[pymoo]"
 pymoo = import_optional_dependency("pymoo", errors="warn", extra=extra)
@@ -19,6 +21,7 @@ if pymoo is not None:
 
 
 class PymooBackend:
+    idata: PymobInferenceData
     def __init__(
         self, 
         simulation: SimulationBase,
