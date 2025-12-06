@@ -4,6 +4,14 @@ import xarray
 import pytest
 from tests.fixtures import init_case_study_and_scenario
 
+import os
+import matplotlib
+
+# In CI (GitHub Actions sets CI= true) or when the GITHUB_ACTIONS flag is present,
+# force Matplotlib to use the non‑interactive Agg backend.
+if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
+    matplotlib.use("Agg")
+
 @pytest.fixture(autouse=True)
 def add_imports(doctest_namespace):
     doctest_namespace["np"] = numpy
