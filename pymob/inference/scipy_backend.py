@@ -104,6 +104,9 @@ class ScipyBackend(InferenceBackend):
             return None
 
         return _log_likelihood, _gradient
+    
+    def run(self):
+        pass
 
 
 class ScipyPriorModel:

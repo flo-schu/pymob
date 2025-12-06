@@ -1,4 +1,5 @@
 import numpy as np
+import xarray as xr
 import ast
 from typing import (
     Dict,
@@ -172,10 +173,21 @@ class Distribution:
 
         return distribution, mapped_params, underfined_args
 
+class PymobInferenceData(az.InferenceData):
+    prior: xr.Dataset
+    posterior: xr.Dataset
+    log_likelihood: xr.Dataset
+    prior_model_fits: xr.Dataset
+    posterior_model_fits: xr.Dataset
+    prior_residuals: xr.Dataset
+    posterior_residuals: xr.Dataset
+    unconstrained_prior: xr.Dataset
+    unconstrained_prior: xr.Dataset
+
 
 class InferenceBackend(ABC):
     _distribution = Distribution
-    idata: az.InferenceData
+    idata: PymobInferenceData
     prior: Dict[str,Distribution]
     log_likelihood: Errorfunction
     gradient_log_likelihood: Errorfunction
@@ -212,6 +224,10 @@ class InferenceBackend(ABC):
 
     @abstractmethod
     def parse_probabilistic_model(self):
+        pass
+
+    @abstractmethod
+    def run(self):
         pass
 
     @property
