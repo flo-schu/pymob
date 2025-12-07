@@ -579,7 +579,7 @@ class Casestudy(PymobModel):
         Logging level and optional logfile.
     """
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
-    model_config = {"validate_assignment" : True}
+
     init_root: str = Field(default=os.getcwd(), exclude=True)
     root: str = "."
     name: str = "unnamed_case_study"
