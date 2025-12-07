@@ -45,8 +45,8 @@ class Config(BaseModel):
     """
     model_config = ConfigDict(validate_assignment=True, extra="allow", protected_namespaces=())
 
-    _config: configparser.ConfigParser
-    _modules: Dict[str, ModuleType]
+    _config: configparser.ConfigParser = configparser.ConfigParser()
+    _modules: Dict[str, ModuleType] = {}
 
     def __init__(
         self,
