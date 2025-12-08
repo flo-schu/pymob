@@ -3,7 +3,8 @@ from typing import Dict, Tuple, Union
 
 import numpy as np
 from numpy.random import Generator, PCG64
-from scipy.stats._distn_infrastructure import rv_continuous, rv_discrete, rv_generic, rv_continuous_frozen, rv_discrete_frozen
+from scipy.stats._distn_infrastructure import rv_continuous, rv_discrete, rv_generic
+from scipy.stats._multivariate import multi_rv_generic
 
 from pymob.sim.config import scipy_to_scipy
 from pymob.inference.base import Distribution, Errorfunction, InferenceBackend
@@ -24,7 +25,7 @@ class ScipyDistribution(Distribution):
     The primary purpose of this class is to expose a ``dist_name`` property that
     returns the name of the underlying SciPy distribution.
     """
-    distribution_map: Dict[str,Tuple[Union[rv_continuous,rv_discrete],Dict[str,str]]] = scipy_to_scipy
+    distribution_map: Dict[str,Tuple[Union[rv_continuous,rv_discrete,multi_rv_generic],Dict[str,str]]] = scipy_to_scipy
     parameter_converter = staticmethod(lambda x: np.array(x))
     
     @property
