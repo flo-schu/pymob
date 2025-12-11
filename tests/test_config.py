@@ -137,10 +137,10 @@ def test_standalone_casestudy():
 def test_parameter_parsing():
     config = Config()
 
-    io = "value=1.0 dims=[] min=0.0 max=3.0 hyper=False free=True"
+    io = "value=1.0 dims=[] unit=mg min=0.0 max=3.0 hyper=False free=True"
 
     # test scripting input
-    test = Param(value=1.0, min=0.0, max=3.0)
+    test = Param(value=1.0, min=0.0, max=3.0, unit="mg")
     config.model_parameters.test = test
 
     # test dict input

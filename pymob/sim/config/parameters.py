@@ -7,7 +7,7 @@ from typing_extensions import Annotated
 import scipy
 import numpy as np
 import xarray as xr
-from pydantic import BaseModel, ConfigDict, model_serializer, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, model_serializer, field_validator, model_validator, Field
 from pydantic.functional_validators import BeforeValidator
 from numpydantic import NDArray, Shape
 from nptyping import Float64, Int64, Float32, Int32
@@ -263,7 +263,7 @@ class Param(BaseModel):
     name: Optional[str] = None
     value: float|NumericArray = 0.0
     dims: Tuple[str, ...] = ()
-    unit: str|List[str] = ""
+    unit: Optional[str|List[str]] = None
     prior: Optional[OptionRV] = None
     min: Optional[float|NumericArray] = None
     max: Optional[float|NumericArray] = None
