@@ -1,6 +1,6 @@
 import os
 from functools import wraps
-from typing import List, Dict, Optional, Literal, Callable
+from typing import List, Dict, Optional, Literal, Callable, TYPE_CHECKING
 import inspect
 import subprocess
 import warnings
@@ -8,9 +8,13 @@ import warnings
 import numpy as np
 import arviz as az
 import pandas as pd
+import xarray as xr
 from matplotlib import pyplot as plt
 from pymob.sim.config import Config
 from pymob.inference.analysis import create_table, log, nrmse, bic, log_lik, plot_trace, plot_pairs
+
+if TYPE_CHECKING:
+    from pymob.inference.base import PymobInferenceData
 
 def reporting(method):
     @wraps(method)
@@ -167,11 +171,29 @@ def _bic_from_idata(
 class Report:
     """Creates a configurable report. To select which items to report and
     to fine-tune the report settings, modify the settings in `config.report`.
+
+    In addition to the config, it provides the main components of a simulation from
+    which all relevant parts of the simulation can be derived
+
+    - config
+    - backend
+    - observations
+    - idata
+
     """
     obs_transform_funcs = {}
-    def __init__(self, config: Config, backend: type):
+    def __init__(
+        self, 
+        config: Config, 
+        backend: type, 
+        observations: xr.Dataset, 
+        idata: "PymobInferenceData",
+    ):
         self.config = config
         self.backend = backend
+        self.observations = observations
+        self.idata = idata
+
         self.rc = config.report
         self.file = os.path.join(self.config.case_study.output_path, "report.md")
 

@@ -1988,7 +1988,12 @@ class SimulationBase:
         """Creates a configurable report. To select which items to report and
         to fine-tune the report settings, modify the options in `config.report`.
         """
-        self._report = self.Report(config=self.config, backend=type(self.inferer))
+        self._report = self.Report(
+            config=self.config, 
+            backend=type(self.inferer), 
+            observations=self.observations, 
+            idata=self.inferer.idata
+        )
 
         if self.solver_post_processing is None:
             if self.config.simulation.solver_post_processing is not None:
