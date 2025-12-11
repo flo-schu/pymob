@@ -605,13 +605,7 @@ class NumpyroBackend(InferenceBackend):
                 iterations=self.svi_iterations,
             )
 
-            # plot loss curve
-            fig, ax = plt.subplots(1, 1)
-            ax.plot(svi_result.losses)
-            ax.set_yscale("log")
-            ax.set_ylabel("Loss")
-            ax.set_xlabel("Iteration")
-            fig.savefig(f"{self.simulation.output_path}/svi_loss_curve.png")
+            self._assess_svi_convergence(svi_result=svi_result)
 
             # save idata and print summary
             draws = 1 if self.kernel.lower() == "map" else self.draws
@@ -625,6 +619,59 @@ class NumpyroBackend(InferenceBackend):
                 f"Kernel {self.kernel} is not implemented. "+
                 "Use one of nuts, sa, svi, map"
             )
+        
+    def _assess_svi_convergence(self, svi_result):
+        # apply really strong convolution, because of the extreme stochasticity
+        losses = xr.DataArray(
+            np.array(svi_result.losses), 
+            coords={"iteration": range(len(svi_result.losses))}
+        )
+
+        kernel_size = int(len(losses) * 0.1)
+        kernel = np.ones(kernel_size) / kernel_size
+        convloss = np.convolve(
+            losses.interpolate_na(dim="iteration", method="linear").values, 
+            v=kernel, mode="valid"
+        )
+
+        change_convloss = np.gradient(convloss)
+        nc = len(change_convloss) 
+        sc = int(kernel_size/2)
+        # assess the mean value of the last 5% of the iterations to know if the 
+        # optimization has converged. 
+        caw = int(kernel_size * 0.5)  # convergence assessment window
+        change_avg = change_convloss[-caw:].mean()
+        change_std = change_convloss[-caw:].std()
+
+        if np.abs(change_avg) < 0.0001:
+            msg = "converged"
+        else:
+            msg = "not converged" 
+
+        msg += f"\navg. $\Delta$ = {change_avg:.1e} $\pm$ {change_std:.1e}"
+
+        if msg == "not converged":
+            warnings.warn(
+                f"SVI optimization did not converge ('{msg}')! Increase the iterations "+
+                "of the algorithm `config.inference_numpyro.svi_iterations = ...`. Currently "+
+                f"svi_iterations={self.config.inference_numpyro.svi_iterations}."
+            )
+
+        # plot loss curve
+        fig, (ax, axconv) = plt.subplots(2, 1, sharex=True)
+        # fig, ax = plt.subplots(1, 1)
+        ax.plot(svi_result.losses)
+        ax.set_yscale("log")
+        axconv.hlines(change_avg * 2, nc-caw+sc+1, nc+sc+1, lw=10, color="grey", alpha=.2)
+        axconv.axhline(0, color="grey", lw=.5)
+        axconv.plot(range(sc, nc+sc),  change_convloss)
+        axconv.set_yscale("linear")
+        axconv.set_ylabel("$\Delta$ Convoluted Loss")
+        axconv.text(0.95, 0.05, msg, transform=axconv.transAxes, ha="right", va="bottom")
+        ax.set_ylabel("Loss")
+        axconv.set_xlabel("Iteration")
+        fig.tight_layout()
+        fig.savefig(f"{self.simulation.output_path}/svi_loss_curve.png")
         
     def run_mcmc(self, model, keys, kernel):
         if kernel == "sa":
