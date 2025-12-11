@@ -567,17 +567,53 @@ class Report:
         plt.close()
         self._write("![Paired parameter estimates](posterior_pairs.png)")
 
-        _, out_trace = plot_trace(
-            idata=idata, var_names=list(var_names.keys()), output=os.path.join(out, "posterior_trace.png")
-        )
-        plt.close()
-        
+
+
         if self.backend.__name__ == "NumpyroBackend":
-            if self.config.inference_numpyro.kernel.lower() != "mcmc":
-                msg = "Psuedo trace, generated for draws from the optimized SVI distribution"
-            else:
-                msg = "Traceplot, generated from MCMC draws. "
-        self._write(f"![{msg}](posterior_trace.png)")
+            if self.config.inference_numpyro.kernel.lower() == "svi":
+                fig_trace, out_trace = plot_trace(
+                    idata=idata, 
+                    var_names=list(var_names.keys()), 
+                    output=os.path.join(out, "posterior_trace.png"),
+                    only_dist=True
+                )
+                msg = "Kernel density estimate (KDE) of the marginal distributions, generated from SVI samples."
+                self._write(f"![{msg}](posterior_trace.png)")
+
+                msg2 = (
+                    "SVI loss curve. Shows the convergence of the optimization. The "+
+                    "upper panel shows the evolution of loss values over iterations " +
+                    "the lower panel shows the approximated gradient of the (smoothed) "+
+                    "loss curve. It's stabilization near zero is an indication of " +
+                    "convergence. The gray window in the upper-right corner is the "+
+                    "section of the smoothed loss curve analyzed for convergence."
+                )
+                self._write(f"![{msg2}](svi_loss_curve.png)")
+
+            
+            elif self.config.inference_numpyro.kernel.lower() in ["mcmc", "sa"]:
+                fig_trace, out_trace = plot_trace(
+                    idata=idata, 
+                    var_names=list(var_names.keys()), 
+                    output=os.path.join(out, "posterior_trace.png"),
+                    only_dist=False
+                )
+                msg = (
+                    "Kernel density estimate (KDE) of the marginal distributions and "+
+                    "traceplot, generated from MCMC draws. "
+                )
+                self._write(f"![{msg}](posterior_trace.png)")
+
+        else:
+            fig_trace, out_trace = plot_trace(
+                idata=idata, 
+                var_names=list(var_names.keys()), 
+                output=os.path.join(out, "posterior_trace.png"),
+                only_dist=False
+            )
+            msg = "Marginal distributions and traceplot, generated from  draws. "
+            self._write(f"![{msg}](posterior_trace.png)")
+        plt.close(fig=fig_trace)
 
         return out_pairs, out_trace
 
