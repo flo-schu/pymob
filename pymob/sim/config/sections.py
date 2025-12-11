@@ -4,7 +4,7 @@ import sys
 from ast import literal_eval as make_tuple
 import warnings
 import multiprocessing as mp
-from typing import List, Optional, Union, Dict, Literal, Type, Callable, Tuple, TypedDict, Any, Mapping
+from typing import List, Optional, Union, Dict, Literal, Type, Callable, Tuple, TypedDict, Any, Mapping, AnyStr
 from typing_extensions import Annotated
 import tempfile
 from functools import partial
@@ -125,6 +125,7 @@ class DataVariable(BaseModel):
         extra="forbid"
     )
     dimensions: List[str]
+    unit: Optional[str|List[str]] = None
     min: float = np.nan
     max: float = np.nan
     observed: bool = True
