@@ -319,6 +319,11 @@ def string_to_dict(
             except ValueError:
                 pass
 
+        if not parsed and len(v) == 0 and isinstance(v, str):
+            # parse empty strings
+            parsed_value = str(v)
+            parsed = True
+
         if not parsed and v[0] == "(" and v[-1] == ")":
             try:
                 parsed_value = make_tuple(v)
