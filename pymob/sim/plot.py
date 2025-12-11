@@ -161,7 +161,7 @@ class SimulationPlot:
 
         self.inf_preds.update({idata_group: mask})
 
-        return group.where(~mask, drop=True)
+        return group.where(~mask, np.nan)
 
     def plot_data_variables(self):
         for i, row in enumerate(self.rows):
