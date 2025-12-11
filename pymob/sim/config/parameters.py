@@ -247,6 +247,13 @@ class Param(BaseModel):
         the prior. Strings are automatically parsed to RandomVariables if the 
         syntax is correct. The prior should follow the specification of 
         scipy.stats
+
+    unit : Optional[str|List[str]]
+        The unit of the parameter. The parameter can be either given explicit units
+        or placeholders can be used, e.g. '{X}' or '{T}', where T is the time dimension
+        and and X is the input dimension. These placeholders can then be replaced,
+        if units are specified in the `sim.observations.attrs` section of the dataset.
+        Here it is important, that the name of the attr matches the 
     """
     model_config = ConfigDict(
         arbitrary_types_allowed=True, 
@@ -256,6 +263,7 @@ class Param(BaseModel):
     name: Optional[str] = None
     value: float|NumericArray = 0.0
     dims: Tuple[str, ...] = ()
+    unit: str|List[str] = ""
     prior: Optional[OptionRV] = None
     min: Optional[float|NumericArray] = None
     max: Optional[float|NumericArray] = None
@@ -271,6 +279,7 @@ class Param(BaseModel):
             self.name == other.name and
             self.dims == self.dims and
             np.all(self.value == other.value) and
+            np.all(self.unit == other.unit) and
             np.all(self.min == other.min) and
             np.all(self.max == other.max) and
             np.all(self.step == other.step) and
