@@ -28,11 +28,10 @@ jax.config.update('jax_enable_x64', True)
 def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, data_noise):
 
     string = ""
-    string_2 = ""
 
     try: 
 
-        idata = az.from_netcdf(f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}/optax_idata.nc")
+        idata = az.from_netcdf(f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}_nfic/optax_idata.nc")
 
         n = 50
 
@@ -212,9 +211,9 @@ def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, d
         string = "0;0;0;0;0;0;0"
         string_2 = "0;0;0;0;0;0;0"
 
-    with open(f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}/SINDy_results.txt","w") as variable_name:
+    with open(f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}_nfic/SINDy_results.txt","w") as variable_name:
         variable_name.write(string)
-    with open(f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}/SINDy_results_0.5.txt","w") as variable_name:
+    with open(f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}_nfic/SINDy_results_0.5.txt","w") as variable_name:
         variable_name.write(string_2)
 
 if __name__ == "__main__":

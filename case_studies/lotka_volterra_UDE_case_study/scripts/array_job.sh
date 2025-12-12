@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=UDE_hyperparam
-#SBATCH --output=hyperparams/logs/%s_%A_%a.out
-#SBATCH --error=hyperparams/logs/%s_%A_%a.err
+#SBATCH --output=hyperparam_logs/%s_%A_%a.out
+#SBATCH --error=hyperparam_logs/%s_%A_%a.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
@@ -28,3 +28,13 @@ echo "running hyperparameters.py with length=$length, lr=$lr, clip=$clip, batch=
 
 # Run simulation
 python3 hyperparameters.py -length=$length -lr=$lr -clip=$clip -batch=$batch -points=$points -noise=$noise
+
+echo "running SINDy.py with length=$length, lr=$lr, clip=$clip, batch=$batch, points=$points, and noise=$noise"
+
+# Run simulation
+python3 SINDy.py -length=$length -lr=$lr -clip=$clip -batch=$batch -points=$points -noise=$noise
+
+echo "running validation.py with length=$length, lr=$lr, clip=$clip, batch=$batch, points=$points, and noise=$noise"
+
+# Run simulation
+python3 validation.py -length=$length -lr=$lr -clip=$clip -batch=$batch -points=$points -noise=$noise

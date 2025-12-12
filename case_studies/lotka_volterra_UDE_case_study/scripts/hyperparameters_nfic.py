@@ -61,7 +61,7 @@ def _get_data(ts, theta, max, min, noisiness, *, key):
     )
     ys = sol.ys
     noise = jr.normal(key=key, shape=(len(ts), 2))
-    ys += noisiness * noise
+    ys = ys.at[1:].set(ys[1:] + noisiness * noise[1:])
     return jnp.greater(ys, jnp.zeros(ys.shape)) * ys + 1e-8
 
 def get_data(dataset_size, theta, max, min, t_end, datapoints, noisiness, *, key):
@@ -156,8 +156,8 @@ def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, d
     sim.set_inferer("optax")
     sim.inferer.run()
 
-    sim.config.case_study.output_path = f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}"
-    sim.config.case_study.data_path = f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}"
+    sim.config.case_study.output_path = f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}_nfic"
+    sim.config.case_study.data_path = f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}_nfic"
     sim.config.create_directory("results", force=True)
     os.makedirs(sim.data_path, exist_ok=True)
     os.makedirs(sim.output_path, exist_ok=True)
@@ -171,7 +171,7 @@ def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, d
     sim.inferer.store_results()
     sim.inferer.store_loss_evolution()
 
-    with open(f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}/timeouts.txt","w") as variable_name:
+    with open(f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}_nfic/timeouts.txt","w") as variable_name:
         variable_name.write(str(sim.inferer.timeouts))
 
 if __name__ == "__main__":
