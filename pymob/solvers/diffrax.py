@@ -272,6 +272,26 @@ class JaxSolver(SolverBase):
 
 class UDESolver(JaxSolver):
 
+    '''
+    A subclass of JaxSolver specifically created to suit UDE models. Inherits
+    most of JaxSolver's attributes and methods bur makes slight changes to some 
+    of them and adds the standalone_solver() method.
+
+    Attributes
+    ----------
+    model : Any
+        An instance of the model object only containing the parts that will be
+        static within JIT-compiled methods.
+
+    Methods
+    -------
+    standalone_solver(self, model, ts, y0, x_in, t_end=None)
+        A method specifically created for the OptaxInferer. Instead of using the
+        model, observations, dimensions, and initial conditions provided by the
+        SimulationBase object, they can be passed directly to this method.
+        Evaluator settings (e.g., tolerances or throw_bool) still apply.
+    '''
+
     model = None
 
     def __post_init__(self, *args, **kwargs):
@@ -283,7 +303,19 @@ class UDESolver(JaxSolver):
     # @partial(eqx.filter_jit, static_argnames=["self"])
     @eqx.filter_jit
     def solve(self, model_params, parameters: Dict, y0:Dict={}, x_in:Dict={}):
+        '''
+        Replaces the solve() method provided by JaxSolver with a slightly
+        modified version. Unlike the JaxSolver's version, this method is passed
+        an additional parameter model_params which is passed down to the 
+        odesolve_splitargs() method.
         
+        Parameters
+        ----------
+        model_params : Any
+            Model object containing all model parameters somewhere within a pytree.
+            Only contains the attributes that will be traced during a JIT-compiled
+            method.
+        '''
         
         X_in = self.preprocess_x_in(x_in)
         x_in_flat = [x for xi in X_in for x in xi]
@@ -366,12 +398,29 @@ class UDESolver(JaxSolver):
     # @partial(eqx.filter_jit, static_argnames=["self"])
     @eqx.filter_jit
     def odesolve(self, model_params, y0, x_in):
+        '''
+        Replaces the odesolve() method provided by JaxSolver with a slightly modified 
+        version. Unlike the JaxSolver's version, this method is passed an additional 
+        parameter model_params which is merged with self.model to form a complete model
+        object. Additionally, all references to the model parameters used for non-UDE
+        models were removed and the handling of input data was slightly changed to
+        reflect the structure of the UDEBase.
+        
+        Parameters
+        ----------
+        model_params : Any
+            Model object containing all model parameters somewhere within a pytree.
+            Only contains the attributes that will be traced during a JIT-compiled
+            method.
+        '''
+
+        # Defining the model
         model = eqx.combine(self.model, model_params)
         f = lambda t, y, args: model(t, y, *args)
 
+        # Prepare initial conditions and input data
         y0 = jnp.array([x[0] for x in jnp.array(y0)])
         args = ((), self.x[-1])
-        
         if len(x_in) > 0:
             if len(x_in) > 2:
                 raise NotImplementedError(
@@ -382,7 +431,6 @@ class UDESolver(JaxSolver):
                     "dealing with this. Try pre-compute the interpolations. "+
                     "This should speed up the solver. "
                 )
-            
             
             if x_in[0].shape[0] != x_in[1].shape[0]:
                 raise ValueError(
@@ -399,6 +447,7 @@ class UDESolver(JaxSolver):
             args = ((), self.x[-1])
             jumps = None
 
+        # Initialize the solver and prepare surrounding settings
         solver = self.diffrax_solver() # type: ignore (diffrax_solver is ensured
                                        # to be _MetaAbstractSolver type during 
                                        # post_init)
@@ -416,6 +465,7 @@ class UDESolver(JaxSolver):
         else:
             pass
 
+        # Calculate solution
         sol = diffeqsolve(
             terms=ODETerm(f), 
             solver=solver, 
@@ -434,6 +484,7 @@ class UDESolver(JaxSolver):
             throw=self.throw_exception
         )
 
+        # Change shape of results
         sol_y = tuple([sol.ys[:,i] for i in jnp.arange(sol.ys.shape[1])])
 
         return tuple(sol_y), args[0]
@@ -441,6 +492,18 @@ class UDESolver(JaxSolver):
     # @partial(eqx.filter_jit, static_argnames=["self", "odestates", "n_odeargs", "n_ppargs", "n_xin"])
     @eqx.filter_jit
     def odesolve_splitargs(self, *args, model_params, odestates, n_ppargs, n_xin):
+        '''
+        Replaces the odesolve_splitargs() method provided by JaxSolver with a slightly
+        modified version. Unlike the JaxSolver's version, this method is passed an 
+        additional parameter model_params which is passed down to the odesolve() method.
+        
+        Parameters
+        ----------
+        model_params : Any
+            Model object containing all model parameters somewhere within a pytree.
+            Only contains the attributes that will be traced during a JIT-compiled
+            method.
+        '''
         n_odestates = len(odestates)
         y0 = args[:n_odestates]
         ppargs = args[n_odestates:n_odestates+n_ppargs]
@@ -452,35 +515,51 @@ class UDESolver(JaxSolver):
         return self.post_processing(res_dict, jnp.array(self.x), interp, *ppargs)
     
     @eqx.filter_jit
-    def standalone_solver(self, model, ts, y0, x_in, t_end=None):
-        f = lambda t, y, args: model(t, y, *args)
+    def standalone_solver(self, model, ts, y0, x_in, t_end=None):  
         """
-        Returns a time series (evaluated at the time points defined by ts) of the model 
-        defined in Func starting from an initial condition y0.
+        Returns a simulated time series of the given model for the given initial conditions,
+        points in time, and input data.
 
         Parameters
         ----------
+        model : Any
+            Model object containing all model parameters somewhere within a pytree
+            structure and returning derivatives depending on the model states when
+            called with the model states as input.
         ts : jax.ArrayImpl
-            An array containing all the time points the timeseries should be evaluated for.
+            A jax.numpy array containing all the time points the timeseries should be evaluated for.
         y0 : jax.ArrayImpl
-            An array containg the initial condition for the simulation.
+            A jax.numpy array containing the initial condition for the simulation.
+        x_in : jax.ArrayImpl
+            A jax.numpy array containing the input data.
+        t_end : float
+            Point in time up to which the model should be simulated. If set to None, which is
+            also the default, this is set to the last value of ts.
 
         Returns:
         --------
         jax.ArrayImpl
-            An array containing the simulated time series for both state variables.
+            An array containing the simulated time series for all state variables.
         """
 
-        if y0.shape == ():
-            y0 = jnp.array([y0])
-        else:
-            y0 = jnp.array([x for x in jnp.array(y0)])
+        # Defining the model
+        f = lambda t, y, args: model(t, y, *args)
 
+        # Set time up to which the model should be simulated
         if t_end == None:
             t_thresh = ts[-1]
         else:
             t_thresh = t_end
 
+        # Conditions for application of t_thresh   
+        def cond_fn(t, y, args, **kwargs):
+            return t > args[-1]
+
+        # Prepare initial conditions and input data
+        if y0.shape == ():
+            y0 = jnp.array([y0])
+        else:
+            y0 = jnp.array([x for x in jnp.array(y0)])
         if x_in == None:
             args = ((), t_thresh)
             jumps = None
@@ -512,22 +591,21 @@ class UDESolver(JaxSolver):
                 args = ((), t_thresh)
                 jumps = None
 
+        # Initialize the solver and prepare surrounding settings
+        solver = self.diffrax_solver()
         stepsize_controller = PIDController(
             rtol=self.rtol, atol=self.atol,
             pcoeff=self.pcoeff, icoeff=self.icoeff, dcoeff=self.dcoeff, 
         )
-
         if jumps is not None:
             stepsize_controller = ClipStepSizeController(stepsize_controller, jump_ts=jumps)
         else:
             pass
 
-        def cond_fn(t, y, args, **kwargs):
-            return t > args[-1]
-
+        # Calculate solution
         sol = diffrax.diffeqsolve(
             diffrax.ODETerm(f),
-            self.diffrax_solver(),
+            solver,
             t0=ts[0],
             t1=ts[-1],
             dt0=ts[1] - ts[0],
@@ -541,6 +619,7 @@ class UDESolver(JaxSolver):
             throw = self.throw_exception
         )
 
+        # Change shape of results
         sol_y = tuple([sol.ys[:,i] for i in jnp.arange(sol.ys.shape[1])])
         
         return sol_y

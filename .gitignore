@@ -10,6 +10,13 @@ __pycache__
 .pytest_cache
 case_studies/*/results/
 case_studies/*/tests/
+case_studies/lotka_volterra_UDE_case_study/scripts/results
+case_studies/lotka_volterra_UDE_case_study/scripts/extrapolation
+case_studies/lotka_volterra_UDE_case_study/scripts/hyperparams
+case_studies/lotka_volterra_UDE_case_study/scripts/simple_cases
+case_studies/lotka_volterra_UDE_case_study/scripts/losses
+case_studies/lotka_volterra_UDE_case_study/scripts/failed_training
+case_studies/*/scripts/case_studies
 
 config/settings.json
 *.aux

@@ -1,9 +1,8 @@
-import equinox as eqx
 import jax.nn as jnn
 import jax.numpy as jnp
 import jax
 from typing import Callable
-from pymob.utils.UDE import UDEBase, transformBiasBackwards, transformWeightsBackwards
+from pymob.utils.UDE import UDEBase
     
 class Func(UDEBase):
 

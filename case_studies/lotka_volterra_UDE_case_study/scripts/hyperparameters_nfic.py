@@ -114,14 +114,15 @@ def get_data(dataset_size, theta, max, min, t_end, datapoints, noisiness, *, key
 @click.option("-noise", "--data_noise", type=float, default=0.0)
 def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, data_noise):
 
+    # Create simulation base and model
     sim = SimulationBase()
     sim.config.case_study.name = "lotka_volterra_UDE_case_study"
     sim.config.case_study.scenario = "UDETest"
-
     key = jrandom.PRNGKey(5678)
     data_key, model_key, loader_key = jrandom.split(key, 3)
     sim.model = Func({"alpha":jnp.array(1.3), "delta":jnp.array(1.8)},key=model_key)
 
+    # Add synthetic observation data and initial condition
     ts,ys = get_data(50, [1.3,0.9,0.8,1.8], 5, 1, 50, data_points, data_noise, key=jr.PRNGKey(0))
     datasets = jnp.linspace(0, 49, 50)
     test_data1 = xr.DataArray(ys[:,:,0], coords={"batch_id": datasets, "time": ts}).to_dataset(name="prey")
@@ -130,16 +131,18 @@ def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, d
     sim.observations = test_data
     sim.model_parameters["y0"] = sim.observations.sel(time = 0).drop_vars("time")
 
+    # Define model parameters
     sim.config.model_parameters.alpha = Param(value=1.3, free=False)
     sim.config.model_parameters.delta = Param(value=1.8, free=True)
     sim.config.model_parameters.delta.prior = "uniform(loc=1.0,scale=2.0)"
 
+    # Set solver settings and dispatch evaluator
     sim.solver = UDESolver
     sim.config.jaxsolver.throw_exception = False
-
     sim.dispatch_constructor()
     evaluator = sim.dispatch()
 
+    # Determine inferer settings, create inferer, and run it
     sim.config.inference_optax.MLP_weight_dist = "normal()"
     sim.config.inference_optax.MLP_bias_dist = "normal()"
     sim.config.inference_optax.batch_size = batch_size
@@ -148,7 +151,6 @@ def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, d
     sim.config.inference_optax.multiple_runs_limit = 100
     sim.config.inference_optax.time_limit = 1200
     sim.config.inference_optax.indepth = "partial"
-
     sim.config.inference_optax.length_strategy = [i for i in length_strategy if i != -1]
     sim.config.inference_optax.steps_strategy = [4000/len(sim.config.inference_optax.length_strategy) for i in sim.config.inference_optax.length_strategy]
     sim.config.inference_optax.lr_strategy = lr_strategy
@@ -156,12 +158,12 @@ def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, d
     sim.set_inferer("optax")
     sim.inferer.run()
 
+    # Store results
     sim.config.case_study.output_path = f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}_nfic"
     sim.config.case_study.data_path = f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}_nfic"
     sim.config.create_directory("results", force=True)
     os.makedirs(sim.data_path, exist_ok=True)
     os.makedirs(sim.output_path, exist_ok=True)
-
     sim.save_observations(force=True)
     sim.config.save(fp = sim.data_path+"/settings.cfg", force=True)
     try:
@@ -170,7 +172,6 @@ def main(length_strategy, lr_strategy, clip_strategy, batch_size, data_points, d
         pass
     sim.inferer.store_results()
     sim.inferer.store_loss_evolution()
-
     with open(f"hyperparams/scenario_{str(data_points)}_{str(data_noise)}_hyperparams_{str(length_strategy)}_{str(lr_strategy)}_{str(clip_strategy)}_{str(batch_size)}_nfic/timeouts.txt","w") as variable_name:
         variable_name.write(str(sim.inferer.timeouts))
 
