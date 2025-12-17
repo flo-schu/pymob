@@ -1424,17 +1424,19 @@ class NumpyroBackend(InferenceBackend):
                 replace=False, 
                 shape=(n_draws, ) # type: ignore
             )
-            posterior = posterior.isel(draw=selection)
+            posterior_subset = posterior.isel(draw=selection)
 
+        else:
+            posterior_subset = posterior
 
         preds = []
         with tqdm(
-            total=posterior.sizes["chain"] * posterior.sizes["draw"],
+            total=posterior_subset.sizes["chain"] * posterior_subset.sizes["draw"],
             desc="Posterior predictions"
         ) as pbar:
-            for chain in posterior.chain:
-                for draw in posterior.draw:
-                    theta_arr = posterior.sel(draw=draw, chain=chain)
+            for chain in posterior_subset.chain:
+                for draw in posterior_subset.draw:
+                    theta_arr = posterior_subset.sel(draw=draw, chain=chain)
                     theta_dict = self.get_dict(theta_arr)
                     
                     # calculate deterministic simulation with parameter samples
