@@ -591,7 +591,7 @@ class Report:
                 self._write(f"![{msg2}](svi_loss_curve.png)")
 
             
-            elif self.config.inference_numpyro.kernel.lower() in ["mcmc", "sa"]:
+            else:
                 fig_trace, out_trace = plot_trace(
                     idata=idata, 
                     var_names=list(var_names.keys()), 
@@ -600,7 +600,8 @@ class Report:
                 )
                 msg = (
                     "Kernel density estimate (KDE) of the marginal distributions and "+
-                    "traceplot, generated from MCMC draws. "
+                    "traceplot, generated from MCMC " +
+                    f"({self.config.inference_numpyro.kernel.lower()}) draws. "
                 )
                 self._write(f"![{msg}](posterior_trace.png)")
 
