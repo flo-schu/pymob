@@ -31,7 +31,7 @@ def init_case_study_and_scenario(case_study, scenario, package="case_studies") -
         f"{package}/{case_study}/scenarios/{scenario}/settings.cfg"
     )
     config.case_study.package = package
-    config.import_casestudy_modules(reset_path=True)
+    config.import_casestudy_modules()
     Simulation = config.import_simulation_from_case_study()
     
     sim = Simulation(config)

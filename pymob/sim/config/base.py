@@ -117,7 +117,27 @@ class Config(BaseModel):
 
         _case_study_raw = cfg_dict.get("case-study", {})
         _case_study_instance = Casestudy.model_validate(_case_study_raw)
-        _modules = self._import_casestudy_modules(case_study=_case_study_instance, reset_path=True)
+        
+        # Check if we're in a circular import situation
+        # If Config is being instantiated during module import, skip module import
+        # to prevent circular imports
+        _importing_context = getattr(sys, '_pymob_importing_context', None)
+        _skip_module_import = False
+        if _importing_context is not None:
+            # Check if the current case study is being imported
+            _full_module_name = _case_study_instance.name
+            if _full_module_name in _importing_context:
+                _skip_module_import = True
+                warnings.warn(
+                    f"Skipping module import for '{_full_module_name}' during Config initialization "
+                    "to prevent circular import. Modules will be imported later.",
+                    category=UserWarning
+                )
+        
+        if _skip_module_import:
+            _modules = {}
+        else:
+            _modules = self._import_casestudy_modules(case_study=_case_study_instance)
 
         # initialize submodels
         super().__init__(**cfg_dict)
@@ -277,13 +297,12 @@ class Config(BaseModel):
         """
         modules = self._import_casestudy_modules(
             case_study=self.case_study, 
-            reset_path=reset_path
         )
         
         self._modules.update(modules)
 
     @staticmethod
-    def _import_casestudy_modules(case_study: Casestudy, reset_path: bool=False) -> Dict[str, ModuleType]:
+    def _import_casestudy_modules(case_study: Casestudy) -> Dict[str, ModuleType]:
         """
         Import modules for a given case study.
 
@@ -300,96 +319,90 @@ class Config(BaseModel):
             Mapping of module name to imported module.
         """
         _modules = {}
-
-
-        # reset the path to avoid importing modules form case-studies used
-        # before in the same session
-        if reset_path:
-            # default path needs be copied, otherwise it will be updated
-            # when setting sys.path
-            sys.path = default_path.copy()
-
-
-        # potential BUG: This is not safe. It is not guaranteed that the 
-        # case study has the same name as the package. But it might be in the future
-        package = case_study.name
-
-        if "-" in package or " " in package:
+        
+        # Track modules being imported to prevent circular imports
+        # Use a module-level attribute to track the import context
+        _importing_context = getattr(sys, '_pymob_importing_context', None)
+        if _importing_context is None:
+            sys._pymob_importing_context = set()
+        
+        # Get the full module name for the case study
+        _full_module_name = f"{case_study.name}"
+        
+        # Check if we're already importing this module (circular import detection)
+        if _full_module_name in sys._pymob_importing_context:
+            # We're in a circular import situation, return empty dict to break the cycle
             warnings.warn(
-                f"Case-study contained {package} contained unallowed "+
-                "characters: ['-', ' ']. "+
-                "The characters will be replaced with underscores ('_') for "+
-                "importing the package modules. " +
-                "In the future, the name of the case study should be the same as " +
-                "as the package where the modules are located. This name must not " +
-                "contain hyphens ('-') or whitespace characters (' '),",
+                f"Circular import detected for case study '{_full_module_name}'. "
+                "Skipping module import to prevent infinite recursion.",
                 category=UserWarning
             )
-            _package = package.replace("-", "_").replace(" ", "_")
-        else:
-            _package = package
-
-        spec = importlib.util.find_spec(_package)
-        if spec is not None:
-            for module in case_study.modules:
-                try:
-                    # TODO: Consider importing modules as a nested dictionary 
-                    # with the indexing key being the package. The package
-                    # cannot be derived from the class, if a method, that is 
-                    # executed on a lower level case-study, should target that 
-                    # a module belonging to the same package, because if the
-                    # object is used, it would resolve to the package of the
-                    # higher level case-study
-                    m = importlib.import_module(f"{_package}.{module}")
-                    _modules.update({module: m})
-                except ModuleNotFoundError:
-                    warnings.warn(
-                        f"Module {module}.py not found in {_package}." +
-                        "Missing modules can lead to unexpected behavior. " +
-                        f"Does your case study have a {module}.py file? " +
-                        "It should have the line `from PARENT_CASE_STUDY." +
-                        f"{module} import *` to import all objects from " +
-                        "the parent case study."
-                    )
             return _modules
+        
+        # Mark this module as being imported
+        sys._pymob_importing_context.add(_full_module_name)
+        
+        try:
+            # reset the path to avoid importing modules form case-studies used
+            # before in the same session
+            # if reset_path:
+            #     # default path needs be copied, otherwise it will be updated
+            #     # when setting sys.path
+            #     sys.path = default_path.copy()
 
-        # append relevant paths to sys
-        package = os.path.join(
-            case_study.root, 
-            case_study.package
-        )
-        if package not in sys.path:
-            sys.path.insert(0, package)
-            print(f"Inserted '{package}' in PATH at index=0")
-    
-        case_study_path = os.path.join(
-            case_study.root, 
-            case_study.package,
-            case_study.name,
-            # Account for package architecture 
-            case_study.name
-        )
-        if case_study_path not in sys.path:
-            sys.path.insert(0, case_study_path)
-            print(f"Inserted '{case_study_path}' in PATH at index=0")
 
-        for module in case_study.modules:
-            # remove modules of a different case study that might have been
-            # loaded in the same session.
-            if module in sys.modules:
-                _ = sys.modules.pop(module)
+            # potential BUG: This is not safe. It is not guaranteed that the
+            # case study has the same name as the package. But it might be in the future
+            package = case_study.name
 
-        for module in case_study.modules:
-            try:
-                m = importlib.import_module(module, package=case_study_path)
-                _modules.update({module: m})
-            except ModuleNotFoundError:
+            if "-" in package or " " in package:
                 warnings.warn(
-                    f"Module {module}.py not found in {case_study_path}." +
-                    "Missing modules can lead to unexpected behavior." +
-                    "If a module is not imported, you can specify it in the " +
-                    "Config 'config.case_study.modules = [...]'"
+                    f"Case-study contained {package} contained unallowed "+
+                    "characters: ['-', ' ']. "+
+                    "The characters will be replaced with underscores ('_') for "+
+                    "importing the package modules. " +
+                    "In the future, the name of the case study should be the same as " +
+                    "as the package where the modules are located. This name must not " +
+                    "contain hyphens ('-') or whitespace characters (' '),",
+                    category=UserWarning
                 )
+                _package = package.replace("-", "_").replace(" ", "_")
+            else:
+                _package = package
+
+            spec = importlib.util.find_spec(_package)
+            if spec is not None:
+                for module in case_study.modules:
+                    try:
+                        # TODO: Consider importing modules as a nested dictionary
+                        # with the indexing key being the package. The package
+                        # cannot be derived from the class, if a method, that is
+                        # executed on a lower level case-study, should target that
+                        # a module belonging to the same package, because if the
+                        # object is used, it would resolve to the package of the
+                        # higher level case-study
+                        m = importlib.import_module(f"{_package}.{module}")
+                        _modules.update({module: m})
+                    except ModuleNotFoundError:
+                        warnings.warn(
+                            f"Module {module}.py not found in {_package}." +
+                            "Missing modules can lead to unexpected behavior. " +
+                            f"Does your case study have a {module}.py file? " +
+                            "It should have the line `from PARENT_CASE_STUDY." +
+                            f"{module} import *` to import all objects from " +
+                            "the parent case study."
+                        )
+            
+            else:
+                warnings.warn(
+                    f"Case study '{package}' could not be imported. Install the case " +
+                    f"study with `pip install {package}`."
+                )
+
+            
+        finally:
+            # Remove the module from the importing context
+            sys._pymob_importing_context.discard(_full_module_name)
 
         return _modules
 

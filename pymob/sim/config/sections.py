@@ -759,7 +759,7 @@ class Simulation(PymobModel):
     seed : int
         Random seed.
     """
-    model_config = ConfigDict(validate_assignment=True, extra="allow")
+    model_config = ConfigDict(validate_assignment=True, extra="allow", protected_namespaces=())
 
     model: Optional[str] = Field(default=None, validate_default=True, description="The deterministic model")
     model_class: Optional[str] = Field(
