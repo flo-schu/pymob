@@ -563,7 +563,10 @@ class SimulationBase:
 
         :meta private:
         """
-        # test if the case study is installed as a package
+        # test if the case study is installed as a package or if the 
+        # package is at the root of the path (this can also be a single python file). 
+        # If the package, contains an __init__ file, then the package, contains the
+        # respective submodules
         package = self.__module__.split(".")[0]
         spec = importlib.util.find_spec(package)
         if spec is not None and package != "pymob":
@@ -601,37 +604,42 @@ class SimulationBase:
                             "the parent case study."
                         )
             return
-
-        # This branch is for case studies that are not installed (I guess)
-        # append relevant paths to sys
-        package = os.path.join(
-            self.config.case_study.root, 
-            self.config.case_study.package
-        )
-        if package not in sys.path:
-            sys.path.insert(0, package)
-            print(f"Inserted '{package}' into PATH at index=0")
+        
+        else:
+            warnings.warn(
+                f"Case study '{package}' could not be imported. Install the case " +
+                f"study with `pip install {package}`. Or place in the root directory."
+            )
+        # # This branch is for case studies that are not installed (I guess)
+        # # append relevant paths to sys
+        # package = os.path.join(
+        #     self.config.case_study.root, 
+        #     self.config.case_study.package
+        # )
+        # if package not in sys.path:
+        #     sys.path.insert(0, package)
+        #     print(f"Inserted '{package}' into PATH at index=0")
     
-        case_study = os.path.join(
-            self.config.case_study.root, 
-            self.config.case_study.package,
-            self.config.case_study.name,
-            # Account for package architecture 
-            self.config.case_study.name,
-        )
-        if case_study not in sys.path:
-            sys.path.insert(0, case_study)
-            print(f"Inserted '{case_study}' into PATH at index=0")
+        # case_study = os.path.join(
+        #     self.config.case_study.root, 
+        #     self.config.case_study.package,
+        #     self.config.case_study.name,
+        #     # Account for package architecture 
+        #     self.config.case_study.name,
+        # )
+        # if case_study not in sys.path:
+        #     sys.path.insert(0, case_study)
+        #     print(f"Inserted '{case_study}' into PATH at index=0")
 
-        for module in MODULES:
-            try:
-                m = importlib.import_module(module, package=case_study)
-                setattr(self, f"_{module}", m)
-            except ModuleNotFoundError:
-                warnings.warn(
-                    f"Module {module}.py not found in {case_study}."
-                    f"Missing modules can lead to unexpected behavior."
-                )
+        # for module in MODULES:
+        #     try:
+        #         m = importlib.import_module(module, package=case_study)
+        #         setattr(self, f"_{module}", m)
+        #     except ModuleNotFoundError:
+        #         warnings.warn(
+        #             f"Module {module}.py not found in {case_study}."
+        #             f"Missing modules can lead to unexpected behavior."
+        #         )
 
     def set_logger(self):        
         self.logger = logging.getLogger(f"{type(self).__qualname__}")

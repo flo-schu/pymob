@@ -15,6 +15,7 @@ class DummySettings(BaseModel):
 # Register under a synthetic name
 register_case_study_config("dummy_case_study", DummySettings)
 
+
 @pytest.fixture
 def tmp_cfg(tmp_path):
     cfg_path = tmp_path / "settings.cfg"
@@ -25,6 +26,11 @@ def tmp_cfg(tmp_path):
     with open(cfg_path, "w") as f:
         parser.write(f)
     return str(cfg_path)
+
+def test_lotka_volterra_import():
+    Config()
+
+    import lotka_volterra_case_study
 
 def test_registry_parses_section(tmp_cfg):
     cfg = Config(tmp_cfg)
