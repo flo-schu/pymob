@@ -84,7 +84,7 @@ numpyro = [
     "diffrax >=0.7.0, <1.0.0", 
     "numpyro >=0.18.0, <1.0.0", 
     "equinox >=0.12.2, <1.0.0",
-    "optax >=0.2.4, <1.0.0",
+    "optax >=0.2.6, <1.0.0",
     "sympy2jax ==0.0.5", 
     "graphviz"
 ]

@@ -24,7 +24,7 @@ from pydantic.functional_serializers import PlainSerializer
 
 import pymob
 from pymob.utils.store_file import scenario_file, converters
-from pymob.sim.parameters import Param, NumericArray, OptionRV, to_rv
+from pymob.sim.parameters import Param, NumericArray, OptionRV, to_rv, to_rv_opt
 # this loads at the import of the module
 default_path = sys.path.copy()
 
@@ -182,6 +182,9 @@ def string_to_floatlist(option: Union[List, str]) -> List:
 
 def string_to_intlist(option: Union[List, str]) -> List:
     return [int(i) for i in string_to_list(option)]
+
+def string_to_rv_optlist(option: Union[List, str]) -> List:
+    return [to_rv_opt(i) for i in string_to_list(option)]
 
 
 def string_to_tuple(option: Union[List, str]) -> Tuple:
@@ -832,8 +835,8 @@ class Optax(PymobModel):
     MLP_bias_dist: OptionRV = to_rv("normal()")
     length_strategy: Annotated[list, BeforeValidator(string_to_floatlist), serialize_list_to_string] = [0.1, 1]
     steps_strategy: Annotated[list, BeforeValidator(string_to_intlist), serialize_list_to_string] = [1000, 1000]
-    lr_strategy: float = 1e-3
-    clip_strategy: float = 0.1
+    optim_strategy: Annotated[list, BeforeValidator(string_to_rv_optlist), serialize_list_to_string] = [to_rv_opt("adabelief(learning_rate=1e-3)"), to_rv_opt("adabelief(learning_rate=1e-3)")]
+    clip_strategy: Annotated[list, BeforeValidator(string_to_floatlist), serialize_list_to_string] = [0.1, 0.1]
     batch_size: Annotated[int, to_str] = 1
     data_split: float = 0.8
     multiple_runs_target: Annotated[int, to_str] = 10

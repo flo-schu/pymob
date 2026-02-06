@@ -6,6 +6,7 @@ from typing import (
     Tuple, Dict, Union, Optional, Callable, Literal, List, Any,
     Protocol
 )
+from pymob.sim.parameters import optim_lib
 import copy
 import warnings
 import jax.numpy as jnp
@@ -55,6 +56,39 @@ scipy_to_jax = {
 
     # some are missing, see https://docs.jax.dev/en/latest/jax.random.html for complete list -> TODO
 }
+
+# optim_lib = {
+#     "adabelief": lambda parameters: optax.adabelief(**parameters),
+#     "adadelta": lambda parameters: optax.adadelta(**parameters),
+#     "adan": lambda parameters: optax.adan(**parameters),
+#     "adafactor": lambda parameters: optax.adafactor(**parameters),
+#     "adagrad": lambda parameters: optax.adagrad(**parameters),
+#     "adam": lambda parameters: optax.adam(**parameters),
+#     "adamw": lambda parameters: optax.adamw(**parameters),
+#     "adamax": lambda parameters: optax.adamax(**parameters),
+#     "adamaxw": lambda parameters: optax.adamaxw(**parameters),
+#     "amsgrad": lambda parameters: optax.amsgrad(**parameters),
+#     "fromage": lambda parameters: optax.fromage(**parameters),
+#     "lamb": lambda parameters: optax.lamb(**parameters),
+#     "lars": lambda parameters: optax.lars(**parameters),
+#     "lbfgs": lambda parameters: optax.lbfgs(**parameters), # problematic, only works with argument linesearch=None due to dimensionless mechanistic parameters
+#     "lion": lambda parameters: optax.lion(**parameters),
+#     "nadam": lambda parameters: optax.nadam(**parameters),
+#     "nadamw": lambda parameters: optax.nadamw(**parameters),
+#     "noisy_sgd": lambda parameters: optax.noisy_sgd(**parameters),
+#     "novograd": lambda parameters: optax.novograd(**parameters),
+#     "optimistic_gradient_descent": lambda parameters: optax.optimistic_gradient_descent(**parameters),
+#     "optimistic_adam_v2": lambda parameters: optax.optimistic_adam_v2(**parameters),
+#     "polyak_sgd": lambda parameters: optax.polyak_sgd(**parameters),
+#     "radam": lambda parameters: optax.radam(**parameters),
+#     "rmsprop": lambda parameters: optax.rmsprop(**parameters),
+#     "rprop": lambda parameters: optax.rprop(**parameters),
+#     "sgd": lambda parameters: optax.sgd(**parameters),
+#     "sign_sgd": lambda parameters: optax.sign_sgd(**parameters),
+#     "signum": lambda parameters: optax.signum(**parameters), # problematic, does not exist in the installed optax package despite being listed on the website
+#     "sm3": lambda parameters: optax.sm3(**parameters), # problematic due to dimensionless mechanistic parameters
+#     "yogi": lambda parameters: optax.yogi(**parameters),
+# }
 
 class OptaxDistribution(Distribution):
     distribution_map: Dict[str,Tuple[Callable, Dict[str,str]]] = scipy_to_jax
@@ -555,9 +589,18 @@ class OptaxBackend(InferenceBackend):
                 New state of the optimization.
             """
             loss, grads = grad_loss(model, ti, yi, mask, t_thresh, x_in, loss_func)
-            updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_inexact_array))
+            updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_inexact_array), value=loss, grad=grads, value_fn=grad_loss)
             model = eqx.apply_updates(model, updates)
             return loss, model, opt_state
+        
+        def construct_optimizer(random_variable, clip):
+            parameters = {key: entry.evaluate() for key, entry in random_variable.parameters.items()}
+            optim = optim_lib[random_variable.distribution](parameters)
+            if clip != 0:
+                optim = optax.chain(optax.clip(clip), optim)
+            return optim
+        
+        make_steps = []
 
         make_step_jit = eqx.filter_jit(make_step)
 
@@ -574,21 +617,17 @@ class OptaxBackend(InferenceBackend):
 
         model = self.construct_model(key)
 
-        clip = self.config.inference_optax.clip_strategy
-        lr = self.config.inference_optax.lr_strategy
-
-        if clip != 0:
-            optim = optax.chain(optax.clip(clip), optax.adabelief(lr))
-        else:
-            optim = optax.adabelief(lr)
-        opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
-
         def loss_func(y_obs, y_pred):
             return self.simulation.model.loss(jnp.where(jnp.isnan(y_obs), y_pred, y_obs), y_pred)
         
-        make_step_jit_compiled =  make_step_jit.lower(ts, ys[0:self.config.inference_optax.batch_size], x_in, jnp.ones(ys[0:self.config.inference_optax.batch_size].shape), ts[-1], model, optim, opt_state, loss_func).compile()
+        for optimizer, clip in zip(self.config.inference_optax.optim_strategy, self.config.inference_optax.clip_strategy):
 
-        return make_step_jit_compiled
+            optim = construct_optimizer(optimizer, clip)
+            opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
+            
+            make_steps.append(make_step_jit.lower(ts, ys[0:self.config.inference_optax.batch_size], x_in, jnp.ones(ys[0:self.config.inference_optax.batch_size].shape), ts[-1], model, optim, opt_state, loss_func).compile())
+
+        return make_steps
     
     def compile_make_step2(self):
         raise NotImplementedError()
@@ -788,18 +827,20 @@ class OptaxBackend(InferenceBackend):
                     start = end
                     end = start + batch_size
 
-        # run multiple epochs
-        for length, steps in zip(self.config.inference_optax.length_strategy, self.config.inference_optax.steps_strategy):
+        def construct_optimizer(random_variable, clip):
+            parameters = {key: entry.evaluate() for key, entry in random_variable.parameters.items()}
+            optim = optim_lib[random_variable.distribution](parameters)
+            if clip != 0:
+                optim = optax.chain(optax.clip(clip), optim)
+            return optim
 
-            clip = self.config.inference_optax.clip_strategy
-            lr = self.config.inference_optax.lr_strategy
+        # run multiple epochs
+        for length, steps, optimizer, clip, make_step_epoch in zip(self.config.inference_optax.length_strategy, self.config.inference_optax.steps_strategy, self.config.inference_optax.optim_strategy, self.config.inference_optax.clip_strategy, make_step):
+
             batch_size = self.config.inference_optax.batch_size
 
             # create and initialize optimizer, chain with gradient clipping tool if clip parameter is not zero
-            if clip != 0:
-                optim = optax.chain(optax.clip(clip), optax.adabelief(lr))
-            else:
-                optim = optax.adabelief(lr)
+            optim = construct_optimizer(optimizer, clip)
             opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
 
             # determine which part of the observation data should be considered
@@ -815,7 +856,7 @@ class OptaxBackend(InferenceBackend):
                     range(steps), dataloader((ys,), batch_size, key=loader_key)
                 ):
                     # execute training step
-                    loss, model, opt_state = make_step(ts, yi, x_in, mask, t_thresh, model, optim, opt_state, loss_func)
+                    loss, model, opt_state = make_step_epoch(ts, yi, x_in, mask, t_thresh, model, optim, opt_state, loss_func)
 
                     # create data for indepth modes
                     if self.config.inference_optax.indepth == "full":
@@ -843,7 +884,7 @@ class OptaxBackend(InferenceBackend):
                     range(steps), [[ys]] * steps
                 ):
                     # execute training step
-                    loss, model, opt_state = make_step(ts, yi, x_in, mask, t_thresh, model, optim, opt_state, loss_func)
+                    loss, model, opt_state = make_step_epoch(ts, yi, x_in, mask, t_thresh, model, optim, opt_state, loss_func)
 
                     # create data for indepth modes
                     if self.config.inference_optax.indepth == "full":
