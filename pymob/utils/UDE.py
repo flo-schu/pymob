@@ -309,10 +309,10 @@ class UDEBase(eqx.Module):
 
         for (key, value) in params.items():
             if isinstance(value, tuple):
-                setattr(self, key, jnp.array(value[0]))
+                setattr(self, key, jnp.array([value[0]]))
             else:
-                setattr(self, key, jnp.array(value))
-            self.UDE_params.append((key, value))
+                setattr(self, key, jnp.array([value]))
+            self.UDE_params.append((key, jnp.array([value])))
 
     def preprocess_params(self):
         '''
@@ -382,9 +382,11 @@ class UDEBase(eqx.Module):
         params = self.preprocess_params()
         derivatives = self.model(t, y, *x_in, self.mlp, **params)
         if type(derivatives) == tuple:
-            return jnp.array([der.astype(float) for der in derivatives])
+            res = jnp.array([der.astype(float) for der in derivatives])
+            return res.reshape((res.shape[0]))
         else:
-            return jnp.array(derivatives)
+            res = jnp.array(derivatives)
+            return res.reshape((res.shape[0]))
         
     @staticmethod
     def loss(y_obs, y_pred):

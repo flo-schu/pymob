@@ -71,7 +71,7 @@ scipy_to_jax = {
 #     "fromage": lambda parameters: optax.fromage(**parameters),
 #     "lamb": lambda parameters: optax.lamb(**parameters),
 #     "lars": lambda parameters: optax.lars(**parameters),
-#     "lbfgs": lambda parameters: optax.lbfgs(**parameters), # problematic, only works with argument linesearch=None due to dimensionless mechanistic parameters
+#     "lbfgs": lambda parameters: optax.lbfgs(**parameters),
 #     "lion": lambda parameters: optax.lion(**parameters),
 #     "nadam": lambda parameters: optax.nadam(**parameters),
 #     "nadamw": lambda parameters: optax.nadamw(**parameters),
@@ -85,8 +85,8 @@ scipy_to_jax = {
 #     "rprop": lambda parameters: optax.rprop(**parameters),
 #     "sgd": lambda parameters: optax.sgd(**parameters),
 #     "sign_sgd": lambda parameters: optax.sign_sgd(**parameters),
-#     "signum": lambda parameters: optax.signum(**parameters), # problematic, does not exist in the installed optax package despite being listed on the website
-#     "sm3": lambda parameters: optax.sm3(**parameters), # problematic due to dimensionless mechanistic parameters
+#     "signum": lambda parameters: optax.signum(**parameters), # requires optax 0.27
+#     "sm3": lambda parameters: optax.sm3(**parameters),
 #     "yogi": lambda parameters: optax.yogi(**parameters),
 # }
 
@@ -516,8 +516,8 @@ class OptaxBackend(InferenceBackend):
         make_step_jit_compiled : equinox._compile_utils.Compiled
             Compiled version of the make_step function.
         """
-        @eqx.filter_value_and_grad
-        def grad_loss(model, ti, yi, mask, t_thresh, x_in, loss_func):
+        # @eqx.filter_value_and_grad
+        def loss_fn(model, ti, yi, mask, t_thresh, x_in, loss_func):
             """
             Computes the loss and gradients of all model parameters.
 
@@ -545,6 +545,8 @@ class OptaxBackend(InferenceBackend):
             losses = loss_func(yi, y_pred)
 
             return jnp.mean(jnp.where(mask, losses, mask))
+        
+        grad_loss = eqx.filter_value_and_grad(loss_fn)
 
         def make_step(ti, yi, x_in, mask, t_thresh, model, optim, opt_state, loss_func):
             """
@@ -589,7 +591,7 @@ class OptaxBackend(InferenceBackend):
                 New state of the optimization.
             """
             loss, grads = grad_loss(model, ti, yi, mask, t_thresh, x_in, loss_func)
-            updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_inexact_array), value=loss, grad=grads, value_fn=grad_loss)
+            updates, opt_state = optim.update(grads, opt_state, eqx.filter(model, eqx.is_inexact_array), value=loss, grad=grads, value_fn=lambda x: loss_fn(model, ti, yi, mask, t_thresh, x_in, loss_func))
             model = eqx.apply_updates(model, updates)
             return loss, model, opt_state
         
