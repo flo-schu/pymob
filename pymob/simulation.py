@@ -223,7 +223,7 @@ class SimulationBase:
             ParameterDict(parameters={}, callback=self._on_params_updated)
         # self.observations = None
         self._objective_names: str|List[str] = []
-        self.indices: Dict = {}
+        self._indices: Dict = {}
 
         # seed gloabal RNG
         self._seed_buffer_size: int = self.config.multiprocessing.n_cores * 2
@@ -250,6 +250,8 @@ class SimulationBase:
         ------------
 
         self.initialize --> may be replaced by self.set_observations
+
+        TODO: Combining this with __init__ would make the usage more intuituve
 
         """
 
@@ -388,6 +390,7 @@ class SimulationBase:
             self._observations_copy = copy.deepcopy(value)
 
         self.coordinates = self.create_coordinates()
+        self.indices = self.create_indices()
 
         unobserved_keys = [
             k for k in self.config.data_structure.observed_data_variables 
@@ -521,6 +524,27 @@ class SimulationBase:
         self._coordinates = value
 
     @property
+    def indices(self):
+        return self._indices
+    
+
+    @indices.setter
+    def indices(self, value: Dict[str, np.ndarray]):
+        """Hook in observations.setter makes sure that indices are always updated when
+        observations change. This is backwards compatible with the existing API
+        """
+        # TODO: Check integrity of indices 
+
+        self._indices = value
+
+    def create_indices(self):
+        indices = {}
+        for index in self.config.data_structure.indices:
+            indices.update(self.create_index(index))
+
+        return indices
+
+    @property
     def free_model_parameters(self) -> List[Param]:
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
@@ -562,6 +586,9 @@ class SimulationBase:
         class and imports the typical modules [data, mod, plot, prob, sim]
 
         :meta private:
+
+        TODO: Harmonize this with import_casestudy_modules. This should be as simple as 
+              possible.
         """
         # test if the case study is installed as a package or if the 
         # package is at the root of the path (this can also be a single python file). 
@@ -603,43 +630,12 @@ class SimulationBase:
                             f"{module} import *` to import all objects from "
                             "the parent case study."
                         )
-            return
         
         else:
             warnings.warn(
                 f"Case study '{package}' could not be imported. Install the case " +
                 f"study with `pip install {package}`. Or place in the root directory."
             )
-        # # This branch is for case studies that are not installed (I guess)
-        # # append relevant paths to sys
-        # package = os.path.join(
-        #     self.config.case_study.root, 
-        #     self.config.case_study.package
-        # )
-        # if package not in sys.path:
-        #     sys.path.insert(0, package)
-        #     print(f"Inserted '{package}' into PATH at index=0")
-    
-        # case_study = os.path.join(
-        #     self.config.case_study.root, 
-        #     self.config.case_study.package,
-        #     self.config.case_study.name,
-        #     # Account for package architecture 
-        #     self.config.case_study.name,
-        # )
-        # if case_study not in sys.path:
-        #     sys.path.insert(0, case_study)
-        #     print(f"Inserted '{case_study}' into PATH at index=0")
-
-        # for module in MODULES:
-        #     try:
-        #         m = importlib.import_module(module, package=case_study)
-        #         setattr(self, f"_{module}", m)
-        #     except ModuleNotFoundError:
-        #         warnings.warn(
-        #             f"Module {module}.py not found in {case_study}."
-        #             f"Missing modules can lead to unexpected behavior."
-        #         )
 
     def set_logger(self):        
         self.logger = logging.getLogger(f"{type(self).__qualname__}")
@@ -1925,6 +1921,15 @@ class SimulationBase:
         
         batch_dim = self.config.simulation.batch_dimension
         # TODO: There may be a problem, when batch dimension is not defined!
+        dims = list(self.observations.dims.keys())
+
+        if batch_dim not in dims:
+            raise PymobError(
+                f"The batch dimension '{batch_dim}' is not in observation.dims "+
+                f"{dims}. If you want to create indices, the batch " +
+                "dimension has to be properly defined in the config:\n"+
+                f">>> config.simulation.batch_dimension = ... # (use one of {dims})"
+            )
 
         return {coord: xr.DataArray(
                 self.index_coordinates(self.observations[coord].values),

@@ -794,6 +794,8 @@ class Datastructure(PymobModel):
     __pydantic_extra__: Dict[str, OptionDataVariable]
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
+    indices: OptionListStr = []
+
     def remove(self, key: str) -> None:
         """Removes a data variable from the data structure."""
         if key not in self.__pydantic_extra__:
