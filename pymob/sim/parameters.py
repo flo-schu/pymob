@@ -10,6 +10,7 @@ import xarray as xr
 from pydantic import BaseModel, ConfigDict, model_serializer, field_validator, model_validator
 from pydantic.functional_validators import BeforeValidator
 from numpydantic import NDArray, Shape
+from pymob.utils.errors import import_optional_dependency
 
 NumericArray = Union[
     NDArray[Shape["*, ..."], float],  # noqa: F722
@@ -160,6 +161,23 @@ class RandomVariable(BaseModel):
                 "https://docs.scipy.org/doc/scipy/reference/stats.html"
             )
         return new_value
+    
+class RandomVariableOptim(RandomVariable):
+
+    @field_validator("distribution", mode="after")
+    def check_distribution(cls, new_value, info, **kwargs):
+        if new_value not in optim_lib:
+            warnings.warn(
+                f"The optimizer '{new_value}' is not part of the optax "+
+                "optimizers implemented in pymob. "+
+                "This can lead to inconsistent behavior. "+
+                "It is recommended to use the optax protocol "+
+                "where possible. "+
+                "https://optax.readthedocs.io/en/latest/api/optimizers.html "+
+                "It may also be possible that your optimizer has not yet "+
+                "been introduced into the pymob package "
+            )
+        return new_value.lower()
 
 def string_to_prior_dict(prior_str: str):
     # Step 1: Parse the string to extract the function name and its arguments.
@@ -202,6 +220,16 @@ def to_rv(option: Union[str,RandomVariable,Dict]) -> RandomVariable:
         prior_dict = string_to_prior_dict(option)
 
     return RandomVariable.model_validate(prior_dict, strict=False)
+
+def to_rv_opt(option: Union[str,RandomVariableOptim,Dict]) -> RandomVariableOptim:
+    if isinstance(option, RandomVariableOptim):
+        return option
+    elif isinstance(option, Dict):
+        prior_dict = option
+    else:
+        prior_dict = string_to_prior_dict(option)
+
+    return RandomVariableOptim.model_validate(prior_dict, strict=False)
 
 
 def dict_to_string(dct: Dict, jstr=" "):
@@ -406,3 +434,41 @@ scipy_to_scipy = {
     "dlaplace": (scipy.stats.dlaplace, {}),
     "skellam": (scipy.stats.skellam, {}),
 }
+
+optax = import_optional_dependency(
+    "optax", errors="ignore"
+)
+if optax is not None:
+    import optax
+    optim_lib = {
+        "adabelief": lambda parameters: optax.adabelief(**parameters),
+        "adadelta": lambda parameters: optax.adadelta(**parameters),
+        "adan": lambda parameters: optax.adan(**parameters),
+        "adafactor": lambda parameters: optax.adafactor(**parameters),
+        "adagrad": lambda parameters: optax.adagrad(**parameters),
+        "adam": lambda parameters: optax.adam(**parameters),
+        "adamw": lambda parameters: optax.adamw(**parameters),
+        "adamax": lambda parameters: optax.adamax(**parameters),
+        "adamaxw": lambda parameters: optax.adamaxw(**parameters),
+        "amsgrad": lambda parameters: optax.amsgrad(**parameters),
+        "fromage": lambda parameters: optax.fromage(**parameters),
+        "lamb": lambda parameters: optax.lamb(**parameters),
+        "lars": lambda parameters: optax.lars(**parameters),
+        "lbfgs": lambda parameters: optax.lbfgs(**parameters),
+        "lion": lambda parameters: optax.lion(**parameters),
+        "nadam": lambda parameters: optax.nadam(**parameters),
+        "nadamw": lambda parameters: optax.nadamw(**parameters),
+        "noisy_sgd": lambda parameters: optax.noisy_sgd(**parameters),
+        "novograd": lambda parameters: optax.novograd(**parameters),
+        "optimistic_gradient_descent": lambda parameters: optax.optimistic_gradient_descent(**parameters),
+        "optimistic_adam_v2": lambda parameters: optax.optimistic_adam_v2(**parameters),
+        "polyak_sgd": lambda parameters: optax.polyak_sgd(**parameters),
+        "radam": lambda parameters: optax.radam(**parameters),
+        "rmsprop": lambda parameters: optax.rmsprop(**parameters),
+        "rprop": lambda parameters: optax.rprop(**parameters),
+        "sgd": lambda parameters: optax.sgd(**parameters),
+        "sign_sgd": lambda parameters: optax.sign_sgd(**parameters),
+        "signum": lambda parameters: optax.signum(**parameters),
+        "sm3": lambda parameters: optax.sm3(**parameters),
+        "yogi": lambda parameters: optax.yogi(**parameters),
+    }

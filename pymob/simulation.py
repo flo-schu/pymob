@@ -26,6 +26,7 @@ from pymob.sim.base import stack_variables
 from pymob.sim.config import Config, ParameterDict, DataVariable, Param, NumericArray
 from pymob.sim.plot import SimulationPlot
 from pymob.sim.report import Report
+from pymob.solvers.diffrax import UDESolver
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -640,7 +641,17 @@ class SimulationBase:
     def infer_ode_states(self) -> int:
         if self.config.simulation.n_ode_states == -1:
             try: 
-                return_args = get_return_arguments(self.model)
+                equinox = import_optional_dependency(
+                    "equinox", errors="ignore"
+                )
+                if equinox is not None:
+                    from pymob.solvers.diffrax import UDESolver
+                    if self.solver == UDESolver:
+                        return_args = get_return_arguments(self.model.model)
+                    else:
+                        return_args = get_return_arguments(self.model)
+                else:
+                    return_args = get_return_arguments(self.model)
                 n_ode_states = len(return_args)
                 warnings.warn(
                     "The number of ODE states was not specified in "
@@ -1225,6 +1236,18 @@ class SimulationBase:
                 from pymob.inference.scipy_backend import ScipyBackend
 
             self.inferer = ScipyBackend(simulation=self)
+
+        elif backend == "optax":
+            optax = import_optional_dependency(
+                "optax", errors="raise", extra=extra.format("optax")
+            )
+            equinox = import_optional_dependency(
+                "equinox", errors="raise", extra=extra.format("equinox")
+            )
+            if optax is not None and equinox is not None:
+                from pymob.inference.optax_backend import OptaxBackend
+
+            self.inferer = OptaxBackend(simulation=self)
     
     
     
@@ -1906,6 +1929,7 @@ class SimulationBase:
         )
 
         simplot.plot_data_variables()
+
         simplot.save("posterior_predictive.png")
 
 

@@ -1,0 +1,72 @@
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lotka_volterra_UDE_case_study"
+version = "1.0.0"
+authors = [
+  { name="Florian Schunck", email="fluncki@protonmail.com" },
+]
+description = "Lotka Volterra Predator-Prey case study"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies=[
+    "pymob[numpyro] >= 0.5.0a19",
+    "preliz",
+]
+license = {file = "LICENSE"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Natural Language :: English",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/flo-schu/lotka_volterra_case_study"
+"Issue Tracker" = "https://github.com/flo-schu/lotka_volterra_case_study/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest >= 7.3", 
+    "bumpver", 
+    "pre-commit",
+    "ipykernel",
+    "ipywidgets"
+]
+
+[tool.setuptools.packages.find]
+include = ["lotka_volterra_UDE_case_study*"]
+
+[tool.bumpver]
+current_version = "1.0.0"
+version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
+commit_message = "bump version {old_version} -> {new_version}"
+tag_message = "{new_version}"
+tag_scope = "default"
+pre_commit_hook = ""
+post_commit_hook = ""
+commit = true
+tag = true
+push = true
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = [
+    'current_version = "{version}"',
+    'version = "{version}"'
+]
+"lotka_volterra_case_study/__init__.py" = [
+    '__version__ = "{version}"'
+]
+"README.md" = [
+    'git clone git@github.com:flo-schu/lotka_volterra_case_study/{version}'
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow='mark test as slow.'"
+]

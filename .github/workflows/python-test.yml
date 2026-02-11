@@ -125,6 +125,7 @@ jobs:
         python -m pip install flake8 pytest
         pip install .[pyabc,pymoo,interactive,numpyro]
         pip install -e case_studies/lotka_volterra_case_study
+        pip install -e case_studies/lotka_volterra_UDE_case_study
 
     - name: Lint with flake8
       if: env.full-test == 'true' && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'

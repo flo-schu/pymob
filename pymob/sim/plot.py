@@ -5,6 +5,7 @@ import xarray as xr
 import arviz as az
 import numpy as np
 import numpy.typing as npt
+import jax.numpy as jnp
 
 from pymob.sim.config import Config
 from matplotlib import pyplot as plt
@@ -327,5 +328,3 @@ class SimulationPlot:
         self.figure.savefig(
             f"{self.config.case_study.output_path}/{filename}"
         )
-
-        
