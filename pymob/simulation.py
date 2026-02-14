@@ -2041,6 +2041,7 @@ class SimulationBase:
         self, 
         directory: Optional[str] = None,
         mode: Literal["export", "copy"] = "export",
+        exclude_idata_groups: List[str] = []
 
     ):
         """Exports a SimulationBase object to disk. If directory is given, objects are
@@ -2106,7 +2107,14 @@ class SimulationBase:
                 # this raises an OS Error
                 if os.access(idata_path, os.W_OK):
                     os.remove(idata_path)
-                self.inferer.idata.to_netcdf(idata_path)
+
+                self.inferer.idata.to_netcdf(
+                    idata_path, 
+                    groups=[
+                        g for g in self.inferer.idata.groups() 
+                        if g not in exclude_idata_groups
+                    ]
+                )
             else:
                 pass
         else:
@@ -2201,7 +2209,7 @@ class SimulationBase:
 
         return sim
 
-    def copy(self: _SimulationType) -> _SimulationType:
+    def copy(self: _SimulationType, exclude_idata_groups: List[str] = []) -> _SimulationType:
         """Creates a copy of a SimulationBase object by exporting to a temporary directory
         in the output path and importing again from that directoy. The temporary directory
         is destroyed directly afterwards
@@ -2213,7 +2221,7 @@ class SimulationBase:
             tmp_basedir = os.path.join(self.output_path, "_tmp")
             os.makedirs(tmp_basedir, exist_ok=True)
             with tempfile.TemporaryDirectory(dir=tmp_basedir) as name:
-                self.export(directory=name, mode="copy")
+                self.export(directory=name, mode="copy", exclude_idata_groups=exclude_idata_groups)
                 sim_copy: _SimulationType = type(self).from_directory(name, mode="copy")
 
         return sim_copy
