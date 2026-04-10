@@ -1,7 +1,8 @@
 import numpyro
 import jax.numpy as jnp
-from numpyro.distributions import Normal, TransformedDistribution
-from numpyro.distributions import transforms
+from numpyro.distributions import Normal, TransformedDistribution, TruncatedNormal
+from numpyro.distributions import transforms, constraints
+from jax.scipy.special import ndtr, ndtri
 
 scipy_to_numpyro = {
     "deterministic": (numpyro.deterministic, {"value": "value"}),
@@ -40,10 +41,6 @@ scipy_to_numpyro = {
     
 }
 
-import jax.numpy as jnp
-from numpyro.distributions import Normal, TransformedDistribution, TruncatedNormal
-from numpyro.distributions import transforms
-
 
 def transform(transforms, x):
     for part in transforms:
@@ -77,12 +74,21 @@ def LogNormalTrans(loc, scale, low=None, high=None):
     )
 
 # LogNormal Transformation
-def NormalTrans(loc, scale):
+def NormalTrans(loc, scale, low=None, high=None):
+    _transforms = [
+        transforms.AffineTransform(loc=loc, scale=scale),
+    ]
+
+    if high is not None:
+        high = inv_transform(_transforms, high)
+
+    if low is not None:
+        low = inv_transform(_transforms, low)
+
+    base_distribution=TruncatedNormal(0, 1, low=low, high=high)
     return TransformedDistribution(
-        base_distribution=Normal(0, 1),
-        transforms=[
-            transforms.AffineTransform(loc=loc, scale=scale),
-        ]
+        base_distribution=base_distribution,
+        transforms=_transforms
     )
 
 # Exponential Transformation
@@ -95,8 +101,11 @@ def ExponentialTrans(rate):
         ]
     )
 
-# Uniform Transformation
-def UniformTrans(low, high):
+# Uniform Transformation Approximation
+def UniformApproxTrans(low, high):
+    """The sigmoid transform maps an unconstrained interval (-inf, +inf) to the unit
+    interval [0,1], as the transformation is not exact, the transformation is only
+    approximate."""
     return TransformedDistribution(
         base_distribution=Normal(0, 1),
         transforms=[
@@ -116,10 +125,62 @@ def HalfNormalTrans(scale):
         ]
     )
 
+
+class NormalCDFTransform(transforms.ParameterFreeTransform):
+    """
+    Transform standard normal to uniform using the normal CDF.
+    Maps: ℝ → (0, 1)
+    """
+    domain = constraints.real
+    codomain = constraints.unit_interval
+
+    def __call__(self, x):
+        """Forward: normal -> uniform using CDF"""
+        return ndtr(x)
+
+    def _inverse(self, y):
+        """Inverse: uniform -> normal using inverse CDF"""
+        return ndtri(y)
+
+    def log_abs_det_jacobian(self, x, y, intermediates=None):
+        """Log absolute determinant of Jacobian"""
+        # For normal CDF: d/dx Φ(x) = φ(x) = exp(-x²/2) / sqrt(2π)
+        return -0.5 * x**2 - 0.5 * jnp.log(2 * jnp.pi)
+
+
+def UniformTrans(low, high):
+    return TransformedDistribution(
+        base_distribution=Normal(0, 1),
+        transforms=[
+            # transform to uniform distributiin
+            NormalCDFTransform(),
+            # stretch the distribution with logarithms of low and high
+            transforms.AffineTransform(loc=low, scale=high - low),
+            # exponential transform
+            # transforms.ExpTransform()
+        ]
+    )
+
+
+def LogUniformTrans(low, high):
+    return TransformedDistribution(
+        base_distribution=Normal(0, 1),
+        transforms=[
+            # transform to uniform distribution
+            NormalCDFTransform(),
+            # stretch the distribution with logarithms of low and high
+            transforms.AffineTransform(loc=jnp.log(low), scale=jnp.log(high) - jnp.log(low)),
+            # exponential transform
+            transforms.ExpTransform()
+        ]
+    )
+
+
 transformed_dist_map = {
     numpyro.distributions.LogNormal: LogNormalTrans,
     numpyro.distributions.Exponential: ExponentialTrans,
     numpyro.distributions.Uniform: UniformTrans,
+    numpyro.distributions.LogUniform: LogUniformTrans,
     numpyro.distributions.HalfNormal: HalfNormalTrans,
     numpyro.distributions.Normal: NormalTrans,
 }
