@@ -356,7 +356,10 @@ def create_table(
         stacked_tab = tab.sel(metric=["mean", "hdi_3%", "hdi_97%"])\
             .assign_coords(metric=["mean", "hdi 3%", "hdi 97%"])\
             .stack(col=stack_cols)
-        table = stacked_tab.to_dataframe().T.drop(list(stack_cols))
+        # Migrating xarray from 2023.11 -> 2026.02 fixed the .drop() method
+        # rows that are already in the index are not duplicated anymore, which
+        # removes the need for dropping them from the dataframe.
+        table = stacked_tab.to_dataframe().T
 
     else:
         raise NotImplementedError("Must use one of 'sd' or 'hdi'")
