@@ -18,6 +18,7 @@ def main(case_study, scenario, package, logging, logfile):
     cfg = os.path.join(package, case_study, "scenarios", scenario, "settings.cfg")
     config = Config(cfg)
     config.case_study.name = case_study
+    config.case_study.package = package
     config.case_study.scenario = scenario
     config.import_casestudy_modules(reset_path=True)
 
@@ -37,6 +38,7 @@ def main(case_study, scenario, package, logging, logfile):
     # store and process output
     sim.dump(results=evaluator.results)
     sim.plot(results=evaluator.results)
+    sim.export()
 
 if __name__ == "__main__":
     main()

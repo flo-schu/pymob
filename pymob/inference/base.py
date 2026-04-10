@@ -1,4 +1,5 @@
 import numpy as np
+import xarray as xr
 import ast
 from typing import (
     Dict,
@@ -22,7 +23,7 @@ import itertools as it
 import tqdm
 
 from pymob.simulation import SimulationBase
-from pymob.sim.parameters import Param, RandomVariable, Expression
+from pymob.sim.config import Param, RandomVariable, Expression, NumericArray
 from pymob.sim.config import Datastructure
 from pymob.utils.config import lookup_from
 from pymob.inference.analysis import plot_pairs, plot_trace
@@ -44,7 +45,7 @@ class TqdmLogger:
 class Errorfunction(Protocol):
     def __call__(
         self, 
-        theta: Dict[str, List[float]], 
+        theta: Mapping[str, float|List[float]|NumericArray], 
     ) -> Any:
         ...
 
@@ -172,10 +173,21 @@ class Distribution:
 
         return distribution, mapped_params, underfined_args
 
+class PymobInferenceData(az.InferenceData):
+    prior: xr.Dataset
+    posterior: xr.Dataset
+    log_likelihood: xr.Dataset
+    prior_model_fits: xr.Dataset
+    posterior_model_fits: xr.Dataset
+    prior_residuals: xr.Dataset
+    posterior_residuals: xr.Dataset
+    unconstrained_prior: xr.Dataset
+    unconstrained_prior: xr.Dataset
+
 
 class InferenceBackend(ABC):
     _distribution = Distribution
-    idata: az.InferenceData
+    idata: PymobInferenceData
     prior: Dict[str,Distribution]
     log_likelihood: Errorfunction
     gradient_log_likelihood: Errorfunction
@@ -212,6 +224,10 @@ class InferenceBackend(ABC):
 
     @abstractmethod
     def parse_probabilistic_model(self):
+        pass
+
+    @abstractmethod
+    def run(self):
         pass
 
     @property

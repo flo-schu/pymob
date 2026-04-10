@@ -2,8 +2,11 @@ import os
 import sys
 import copy
 import warnings
+import textwrap
+import tempfile
 import importlib
-from typing import Optional, List, Union, Literal, Any, Tuple, Sequence, Mapping
+from copy import deepcopy
+from typing import Optional, List, Union, Literal, Any, Tuple, Sequence, Mapping, TypeVar
 from types import ModuleType
 import configparser
 from functools import partial
@@ -13,22 +16,26 @@ import logging
 import numpy as np
 from numpy.typing import NDArray
 import xarray as xr
+import arviz as az
 import dpath as dp
 from sklearn.preprocessing import MinMaxScaler
 
 import pymob
 from pymob.utils.config import lambdify_expression, lookup_args, get_return_arguments
-from pymob.utils.errors import errormsg, import_optional_dependency
+from pymob.utils.errors import errormsg, import_optional_dependency, PymobError
 from pymob.utils.store_file import parse_config_section
 from pymob.utils.misc import benchmark
 from pymob.sim.evaluator import Evaluator, create_dataset_from_dict, create_dataset_from_numpy
 from pymob.sim.base import stack_variables
-from pymob.sim.config import Config, ParameterDict, DataVariable, Param, NumericArray
+
+from pymob.sim.config import ParameterDict, DataVariable, Param, NumericArray, Config
 from pymob.sim.plot import SimulationPlot
 from pymob.sim.report import Report
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
+
+_SimulationType = TypeVar("_SimulationType", bound="SimulationBase")
 
 def is_iterable(x):
     try:
@@ -216,7 +223,7 @@ class SimulationBase:
             ParameterDict(parameters={}, callback=self._on_params_updated)
         # self.observations = None
         self._objective_names: str|List[str] = []
-        self.indices: Dict = {}
+        self._indices: Dict = {}
 
         # seed gloabal RNG
         self._seed_buffer_size: int = self.config.multiprocessing.n_cores * 2
@@ -244,18 +251,21 @@ class SimulationBase:
 
         self.initialize --> may be replaced by self.set_observations
 
+        TODO: Combining this with __init__ would make the usage more intuituve
+
         """
 
 
         self.load_modules()
 
+        self.config.create_directory(directory="results", force=True)
+        self.config.create_directory(directory="scenario", force=True)
+
+        self.set_logger()
+        
         self.initialize(input=self.config.input_file_paths)
         self.coordinates = self.create_coordinates()
         self.validate()
-        
-        self.config.create_directory(directory="results", force=True)
-        self.config.create_directory(directory="scenario", force=True)
-        self.set_logger()
 
         # TODO: set up logger
         self.parameterize = partial(
@@ -274,6 +284,9 @@ class SimulationBase:
             raise KeyError(
                 "'model_parameters' must contain a 'parameters' key"
             )
+
+        self._check_input_for_nans(model_parameters=value, key="x_in")
+        self._check_input_for_nans(model_parameters=value, key="y0")
         
         if not isinstance(value["parameters"], dict):
             raise ValueError(
@@ -289,6 +302,52 @@ class SimulationBase:
     def _on_params_updated(self, updated_dict):
         self.model_parameters = updated_dict
 
+    def _check_input_for_nans(self, model_parameters, key):
+        if key not in model_parameters:
+            return
+
+        for data_var, array in model_parameters[key].items():
+            nans = array.isnull().sum([
+                d for d in array.dims 
+                if d == self.config.simulation.x_dimension
+            ])
+            nans = nans.where(nans, drop=True)
+
+            if sum(nans.shape) > 0:
+                batch_dim = self.config.simulation.batch_dimension
+                raise PymobError(
+                    f"The xarray passed to `sim.model_parameters['{key}']` contained "+
+                    f"NaN values. They occur at the {batch_dim}-coordinates: "+
+                    f"{nans.coords['id'].values}.\n\n"+
+                    
+                    "Why does this error occur?\n"+
+                    "--------------------------\n"+
+                    "Pymob uses y0 as initial conditions for a solver and uses x_in to "+
+                    "provide interpolated values for any value of t. Having nan values "+
+                    "in such components presents an unsolvable challenge to the solver.\n\n" +
+
+                    "How can I fix this error?\n"+
+                    "-------------------------\n"+
+                    "General advice: Use sim.parse_input https://pymob.readthedocs.io/en/stable/api/pymob.html#pymob.simulation.SimulationBase.parse_input\n"
+                    "* Problem with 'x_in': Check sim.observations and also check"+
+                    "sim.config.simulations.x_in"
+                    "You may need to take a decision how to interpolate "+
+                    "your data. Check out the xarray documentation "+
+                    "https://docs.xarray.dev/en/stable/generated/xarray.DataArray.interpolate_na.html" +
+                    "or https://docs.xarray.dev/en/stable/generated/xarray.DataArray.ffill.html "+
+                    "to replace nan values.\n"+ 
+                    "* If you want to make sure your 'x_in' follows a rectangular interpolation you can use\n"+
+                    "  >>> sim.parse_input('x_in', reference_data=sim.observations)\n"
+                    "  >>> pymob.solvers.base.rect_interpolation(x_in)\n"
+                    "* Problem with 'y0': Check sim.observations and also check "+
+                    "sim.config.simulation.y0\n\n"
+
+                    "Details\n"
+                    "-------\n"
+                    f"{key}: {model_parameters[key]}"
+                )
+        
+
     @property
     def observations(self):
         assert isinstance(self._observations, xr.Dataset), "Observations must be an xr.Dataset"
@@ -300,8 +359,8 @@ class SimulationBase:
             if k not in self.config.data_structure.data_variables:
                 datavar = DataVariable(
                     dimensions=[str(d) for d in v.dims],
-                    min=float(v.min()),
-                    max=float(v.max()),
+                    min=float(v.values.min()),
+                    max=float(v.values.max()),
                 )
                 setattr(self.config.data_structure, k, datavar)
                 warnings.warn(
@@ -313,9 +372,9 @@ class SimulationBase:
             else:
                 datavar: DataVariable = getattr(self.config.data_structure, k)
                 if np.isnan(datavar.min):
-                    datavar.min = float(v.min())
+                    datavar.min = float(v.values.min())
                 if np.isnan(datavar.max):
-                    datavar.max = float(v.max())
+                    datavar.max = float(v.values.max())
 
                 if set(datavar.dimensions) != set(v.dims):
                     raise KeyError(
@@ -331,6 +390,7 @@ class SimulationBase:
             self._observations_copy = copy.deepcopy(value)
 
         self.coordinates = self.create_coordinates()
+        self.indices = self.create_indices()
 
         unobserved_keys = [
             k for k in self.config.data_structure.observed_data_variables 
@@ -347,17 +407,102 @@ class SimulationBase:
 
         self.create_data_scaler()
         
-    def save_observations(self, filename="observations.nc", force=False):
-        fp = os.path.join(self.data_path, filename)
+    def save_observations(
+        self, 
+        filename="observations.nc", 
+        directory=None, 
+        force=False
+    ):
+        """Save observations to a NetCDF file.
+
+        This function saves the observations data to a NetCDF file with a specified
+        filename and directory. By default, it saves to the data path defined in the
+        configuration. It prompts the user for confirmation before overwriting an
+        existing file, unless the `force` flag is set.
+
+        Parameters
+        ----------
+        filename : str, optional
+            The name of the NetCDF file to save. Defaults to "observations.nc".
+        directory : str, optional
+            The directory to save the NetCDF file to. If None, the data path
+            defined in the object's configuration is used. Defaults to None.
+        force : bool, optional
+            If True, overwrite the file without prompting. Defaults to False.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
+
+        Notes
+        -----
+        - The function updates the `observations` attribute in the object's
+        configuration to reflect the saved filename.
+        - The `drop_encoding()` method is called on the observations dataset
+        before saving to remove any encoding information.  This is a common
+        practice to ensure portability and avoid issues with different NetCDF
+        readers.
+        - The function uses `os.path.join()` to construct the full file path,
+        ensuring correct path handling across different operating systems.
+        - Before exporting attributes of the dataset are serialized to avoid
+        export errors.
+        - Creates a data directory if it does not exist
+        
+        Examples
+        --------
+
+        >>> # Create a simulation
+        >>> sim = SimulationBase()
+        >>> sim.config.case_study.name = "testing"
+
+        >>> # Save observations to the default data path with the default filename
+        >>> # 'case_studies/testing/data/observations.nc'
+        >>> sim.save_observations() 
+        >>> os.listdir("case_studies/testing/data/")
+        ['observations.nc']
+
+        >>> # Overwrite an existing file without prompting
+        >>> sim.save_observations(force=True)
+        >>> os.listdir("case_studies/testing/data/")
+        ['observations.nc']
+
+        >>> # Save observations to a specific directory with a custom filename
+        >>> sim.save_observations(filename="my_obs.nc", directory="case_studies/testing/data_mod/")
+        >>> os.listdir("case_studies/testing/data_mod/")
+        ['my_obs.nc']
+
+        """
+
+        if directory is None:
+            directory = self.data_path
+            
+        fp = os.path.join(directory, filename)
         if filename != self.config.case_study.observations:
             self.config.case_study.observations = filename
 
+        self._serialize_attrs(self.observations)
+
+        if not os.path.exists(os.path.dirname(fp)):
+            os.makedirs(os.path.dirname(fp))
+
         if not os.path.exists(fp) or force:
-            self.observations.to_netcdf(fp)
+            self.observations.drop_encoding().to_netcdf(fp)
         else:
             if input(f"Observations {fp} exist. Overwrite? [y/N]") == "y":
-                self.observations.to_netcdf(fp)
+                self.observations.drop_encoding().to_netcdf(fp)
 
+    @staticmethod
+    def _serialize_attrs(observations):
+        for key, dv in observations.items():
+            dv.attrs = {
+                k: str(v) for k, v in dv.attrs.items() 
+            }
+
+        return observations
 
     @property
     def coordinates(self):
@@ -379,6 +524,27 @@ class SimulationBase:
         self._coordinates = value
 
     @property
+    def indices(self):
+        return self._indices
+    
+
+    @indices.setter
+    def indices(self, value: Dict[str, np.ndarray]):
+        """Hook in observations.setter makes sure that indices are always updated when
+        observations change. This is backwards compatible with the existing API
+        """
+        # TODO: Check integrity of indices 
+
+        self._indices = value
+
+    def create_indices(self):
+        indices = {}
+        for index in self.config.data_structure.indices:
+            indices.update(self.create_index(index))
+
+        return indices
+
+    @property
     def free_model_parameters(self) -> List[Param]:
         # TODO: Remove when all method has been updated to the new config API
         warnings.warn(config_deprecation, DeprecationWarning)
@@ -395,6 +561,16 @@ class SimulationBase:
     def all_model_parameters(self) -> Dict[str, Param]:
         return self.config.model_parameters.all
 
+    @property
+    def _model_class(self):
+        if self.config.simulation.model_class is not None:
+            module, attr = self.config.simulation.model_class.rsplit(".", 1)
+            _module = importlib.import_module(module)
+            return getattr(_module, attr)
+        else:
+            return None
+
+
     def __repr__(self) -> str:
         return (
             "Simulation(case_study={c}, scenario={s}, version={v})".format(
@@ -410,8 +586,14 @@ class SimulationBase:
         class and imports the typical modules [data, mod, plot, prob, sim]
 
         :meta private:
+
+        TODO: Harmonize this with import_casestudy_modules. This should be as simple as 
+              possible.
         """
-        # test if the case study is installed as a package
+        # test if the case study is installed as a package or if the 
+        # package is at the root of the path (this can also be a single python file). 
+        # If the package, contains an __init__ file, then the package, contains the
+        # respective submodules
         package = self.__module__.split(".")[0]
         spec = importlib.util.find_spec(package)
         if spec is not None and package != "pymob":
@@ -448,38 +630,12 @@ class SimulationBase:
                             f"{module} import *` to import all objects from "
                             "the parent case study."
                         )
-            return
-
-        # This branch is for case studies that are not installed (I guess)
-        # append relevant paths to sys
-        package = os.path.join(
-            self.config.case_study.root, 
-            self.config.case_study.package
-        )
-        if package not in sys.path:
-            sys.path.insert(0, package)
-            print(f"Inserted '{package}' into PATH at index=0")
-    
-        case_study = os.path.join(
-            self.config.case_study.root, 
-            self.config.case_study.package,
-            self.config.case_study.name,
-            # Account for package architecture 
-            self.config.case_study.name,
-        )
-        if case_study not in sys.path:
-            sys.path.insert(0, case_study)
-            print(f"Inserted '{case_study}' into PATH at index=0")
-
-        for module in MODULES:
-            try:
-                m = importlib.import_module(module, package=case_study)
-                setattr(self, f"_{module}", m)
-            except ModuleNotFoundError:
-                warnings.warn(
-                    f"Module {module}.py not found in {case_study}."
-                    f"Missing modules can lead to unexpected behavior."
-                )
+        
+        else:
+            warnings.warn(
+                f"Case study '{package}' could not be imported. Install the case " +
+                f"study with `pip install {package}`. Or place in the root directory."
+            )
 
     def set_logger(self):        
         self.logger = logging.getLogger(f"{type(self).__qualname__}")
@@ -620,6 +776,7 @@ class SimulationBase:
 
     @property
     def coordinates_input_vars(self) -> Dict[str, Dict[str, Dict[str, NDArray]]]:
+        """TODO: Error source. dataset coordinates are unordered."""
         input_vars = ["x_in", "y0"]
 
         # This is a function that could replace the below, to return always
@@ -1345,7 +1502,7 @@ class SimulationBase:
 
         tulpe: tuple of parameters, can have any length.
         """
-        parameters = model_parameters["parameters"]
+        parameters = copy.deepcopy(model_parameters["parameters"])
         parameters.update(free_parameters)
 
         updated_model_parameters = dict(parameters=parameters)
@@ -1439,7 +1596,7 @@ class SimulationBase:
                 category=UserWarning
             )
 
-        if self.config.simulation.y0 is not None:
+        if self.config.simulation.x_in is not None:
             self.model_parameters["x_in"] = self.parse_input(
                 input="x_in", 
                 reference_data=self.observations,
@@ -1447,10 +1604,11 @@ class SimulationBase:
             )
         else:
             warnings.warn(
-                "'sim.config.simulation.y0' is undefined.",
+                "'sim.config.simulation.x_in' is undefined.",
                 category=UserWarning
             )
 
+        self.model_parameters["parameters"] = self.config.model_parameters.value_dict
     
     def dump(self, results):
         pass
@@ -1763,6 +1921,15 @@ class SimulationBase:
         
         batch_dim = self.config.simulation.batch_dimension
         # TODO: There may be a problem, when batch dimension is not defined!
+        dims = list(self.observations.dims.keys())
+
+        if batch_dim not in dims:
+            raise PymobError(
+                f"The batch dimension '{batch_dim}' is not in observation.dims "+
+                f"{dims}. If you want to create indices, the batch " +
+                "dimension has to be properly defined in the config:\n"+
+                f">>> config.simulation.batch_dimension = ... # (use one of {dims})"
+            )
 
         return {coord: xr.DataArray(
                 self.index_coordinates(self.observations[coord].values),
@@ -1834,7 +2001,12 @@ class SimulationBase:
         """Creates a configurable report. To select which items to report and
         to fine-tune the report settings, modify the options in `config.report`.
         """
-        self._report = self.Report(config=self.config, backend=type(self.inferer))
+        self._report = self.Report(
+            config=self.config, 
+            backend=type(self.inferer), 
+            observations=self.observations, 
+            idata=self.inferer.idata
+        )
 
         if self.solver_post_processing is None:
             if self.config.simulation.solver_post_processing is not None:
@@ -1864,3 +2036,192 @@ class SimulationBase:
         # into the report. I think their execution should be continued outside of the report,
         # but they could be linked (as images) inside the report. This way, the report
         # would just have to plot them if available.
+
+    def export(
+        self, 
+        directory: Optional[str] = None,
+        mode: Literal["export", "copy"] = "export",
+        exclude_idata_groups: List[str] = []
+
+    ):
+        """Exports a SimulationBase object to disk. If directory is given, objects are
+        exported to the directory, otherwise, exports are made to sim.output_path
+
+        Parameters
+        ----------
+
+        directory : str
+            Optional. Specifies the directory where the simulation should be exported to.
+            Otherwise exports to output path
+        mode : str
+            If from_directory is used in 'import'-mode, the output, data and scenario
+            paths are changed to take the path of the directory, which means that all
+            output, data, etc. is directed to the directory. If mode='copy', the original
+            paths read from the config file remain as they were. 
+        
+    
+        Notes
+        -----
+
+        This method exports at least two files:
+        - 'settings.cfg' 
+        - 'observations.nc'. 
+        
+        If the inferer was already run, it additionally exports 
+        - 'idata.nc'
+        
+        """
+        if directory is None:
+            directory = self.output_path
+
+        os.makedirs(directory, exist_ok=True)
+
+        data_path_backup = self.config.case_study.data
+        output_path_backup = self.config.case_study.output
+        scenario_path_backup = self.config.case_study.scenario_path_override
+        
+        self.config.case_study.data = directory
+        # FIXME: Setting package to . did not work out with use of pymob infer
+        #        Why did I do this? Make sure it checks out
+        # self.config.case_study.package = "."
+        self.save_observations(directory=directory, force=True)
+
+        if hasattr(self, "inferer"):
+            backend = type(self.inferer).__name__
+        
+            if backend == "NumpyroBackend":
+                self.config.simulation.inferer = "numpyro"
+            elif backend == "ScipyBackend":
+                self.config.simulation.inferer = "scipy"
+            elif backend == "PymooBackend":
+                self.config.simulation.inferer = "pymoo"
+            elif backend == "PyabcBackend":
+                self.config.simulation.inferer = "pyabc"
+            else:
+                raise NotImplementedError(f"Backend: {backend} is not implemented.")
+
+
+            if hasattr(self.inferer, "idata"):
+                idata_path = os.path.join(directory, "idata.nc")
+                # removes the existing file before attempting overwrite. Otherwise
+                # this raises an OS Error
+                if os.access(idata_path, os.W_OK):
+                    os.remove(idata_path)
+
+                self.inferer.idata.to_netcdf(
+                    idata_path, 
+                    groups=[
+                        g for g in self.inferer.idata.groups() 
+                        if g not in exclude_idata_groups
+                    ]
+                )
+            else:
+                pass
+        else:
+            pass
+
+        if mode == "copy":
+            # under copy-mode, the exported scenario file should retain the original
+            # data path. This is temporarily overwritten in from_directory(mode="copy")
+            # and then reset
+            self.config.case_study.data = data_path_backup
+            self.config.save(fp=os.path.join(directory, "settings.cfg"), force=True)
+        elif mode == "export":
+            # under mode export, the data_path in the config file should reflect the 
+            # export directory
+            # output path and scenario paths are irrelevant because they are overwritten
+            # using import mode of from_directory
+            self.config.case_study.output = directory
+            self.config.case_study.scenario_path_override = directory
+            self.config.save(fp=os.path.join(directory, "settings.cfg"), force=True)
+            self.config.case_study.data = data_path_backup
+            self.config.case_study.output = output_path_backup
+            self.config.case_study.scenario_path_override = scenario_path_backup
+
+        else:
+            raise PymobError(textwrap.dedent(
+                """export only supports the modes 'copy' and 'export', please select 
+                one of those options.
+                """
+            ))
+
+
+    @classmethod
+    def from_directory(
+        cls, 
+        directory: str,
+        mode: Literal["import", "copy"] = "import",
+    ) -> _SimulationType:
+        """Imports a SimulationBase from a directory where the simulation had been 
+        exported to with sim.export()
+
+        Parameters
+        ----------
+        directory : str
+            The path to the directory, the required contents of the directory are:
+            'settings.cfg' and 'observations.nc'. Optionally 'idata.nc' can be defined,
+            which contains the posterior. From this a MempySim with completed inference
+            can be initialized
+
+        mode : str
+            If from_directory is used in 'import'-mode, the output, data and scenario
+            paths are changed to take the path of the directory, which means that all
+            output, data, etc. is directed to the directory. If mode='copy', the original
+            paths read from the config file remain as they were. 
+        """
+        cfg_file = os.path.join(directory, "settings.cfg")
+        config = Config(config=cfg_file)
+
+        if mode == "import":
+            config.case_study.data = directory
+            config.case_study.output = directory
+            config.case_study.scenario_path_override = directory
+        elif mode == "copy":
+            data_path_backup = config.case_study.data
+            config.case_study.data = directory            
+        else:
+            raise PymobError(textwrap.dedent(
+                """from_directory only supports the modes 'copy' and 'import', please select 
+                one of those options.
+                """
+            ))
+
+        sim = cls(config)
+        sim.setup()
+
+        if hasattr(sim.config.simulation, "inferer"):
+            sim.set_inferer(sim.config.simulation.inferer)
+            idata = os.path.join(directory, "idata.nc")
+            if os.path.exists(idata):
+                # load transfers the idata object into memory, which is important
+                # for decoupling it from the underlying file, which may be used
+                # for 
+                sim.inferer.idata = az.from_netcdf(idata).load()
+            else:
+                pass
+        else:
+            pass
+
+        if mode == "copy":
+            # reset the data path to its original value, so that the copied simulation
+            # is equivalent to the original one.
+            sim.config.case_study.data = data_path_backup
+
+        return sim
+
+    def copy(self: _SimulationType, exclude_idata_groups: List[str] = []) -> _SimulationType:
+        """Creates a copy of a SimulationBase object by exporting to a temporary directory
+        in the output path and importing again from that directoy. The temporary directory
+        is destroyed directly afterwards
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            # create the tempdir in the output path, because a default temporary directory
+            # may not have enough space. Using the output path here resolves any path issues.
+            tmp_basedir = os.path.join(self.output_path, "_tmp")
+            os.makedirs(tmp_basedir, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir=tmp_basedir) as name:
+                self.export(directory=name, mode="copy", exclude_idata_groups=exclude_idata_groups)
+                sim_copy: _SimulationType = type(self).from_directory(name, mode="copy")
+
+        return sim_copy

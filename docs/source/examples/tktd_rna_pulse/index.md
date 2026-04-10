@@ -9,6 +9,6 @@ The toxicokinetic-toxicodynamic TKTD-RNA Pulse model is a description of the tox
 ```{toctree}
 :maxdepth: 1
 
-tktd_rna_3_6c_substance_specific.md
-tktd_rna_3_6c_substance_independent.md
+tktd_rna_5_substance_specific.md
+tktd_rna_5_substance_independent.md
 ```

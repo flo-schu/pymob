@@ -5,16 +5,16 @@ import pytest
 
 from pymob.solvers.diffrax import JaxSolver
 from pymob.sim.config import Config, DataVariable, Modelparameters
-from pymob.sim.parameters import Param, RandomVariable, Expression, OptionRV
+from pymob.sim.config import Param, RandomVariable, Expression, OptionRV
 from pymob.simulation import SimulationBase
 from pymob.utils.store_file import prepare_casestudy
 from pymob.examples import linear_model
 
-from lotka_volterra_case_study.sim import Simulation
-
 rng = np.random.default_rng(1)
 
 def init_simulation_casestudy_api(scenario="test_scenario"):
+    from lotka_volterra_case_study.sim import Simulation # type: ignore
+
     config = prepare_casestudy(
         case_study=("lotka_volterra_case_study", scenario),
         config_file="settings.cfg",
@@ -31,7 +31,7 @@ def init_case_study_and_scenario(case_study, scenario, package="case_studies") -
         f"{package}/{case_study}/scenarios/{scenario}/settings.cfg"
     )
     config.case_study.package = package
-    config.import_casestudy_modules(reset_path=True)
+    config.import_casestudy_modules()
     Simulation = config.import_simulation_from_case_study()
     
     sim = Simulation(config)
@@ -123,6 +123,7 @@ def init_lotka_volterra_case_study_hierarchical_from_settings(
         "test_hierarchical",
         "test_hierarchical_presimulated",
         "lotka_volterra_hierarchical_presimulated_v1",
+        "lotka_volterra_hierarchical_final",
     ] = "test_hierarchical_presimulated"
 ) -> SimulationBase:
     config = Config(f"case_studies/lotka_volterra_case_study/scenarios/{scenario}/settings.cfg")

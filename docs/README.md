@@ -1,5 +1,39 @@
 # Documentation developer documentation
 
+## Building the documentation
+
+The build process of the documentation is containerized in these commands.
+They are used in jobs that extend the build process configured in the `.readthedocs.yml` 
+config file (https://docs.readthedocs.com/platform/stable/build-customization.html) but 
+can also be executed locally with a linux terminal.
+
+```bash
+# run the doctests (pre_build)
+bash ./docs/run_doctest.sh
+
+# build the documentation with sphinx (build)
+bash ./docs/build_documentation.sh
+
+# this is a post_build job
+bash ./docs/build_user_guide.sh
+
+# this is a post_build job
+# can be run with the no-execute argument to disable executing the notebook
+# ATTENTION!! Make sure that the notebooks listed in the index of the docs/examples are matched by the names of the notebooks in the scripts folder of the case study 
+bash ./docs/build_examples.sh
+```
+
+Testing the notebooks is thereby the responsibility of the case study provider.
+
+TODO: What I could do in the future is add a watermark, which version of pymob was used to gernerate the case-study. Or next level, build the examples on push and save as an artifact so they can be downloaded
+
+### Check list
+
+- [ ] If case studies were updated go to the respective branch
+      of the release (e.g. releases/0.5.x) and execute the jupyter notebooks locally with the latest pymob version and upload to the remote repository 
+- [ ] push to the pymob remote to trigger a documentation 
+      build. This will run doctests, execute the user guide pull the examples and convert them to notebooks
+
 
 ## Executing and building examples.
 
@@ -26,6 +60,9 @@ pytest --doctest-modules --disable-warnings \
     --ignore=inference/optimization.py
 cd ..
 ```
+
+This is now implemented in `docs/run_doctests.sh`.
+
 ### Testing inference
 
 + LONG INFERENCE -> CASE STUDY
@@ -66,6 +103,11 @@ jupyter nbconvert --to markdown --execute --output_dir docs/source/examples/CASE
 # repeat last step for 2nd example, ...
 ```
 
+Case studies should be selected carefully. Not any case study should be taken up in the
+examples, because maintaining them with each pymob release (minor version), would become
+increasingly tedious. On the flip side, maintaining case studies and ensuring they are 
+always compatible to the latest pymob release would make experiences with pymob much more
+smooth.
 
 
 These commands should be integrated in pre-release CI pipelines. This is because more sophisticated notebooks, will take quite some time to compile. This is usually unnecessary when making development releases or pre-releases. But when updating the standard release available at `pip install pymob` (e.g. 0.4.1), then the examples in the documentation must be tested.

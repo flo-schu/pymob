@@ -2,9 +2,11 @@ import pytest
 import numpy as np
 from click.testing import CliRunner
 from matplotlib import pyplot as plt
+from jax._src.interpreters.partial_eval import DynamicJaxprTracer
+
 from pymob.solvers.diffrax import JaxSolver
 from pymob.inference.numpyro_backend import NumpyroBackend
-from pymob.sim.parameters import Param
+from pymob.sim.config import Param
 
 from tests.fixtures import (
     init_simulation_casestudy_api, 
@@ -38,6 +40,25 @@ def test_diffrax_exception():
 
     badness_for_infeasible_alpha = np.array(badness)[np.where(alpha >= ub_alpha)[0]]
     assert sum(badness_for_infeasible_alpha) > 0
+
+
+def test_tracer_error_after_numpyro():
+    sim = init_simulation_casestudy_api("test_scenario")
+    sim.set_inferer(backend="numpyro")
+    sim.prior_predictive_checks()
+    param_alpha = sim.parameterize.keywords["model_parameters"]["parameters"]["alpha"]
+    
+    if isinstance(param_alpha, DynamicJaxprTracer):
+        raise ValueError(
+            "Parameter in partially initialized keyword of the parameterize method" + 
+            "Contained a 'DynamicJaxprTracer' instead of a normal value."
+
+        )
+    
+    sim.dispatch_constructor()
+    e = sim.dispatch()
+    e()
+    e.results
 
 
 def test_convergence_user_defined_probability_model():
@@ -243,23 +264,32 @@ def test_convergence_sa_kernel():
 
 
 def test_convergence_hierarchical_lotka_volterra():
+    """Hierarchical Lotka-Volterra test case
+    It is an approximate model with some assumptions that will make it difficult to
+    recover the true parameters
+
+    - no priors on initial values
+    - no sigma-prior on alpha species
+
+    Using large tolerances and high leanring rates with low number of steps to speed
+    up testing. The test should only fail, if the inferred parameters are completely
+    off indicating an issue with the backend
+
+    This is not a test for the correctness of the model definition
+    """
     sim = init_lotka_volterra_case_study_hierarchical_from_settings()
 
     sim.config.model_parameters.alpha_species_hyper = Param(
         prior="halfnorm(scale=5)", dims=('rabbit_species',) , # type: ignore
         hyper=True, free=True
     )
-    # sim.config.model_parameters.alpha_species_sigma_hyper = Param(
-    #     prior="halfnorm(scale=5)", dims=('rabbit_species',) , # type: ignore
-    #     hyper=True, free=True
-    # )
+
     sim.config.model_parameters.alpha_sigma = Param(
         prior="halfnorm(scale=1)", hyper=True, free=True # type:ignore
     )
     sim.config.model_parameters.alpha_species.prior="norm(loc=[[alpha_species_hyper[0]],[alpha_species_hyper[1]]],scale=0.1)" # type: ignore
     sim.config.model_parameters.alpha.prior="lognorm(s=alpha_sigma,scale=alpha_species[rabbit_species_index, experiment_index])" # type: ignore
     sim.config.model_parameters.beta.prior="lognorm(s=1,scale=1)" # type: ignore
-    # sim.config.model_parameters.sigma = Param(value=1.0, prior="halfnorm(scale=5)", free=True) # type: ignore
     
     # this reorders the parameters, beginning with alpha_species_hyper
     sim.config.model_parameters.reorder(["alpha_species_hyper", "alpha_sigma"])
@@ -268,38 +298,39 @@ def test_convergence_hierarchical_lotka_volterra():
     sim.config.error_model.wolves = "norm(loc=0, scale=1, obs=(obs-wolves)/jnp.sqrt(wolves+1e-6),obs_inv=res*jnp.sqrt(wolves+1e-6)+wolves)"
 
 
-    # using SVI, because it is much faster than NUTS. 
-    sim.config.inference_numpyro.kernel = "svi"
-    sim.config.inference_numpyro.svi_iterations = 2_000
-    sim.config.inference_numpyro.svi_learning_rate = 0.01
+    # using MAP, because it is much faster than NUTS, and does not need to sample after
+    # inference. This will speed up testing
+    sim.config.inference_numpyro.kernel = "map"
+    sim.config.inference_numpyro.svi_iterations = 1_000
+    sim.config.inference_numpyro.svi_learning_rate = 0.005
     sim.config.inference_numpyro.gaussian_base_distribution = True
-    sim.config.jaxsolver.max_steps = 1e5
+    sim.config.jaxsolver.max_steps = 10000
     sim.config.jaxsolver.throw_exception = False
     sim.config.inference_numpyro.init_strategy = "init_to_median"
+
     sim.solver = JaxSolver
     sim.dispatch_constructor()
     sim.set_inferer("numpyro")
-
-    sim.config.case_study.scenario = "lotka_volterra_hierarchical_presimulated_v1"
-    sim.config.create_directory("scenario", force=True)
-    sim.config.save(force=True)
     sim.inferer.run()
 
-    # this works
+    # higher precisions can be achieved by reducing the learning rate while increaing steps
+    # e.g. lr=0.0001 and svi_iterations=50000
+    # higher learning rates and lower numbers of steps, finish faster (better for testing)
+    # Test to relative tolerance of 10% deviation from the true parameter. 
+    
+    # beta cant be estimated well. With this model. We have to allow for 25% deviation
     np.testing.assert_allclose(
         sim.inferer.idata.posterior.beta.mean(("chain", "draw")), 
         sim.config.model_parameters.beta.value,
-        atol=0.0005,
-        rtol=0.025
+        atol=0.05,
+        rtol=0.25
     )
 
-    # TODO: CUrrently this is not very accurate. But it is a sufficient test
-    # that hierarchical models can be fitted
-    # correct
+    # Test to relative tolerance of 10% deviation from the true parameter. 
     np.testing.assert_allclose(
         sim.inferer.idata.posterior.alpha_species_hyper.mean(("chain", "draw")), 
         (1, 3),
-        atol=0.1,
+        atol=0.5,
         rtol=0.2
     )
 

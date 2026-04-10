@@ -88,7 +88,7 @@ def rename_extra_dims(df, extra_dim_suffix="_dim_0", new_dim="new_dim", new_coor
 
 
 
-def plot_trace(idata, var_names, output):
+def plot_trace(idata, var_names, output,  only_dist=False):
     """
     TODO: Should be outsourced to pymob.sim.plot
     """
@@ -98,15 +98,32 @@ def plot_trace(idata, var_names, output):
             idata["sample_stats"]["diverging"] = idata["sample_stats"].diverging.astype(int)
 
     if hasattr(idata, "posterior"):
-        axes = az.plot_trace(
-            idata,
-            var_names=var_names
-        )
-        fig = plt.gcf()
-        fig.tight_layout()
-        fig.savefig(output)
 
-    return fig, output
+        if only_dist:
+            h = len(var_names) * 2
+            fig_trace, axes_trace = plt.subplots(len(var_names),  1, figsize=(5, h))
+            fig_dist, axes_dist = plt.subplots(len(var_names), 1, figsize=(5, h))
+            _ = az.plot_trace(
+                idata,
+                var_names=var_names,
+                axes=np.array([axes_dist, axes_trace]).T,
+            )
+            plt.close(fig=fig_trace)
+            fig_dist.tight_layout()
+            fig_dist.savefig(output)
+            fig_trace = fig_dist
+        else:
+            h = len(var_names) * 2
+            fig_trace, axes_trace = plt.subplots(len(var_names),  2, figsize=(10.5, h))
+            _ = az.plot_trace(
+                idata,
+                var_names=var_names,
+                axes=axes_trace
+            )
+            fig_trace.tight_layout()
+            fig_trace.savefig(output)
+
+    return fig_trace, output
 
 def plot_pairs(idata, var_names, output):
     """
@@ -339,7 +356,10 @@ def create_table(
         stacked_tab = tab.sel(metric=["mean", "hdi_3%", "hdi_97%"])\
             .assign_coords(metric=["mean", "hdi 3%", "hdi 97%"])\
             .stack(col=stack_cols)
-        table = stacked_tab.to_dataframe().T.drop(list(stack_cols))
+        # Migrating xarray from 2023.11 -> 2026.02 fixed the .drop() method
+        # rows that are already in the index are not duplicated anymore, which
+        # removes the need for dropping them from the dataframe.
+        table = stacked_tab.to_dataframe().T
 
     else:
         raise NotImplementedError("Must use one of 'sd' or 'hdi'")

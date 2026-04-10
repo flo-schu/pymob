@@ -1,6 +1,6 @@
 import os
 from functools import wraps
-from typing import List, Dict, Optional, Literal, Callable
+from typing import List, Dict, Optional, Literal, Callable, TYPE_CHECKING
 import inspect
 import subprocess
 import warnings
@@ -8,9 +8,13 @@ import warnings
 import numpy as np
 import arviz as az
 import pandas as pd
+import xarray as xr
 from matplotlib import pyplot as plt
 from pymob.sim.config import Config
 from pymob.inference.analysis import create_table, log, nrmse, bic, log_lik, plot_trace, plot_pairs
+
+if TYPE_CHECKING:
+    from pymob.inference.base import PymobInferenceData
 
 def reporting(method):
     @wraps(method)
@@ -167,11 +171,29 @@ def _bic_from_idata(
 class Report:
     """Creates a configurable report. To select which items to report and
     to fine-tune the report settings, modify the settings in `config.report`.
+
+    In addition to the config, it provides the main components of a simulation from
+    which all relevant parts of the simulation can be derived
+
+    - config
+    - backend
+    - observations
+    - idata
+
     """
     obs_transform_funcs = {}
-    def __init__(self, config: Config, backend: type):
+    def __init__(
+        self, 
+        config: Config, 
+        backend: type, 
+        observations: xr.Dataset, 
+        idata: "PymobInferenceData",
+    ):
         self.config = config
         self.backend = backend
+        self.observations = observations
+        self.idata = idata
+
         self.rc = config.report
         self.file = os.path.join(self.config.case_study.output_path, "report.md")
 
@@ -244,6 +266,7 @@ class Report:
             "--resource-path=..",
             f"--extract-media=media/{self.config.case_study.name}_{self.config.case_study.scenario}",
             "--standalone",
+            "--mathjax",
             f"--output={self.config.case_study.name}_{self.config.case_study.scenario}.html",
             "../report.md"
         ])
@@ -544,17 +567,54 @@ class Report:
         plt.close()
         self._write("![Paired parameter estimates](posterior_pairs.png)")
 
-        _, out_trace = plot_trace(
-            idata=idata, var_names=list(var_names.keys()), output=os.path.join(out, "posterior_trace.png")
-        )
-        plt.close()
-        
+
+
         if self.backend.__name__ == "NumpyroBackend":
-            if self.config.inference_numpyro.kernel.lower() != "mcmc":
-                msg = "Psuedo trace, generated for draws from the optimized SVI distribution"
+            if self.config.inference_numpyro.kernel.lower() == "svi":
+                fig_trace, out_trace = plot_trace(
+                    idata=idata, 
+                    var_names=list(var_names.keys()), 
+                    output=os.path.join(out, "posterior_trace.png"),
+                    only_dist=True
+                )
+                msg = "Kernel density estimate (KDE) of the marginal distributions, generated from SVI samples."
+                self._write(f"![{msg}](posterior_trace.png)")
+
+                msg2 = (
+                    "SVI loss curve. Shows the convergence of the optimization. The "+
+                    "upper panel shows the evolution of loss values over iterations " +
+                    "the lower panel shows the approximated gradient of the (smoothed) "+
+                    "loss curve. It's stabilization near zero is an indication of " +
+                    "convergence. The gray window in the upper-right corner is the "+
+                    "section of the smoothed loss curve analyzed for convergence."
+                )
+                self._write(f"![{msg2}](svi_loss_curve.png)")
+
+            
             else:
-                msg = "Traceplot, generated from MCMC draws. "
-        self._write(f"![{msg}](posterior_trace.png)")
+                fig_trace, out_trace = plot_trace(
+                    idata=idata, 
+                    var_names=list(var_names.keys()), 
+                    output=os.path.join(out, "posterior_trace.png"),
+                    only_dist=False
+                )
+                msg = (
+                    "Kernel density estimate (KDE) of the marginal distributions and "+
+                    "traceplot, generated from MCMC " +
+                    f"({self.config.inference_numpyro.kernel.lower()}) draws. "
+                )
+                self._write(f"![{msg}](posterior_trace.png)")
+
+        else:
+            fig_trace, out_trace = plot_trace(
+                idata=idata, 
+                var_names=list(var_names.keys()), 
+                output=os.path.join(out, "posterior_trace.png"),
+                only_dist=False
+            )
+            msg = "Marginal distributions and traceplot, generated from  draws. "
+            self._write(f"![{msg}](posterior_trace.png)")
+        plt.close(fig=fig_trace)
 
         return out_pairs, out_trace
 

@@ -23,9 +23,14 @@ config/settings.json
 docs/build
 build
 
+.vscode
 .env
 
 # linked case studies
 bufferguts
 guts_base
 docs/source/*/case_studies
+docs/source/examples/lotka_volterra_case_study/*
+!docs/source/examples/lotka_volterra_case_study/index.md
+docs/source/examples/tktd_rna_pulse/*
+!docs/source/examples/tktd_rna_pulse/index.md

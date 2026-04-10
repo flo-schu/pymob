@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import norm
 
 from pymob.inference.scipy_backend import ScipyBackend
-from pymob.sim.parameters import Param
+from pymob.sim.config import Param
 from pymob.solvers.diffrax import JaxSolver
 
 from tests.fixtures import init_lotka_volterra_case_study_hierarchical_from_script
@@ -135,6 +135,50 @@ def test_parameter_parsing_different_priors_on_year():
     np.testing.assert_array_almost_equal(
         [alpha_2010, alpha_2011, alpha_2012], [1, 2, 3], decimal=1
     )
+
+def test_error_model():
+    sim = init_lotka_volterra_case_study_hierarchical_from_script()
+    
+    sim.config.model_parameters.alpha_species = Param(
+        value=0.5, free=True, hyper=True, dims=('rabbit_species','experiment'),
+        prior="halfnorm(loc=[[1,0.1,0.5]],scale=0.1)" # type: ignore
+    )
+    # prey birth rate
+    sim.config.model_parameters.alpha = Param(
+        value=0.5, free=True, hyper=True, dims=('id',),
+        prior="lognorm(s=0.1,scale=alpha_species[rabbit_species_index, experiment_index])" # type: ignore
+    )
+
+    # re initialize the observation with
+    sim.define_observations_replicated_multi_experiment(n=6) # type: ignore
+    y0 = sim.parse_input("y0", drop_dims=["time"])
+    sim.model_parameters["y0"] = y0
+
+    # too low tolerances break the solver (negative values)
+    sim.config.jaxsolver.atol=1e-8
+    sim.config.jaxsolver.rtol=1e-7
+    sim.config.jaxsolver.diffrax_solver = "Tsit5"
+    sim.config.jaxsolver.max_steps = 1e6
+
+    sim.coordinates["time"] = [0,10]
+    sim.model_parameters["parameters"] = sim.config.model_parameters.value_dict
+    
+    sim.dispatch_constructor()
+
+    inferer = ScipyBackend(simulation=sim)
+
+    # prior predictive mode
+    res = inferer.inference_model(theta=None, observations=None)
+    
+    # likelihood mode
+    inferer.inference_model(theta=res["theta"], observations=res["observations"])
+    
+    # posterior_predictive mode
+    inferer.inference_model(theta=res["theta"], observations=None)
+    
+    # sampling mode
+    inferer.inference_model(theta=None, observations=res["observations"])
+    
 
 
 

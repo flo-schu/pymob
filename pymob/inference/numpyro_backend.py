@@ -6,6 +6,7 @@ from typing import (
     Tuple, Dict, Union, Optional, Callable, Literal, List, Any,
     Protocol
 )
+import importlib
 
 from tqdm import tqdm
 import numpy as np
@@ -17,7 +18,7 @@ from arviz.data.inference_data import SUPPORTED_GROUPS_ALL
 
 import pymob
 from pymob.simulation import SimulationBase
-from pymob.sim.parameters import Expression, NumericArray
+from pymob.sim.config import Expression, NumericArray
 from pymob.inference.base import Errorfunction, InferenceBackend, Distribution
 from pymob.inference.analysis import (
     cluster_chains, rename_extra_dims, plot_posterior_samples,
@@ -143,10 +144,22 @@ class NumpyroBackend(InferenceBackend):
             self.inference_model = self.parse_probabilistic_model()
 
         if self.user_defined_error_model is not None:
-            user_error_model = getattr(
-                self.simulation._prob,
-                self.user_defined_error_model
-            )
+            if "." in self.user_defined_error_model:
+                # if "." in the name of the model assume that this is the 
+                # fully quailified name of the function (including module)
+                module, func = self.user_defined_error_model.rsplit(".", 1)
+                
+                # import the module
+                _module = importlib.import_module(module)
+            else:
+                # if not qualified name
+                # use plain name, assuming this is the function
+                func = self.user_defined_error_model
+
+                # use already imported _prob module from the case study
+                _module = self.simulation._prob
+
+            user_error_model = getattr(_module, func)
 
             self.inference_model = partial(
                 self.inference_model,
@@ -592,13 +605,7 @@ class NumpyroBackend(InferenceBackend):
                 iterations=self.svi_iterations,
             )
 
-            # plot loss curve
-            fig, ax = plt.subplots(1, 1)
-            ax.plot(svi_result.losses)
-            ax.set_yscale("log")
-            ax.set_ylabel("Loss")
-            ax.set_xlabel("Iteration")
-            fig.savefig(f"{self.simulation.output_path}/svi_loss_curve.png")
+            self._assess_svi_convergence(svi_result=svi_result)
 
             # save idata and print summary
             draws = 1 if self.kernel.lower() == "map" else self.draws
@@ -612,6 +619,59 @@ class NumpyroBackend(InferenceBackend):
                 f"Kernel {self.kernel} is not implemented. "+
                 "Use one of nuts, sa, svi, map"
             )
+        
+    def _assess_svi_convergence(self, svi_result):
+        # apply really strong convolution, because of the extreme stochasticity
+        losses = xr.DataArray(
+            np.array(svi_result.losses), 
+            coords={"iteration": range(len(svi_result.losses))}
+        )
+
+        kernel_size = int(len(losses) * 0.1)
+        kernel = np.ones(kernel_size) / kernel_size
+        convloss = np.convolve(
+            losses.interpolate_na(dim="iteration", method="linear").values, 
+            v=kernel, mode="valid"
+        )
+
+        change_convloss = np.gradient(convloss)
+        nc = len(change_convloss) 
+        sc = int(kernel_size/2)
+        # assess the mean value of the last 5% of the iterations to know if the 
+        # optimization has converged. 
+        caw = int(kernel_size * 0.5)  # convergence assessment window
+        change_avg = change_convloss[-caw:].mean()
+        change_std = change_convloss[-caw:].std()
+
+        if np.abs(change_avg) < 0.0001:
+            msg = "converged"
+        else:
+            msg = "not converged" 
+
+        msg += f"\navg. $\Delta$ = {change_avg:.1e} $\pm$ {change_std:.1e}"
+
+        if msg == "not converged":
+            warnings.warn(
+                f"SVI optimization did not converge ('{msg}')! Increase the iterations "+
+                "of the algorithm `config.inference_numpyro.svi_iterations = ...`. Currently "+
+                f"svi_iterations={self.config.inference_numpyro.svi_iterations}."
+            )
+
+        # plot loss curve
+        fig, (ax, axconv) = plt.subplots(2, 1, sharex=True)
+        # fig, ax = plt.subplots(1, 1)
+        ax.plot(svi_result.losses)
+        ax.set_yscale("log")
+        axconv.hlines(change_avg * 2, nc-caw+sc+1, nc+sc+1, lw=10, color="grey", alpha=.2)
+        axconv.axhline(0, color="grey", lw=.5)
+        axconv.plot(range(sc, nc+sc),  change_convloss)
+        axconv.set_yscale("linear")
+        axconv.set_ylabel("$\Delta$ Convoluted Loss")
+        axconv.text(0.95, 0.05, msg, transform=axconv.transAxes, ha="right", va="bottom")
+        ax.set_ylabel("Loss")
+        axconv.set_xlabel("Iteration")
+        fig.tight_layout()
+        fig.savefig(f"{self.simulation.output_path}/svi_loss_curve.png")
         
     def run_mcmc(self, model, keys, kernel):
         if kernel == "sa":
@@ -1364,17 +1424,19 @@ class NumpyroBackend(InferenceBackend):
                 replace=False, 
                 shape=(n_draws, ) # type: ignore
             )
-            posterior = posterior.isel(draw=selection)
+            posterior_subset = posterior.isel(draw=selection)
 
+        else:
+            posterior_subset = posterior
 
         preds = []
         with tqdm(
-            total=posterior.sizes["chain"] * posterior.sizes["draw"],
+            total=posterior_subset.sizes["chain"] * posterior_subset.sizes["draw"],
             desc="Posterior predictions"
         ) as pbar:
-            for chain in posterior.chain:
-                for draw in posterior.draw:
-                    theta_arr = posterior.sel(draw=draw, chain=chain)
+            for chain in posterior_subset.chain:
+                for draw in posterior_subset.draw:
+                    theta_arr = posterior_subset.sel(draw=draw, chain=chain)
                     theta_dict = self.get_dict(theta_arr)
                     
                     # calculate deterministic simulation with parameter samples
