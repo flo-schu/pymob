@@ -1921,7 +1921,7 @@ class SimulationBase:
         
         batch_dim = self.config.simulation.batch_dimension
         # TODO: There may be a problem, when batch dimension is not defined!
-        dims = list(self.observations.dims.keys())
+        dims = list(self.observations.sizes.keys())
 
         if batch_dim not in dims:
             raise PymobError(

@@ -648,7 +648,7 @@ class NumpyroBackend(InferenceBackend):
         else:
             msg = "not converged" 
 
-        msg += f"\navg. $\Delta$ = {change_avg:.1e} $\pm$ {change_std:.1e}"
+        msg += f"\navg. $\\Delta$ = {change_avg:.1e} $\\pm$ {change_std:.1e}"
 
         if msg == "not converged":
             warnings.warn(
@@ -666,7 +666,7 @@ class NumpyroBackend(InferenceBackend):
         axconv.axhline(0, color="grey", lw=.5)
         axconv.plot(range(sc, nc+sc),  change_convloss)
         axconv.set_yscale("linear")
-        axconv.set_ylabel("$\Delta$ Convoluted Loss")
+        axconv.set_ylabel("$\\Delta$ Convoluted Loss")
         axconv.text(0.95, 0.05, msg, transform=axconv.transAxes, ha="right", va="bottom")
         ax.set_ylabel("Loss")
         axconv.set_xlabel("Iteration")
