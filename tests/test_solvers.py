@@ -1,6 +1,7 @@
 import os
 import time
 import numpy as np
+import xarray as xr
 import pytest
 
 from pymob.sim.config import Param, DataVariable
@@ -9,6 +10,7 @@ from pymob.solvers.base import rect_interpolation
 from tests.fixtures import (
     init_simulation_casestudy_api, 
     init_lotkavolterra_simulation_replicated,
+    init_case_study_and_scenario,
     setup_solver
 )
 
@@ -219,20 +221,26 @@ def test_rect_interpolation():
     # TODO: Use another test for making sure, the interpolation works. This
     # is not the right place. A mini Simulation using interpolated data would
     # be great.
-    sim: SimulationBase
+    sim: SimulationBase = init_case_study_and_scenario(
+        case_study="lotka_volterra_case_study",
+        scenario="test_scenario_v2_temperature_forcing"
+    )
     
-    # TODO: Use another test for making sure, the interpolation works. This
-    # is not the right place. A mini Simulation using interpolated data would
-    # be great.
-    sim = None
-    pytest.skip()
-    sim.use_jax_solver() # type: ignore
 
-    # x input is defined on the interval [0,179]
-    x_in = sim.parse_input(input="x_in", reference_data=sim.observations, drop_dims=[])
-    # rect_interpolation adds duplicates the last y_179 for x_180
-    x_in = rect_interpolation(x_in=x_in, x_dim="time")
-    sim.model_parameters["x_in"] = x_in
+    temperature = xr.Dataset(dict(
+        time = ("time", [0, 50, 100, 150, 200]),
+        temperature = ("time", [20, 19, 20, 22, 0])
+    ))
+
+    sim.observations = xr.combine_by_coords([sim.observations, temperature])
+
+    # sim.save_observations(filename="noisy_observations_temperature")
+
+    sim.observations["temperature"] = temperature.temperature
+    x_in = sim.parse_input("x_in", reference_data=sim.observations)
+    sim.model_parameters["x_in"] = rect_interpolation(x_in, x_dim="time")
+
+
 
     # Interpolations in diffrax now jump each discontinuity until the last time
     # that is evaluated by the solver. This is not jumped, so that it can be 
@@ -244,10 +252,18 @@ def test_rect_interpolation():
     # this works and will not return a discontinuity, because jump_ts in the
     # PIDController of diffrax, is told that it shoud jump all ts that are 
     # smaller than x_stop
-    sim.coordinates["time"] = np.linspace(0, sim.t_max - 1, 1000) #type: ignore
+    sim.coordinates["time"] = np.linspace(0, sim.coordinates["time"].max() - 1, 1000) #type: ignore
     sim.dispatch_constructor(max_steps=1e5, throw_exception=True, pcoeff=0.0, icoeff=0.25)
     e = sim.dispatch(theta={})
     e()
+    e.results
+
+
+    pytest.skip()
+    # TODO: save new results with some extra noise and the non-interpolated temperatures
+    # TODO: do some comparisons
+    # TODO: Test with linear interpolation (leaving in NaNs)
+    # TODO: Test with cubic interpolations
 
     # assert that the interpolation produces no infinity values 
     np.testing.assert_array_equal(
