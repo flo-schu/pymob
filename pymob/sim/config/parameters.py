@@ -1,7 +1,7 @@
 import ast
 import warnings
 import inspect
-from typing import Optional, List, Dict, Tuple, Any, Union
+from typing import Optional, List, Dict, Tuple, Any, Union, Literal
 from typing_extensions import Annotated
 
 import scipy
@@ -9,12 +9,12 @@ import numpy as np
 import xarray as xr
 from pydantic import BaseModel, ConfigDict, model_serializer, field_validator, model_validator, Field
 from pydantic.functional_validators import BeforeValidator
-from numpydantic import NDArray, Shape
+from numpydantic import NDArray
 
 NumericArray = Union[
-    NDArray[Shape["*, ..."], float],  # noqa: F722
-    NDArray[Shape["*, ..."], int],  # noqa: F722
-] 
+    NDArray[Literal["*, ..."], float],
+    NDArray[Literal["*, ..."], int],
+]
 
 class Expression:
     """Random variables are context dependent. They may be dependent on other

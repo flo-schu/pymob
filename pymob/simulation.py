@@ -1098,10 +1098,9 @@ class SimulationBase:
                     )
             else:
                 if len(new_dims) == 0:
-                    value = float(value)
+                    value = np.asarray(float(value.item()))
                 else:
-                    value = np.broadcast_to(value, tuple(new_dims.values()))
-
+                    value = np.broadcast_to(np.asarray(value), tuple(new_dims.values()))
 
             value = xr.DataArray(value, coords=input_coords)
             input_dataset[key] = value
