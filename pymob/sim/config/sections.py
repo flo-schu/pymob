@@ -20,7 +20,7 @@ from pydantic import (
 from pydantic.functional_validators import BeforeValidator
 from pydantic.functional_serializers import PlainSerializer
 
-from pymob.sim.config.parameters import Param, NumericArray, OptionRV
+from pymob.sim.config.parameters import Param, NumericArray, OptionRV, to_rv, to_rv_opt
 # this loads at the import of the module
 default_path = sys.path.copy()
 
@@ -252,6 +252,21 @@ def string_to_list(option: Union[List, str]) -> List:
         return [option] 
     else:
         return [i.strip() for i in option.split(" ")]
+
+
+def string_to_floatlist(option: Union[List, str]) -> List[float]:
+    """Convert a string or list/tuple to a list of floats."""
+    return [float(i) for i in string_to_list(option)]
+
+
+def string_to_intlist(option: Union[List, str]) -> List[int]:
+    """Convert a string or list/tuple to a list of ints."""
+    return [int(i) for i in string_to_list(option)]
+
+
+def string_to_rv_optlist(option: Union[List, str]) -> List[Any]:
+    """Convert a string or list/tuple to a list of optimizer random variables."""
+    return [to_rv_opt(i) for i in string_to_list(option)]
 
 
 def string_to_tuple(option: Union[List, str]) -> Tuple:
@@ -1152,6 +1167,32 @@ class Modelparameters(PymobModel):
         self.all = {k: self.all[k] for k in keys} 
 
 
+def string_to_modelparams(option: str | Modelparameters) -> Modelparameters:
+    if isinstance(option, Modelparameters):
+        return option
+    else:
+        modelparams_dict = Modelparameters()
+        if option != "":
+            for substring in option.split("  "):
+                name, value = substring.split(" = ")
+                setattr(modelparams_dict, name, string_to_param(value))
+        return Modelparameters.model_validate(modelparams_dict, strict=False)
+
+
+def modelparams_to_string(mprms: Modelparameters) -> str:
+    string = ""
+    for (key, item) in mprms.all.items():
+        string += key + " = " + param_to_string(item) + "  "
+    return string
+
+
+serialize_modelparams_to_string = PlainSerializer(
+    modelparams_to_string,
+    return_type=str,
+    when_used="json"
+)
+
+
 class Errormodel(PymobModel):
     """
     Container for error-model specifications.
@@ -1302,6 +1343,46 @@ class Numpyro(PymobModel):
     # parameters
     svi_iterations: Annotated[int, to_str] = 10_000
     svi_learning_rate: Annotated[float, to_str] = 0.0001
+
+
+class Optax(PymobModel):
+    """
+    Configuration for the Optax inference backend.
+
+    Attributes
+    ----------
+    MLP_weight_dist, MLP_bias_dist : OptionRV
+        Prior distributions for MLP weights and biases.
+    length_strategy, steps_strategy, optim_strategy, clip_strategy : list
+        Training schedule definitions.
+    batch_size : int
+        Batch size for training.
+    data_split : float
+        Train/test split fraction.
+    multiple_runs_target, multiple_runs_limit : int
+        Limits for repeated training runs.
+    time_limit : int
+        Time limit per run (seconds).
+    indepth : Literal["off", "partial", "full"]
+        Level of detail for diagnostics.
+    """
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
+
+    MLP_weight_dist: OptionRV = to_rv("normal()")
+    MLP_bias_dist: OptionRV = to_rv("normal()")
+    length_strategy: Annotated[list, BeforeValidator(string_to_floatlist), serialize_list_to_string] = [0.1, 1]
+    steps_strategy: Annotated[list, BeforeValidator(string_to_intlist), serialize_list_to_string] = [1000, 1000]
+    optim_strategy: Annotated[list, BeforeValidator(string_to_rv_optlist), serialize_list_to_string] = [
+        to_rv_opt("adabelief(learning_rate=1e-3)"),
+        to_rv_opt("adabelief(learning_rate=1e-3)")
+    ]
+    clip_strategy: Annotated[list, BeforeValidator(string_to_floatlist), serialize_list_to_string] = [0.1, 0.1]
+    batch_size: Annotated[int, to_str] = 1
+    data_split: float = 0.8
+    multiple_runs_target: Annotated[int, to_str] = 10
+    multiple_runs_limit: Annotated[int, to_str] = 50
+    time_limit: Annotated[int, to_str] = 600
+    indepth: Literal["off", "partial", "full"] = "off"
 
 
 class Report(PymobModel):

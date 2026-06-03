@@ -28,6 +28,7 @@ __all__ = [
     "Multiprocessing",
     "Inference",
     "Numpyro",
+    "Optax",
     "Pyabc",
     "Redis",
     "Pymoo",

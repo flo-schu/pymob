@@ -21,6 +21,7 @@ from pymob.sim.config.sections import (
     Pyabc,
     Pymoo,
     Numpyro,
+    Optax,
     Redis,
     Report
 )
@@ -161,6 +162,7 @@ class Config(BaseModel):
     inference_pyabc_redis: Redis = Field(default=Redis(), alias="inference.pyabc.redis")
     inference_pymoo: Pymoo = Field(default=Pymoo(), alias="inference.pymoo")
     inference_numpyro: Numpyro = Field(default=Numpyro(), alias="inference.numpyro")
+    inference_optax: Optax = Field(default=Optax(), alias="inference.optax")
     report: Report = Field(default=Report(), alias="report")
         
     @property
@@ -223,7 +225,10 @@ class Config(BaseModel):
             by_alias=True, 
             mode="json", 
             exclude_none=True,
-            exclude={"case_study": {"output_path", "data_path", "root", "init_root", "default_settings_path"}}
+            exclude={
+                "case_study": {"output_path", "data_path", "root", "init_root", "default_settings_path"},
+                "inference_optax": {"loss_function"}
+            }
         )
         self._config.update(**settings)
 
