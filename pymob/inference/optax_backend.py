@@ -6,7 +6,7 @@ from typing import (
     Tuple, Dict, Union, Optional, Callable, Literal, List, Any,
     Protocol
 )
-from pymob.sim.parameters import optim_lib
+from pymob.sim.config.parameters import optim_lib
 import copy
 import warnings
 import jax.numpy as jnp
