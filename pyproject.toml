@@ -118,6 +118,7 @@ push = true
 ]
 
 [tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
 markers = [
     "slow='mark test as slow.'"
 ]

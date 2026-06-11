@@ -1,7 +1,7 @@
 import ast
 import warnings
 import inspect
-from typing import Optional, List, Dict, Tuple, Any, Union, Literal
+from typing import Optional, List, Dict, Tuple, Any, Union
 from typing_extensions import Annotated
 
 import scipy
@@ -13,8 +13,8 @@ from numpydantic import NDArray, Shape
 from pymob.utils.errors import import_optional_dependency
 
 NumericArray = Union[
-    NDArray[Literal["*, ..."], float],
-    NDArray[Literal["*, ..."], int],
+    NDArray[Shape["*, ..."], float], # pyright: ignore[reportGeneralTypeIssues]
+    NDArray[Shape["*, ..."], int], # pyright: ignore[reportGeneralTypeIssues]
 ]
 
 class Expression:
@@ -367,6 +367,7 @@ class Param(BaseModel):
 
 
 scipy_to_scipy = {
+    "deterministic": (None, {}),
     # Continuous Distributions
     "norm": (scipy.stats.norm, {}),
     "normal": (scipy.stats.norm, {}),
