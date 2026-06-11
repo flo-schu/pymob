@@ -1109,7 +1109,7 @@ class SimulationBase:
                     )
             else:
                 if len(new_dims) == 0:
-                    value = np.asarray(float(value.item()))
+                    value = np.asarray(float(value))
                 else:
                     value = np.broadcast_to(np.asarray(value), tuple(new_dims.values()))
 
