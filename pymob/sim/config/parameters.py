@@ -13,8 +13,8 @@ from numpydantic import NDArray, Shape
 from pymob.utils.errors import import_optional_dependency
 
 NumericArray = Union[
-    NDArray[Shape["*, ..."], float], # pyright: ignore[reportGeneralTypeIssues]
-    NDArray[Shape["*, ..."], int], # pyright: ignore[reportGeneralTypeIssues]
+    NDArray[Shape["*, ..."], float], # noqa: F722
+    NDArray[Shape["*, ..."], int], # noqa: F722
 ]
 
 class Expression:
