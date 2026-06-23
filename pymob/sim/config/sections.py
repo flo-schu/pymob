@@ -469,7 +469,13 @@ def list_to_string(lst: List) -> str:
     -------
     str
     """
-    return " ".join([str(_l).replace(" ", "") for _l in lst])
+    string_items = []
+    for item in lst:
+        if hasattr(item, "model_dump"):
+            item = item.model_dump(mode="json")
+        string_items.append(str(item).replace(" ", ""))
+
+    return " ".join(string_items)
 
 
 def param_to_string(prm: Param) -> str:
