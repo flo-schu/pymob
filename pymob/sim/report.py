@@ -286,8 +286,8 @@ class Report:
         return subprocess.run([
             "pandoc",        
             "--resource-path=.",
-            f"--extract-media=reports/media/{self.config.case_study.name}_{self.config.case_study.scenario}",
-            f"--output=reports/{self.config.case_study.name}_{self.config.case_study.scenario}.tex",
+            f"--extract-media={os.path.join('reports', 'media', f'{self.config.case_study.name}_{self.config.case_study.scenario}')}",
+            f"--output={os.path.join('reports', f'{self.config.case_study.name}_{self.config.case_study.scenario}.tex')}",
             "report.md"
         ])
 
@@ -295,7 +295,7 @@ class Report:
         return subprocess.run([
             "pandoc",        
             "--resource-path=.",
-            f"--output=reports/{self.config.case_study.name}_{self.config.case_study.scenario}.pdf",
+            f"--output={os.path.join('reports', f'{self.config.case_study.name}_{self.config.case_study.scenario}.pdf')}",
             "--pdf-engine=xelatex",
             "report.md"
         ])
@@ -401,17 +401,17 @@ class Report:
                 label=self._label.format(placeholder=f"tab:{safe_string_insert}")
             )
 
-            out = f"{self.config.case_study.output_path}/report_table_{safe_string_insert}.tex"
+            out = os.path.join(self.config.case_study.output_path, f"report_table_{safe_string_insert}.tex")
             with open(out, "w") as f:
                 f.writelines(table_latex)
 
         elif self.rc.table_parameter_estimates_format == "csv":
-            out = f"{self.config.case_study.output_path}/report_table_{safe_string_insert}.csv"
+            out = os.path.join(self.config.case_study.output_path, f"report_table_{safe_string_insert}.csv")
             tab.to_csv(out)
 
 
         elif self.rc.table_parameter_estimates_format == "tsv":
-            out = f"{self.config.case_study.output_path}/report_table_{safe_string_insert}.tsv"
+            out = os.path.join(self.config.case_study.output_path, f"report_table_{safe_string_insert}.tsv")
             tab.to_csv(out, sep="\t")
 
         return out
@@ -522,7 +522,7 @@ class Report:
         )
 
         df = pd.concat([_nrmse.T, _loglik.T, _bic.T])
-        out = f"{self.config.case_study.output_path}/goodness_of_fit.csv"
+        out = os.path.join(self.config.case_study.output_path, "goodness_of_fit.csv")
         df.to_csv(out)
 
         self._write(df.to_markdown())

@@ -107,5 +107,5 @@ def test_copy():
 
 
 if __name__ == "__main__":
-    test_import(tmp_path="results/debug")
+    test_import(tmp_path=os.path.join("results", "debug"))
     test_copy()

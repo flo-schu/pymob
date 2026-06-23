@@ -1,6 +1,7 @@
 from functools import partial, lru_cache
 import glob
 import re
+import os
 import warnings
 from typing import (
     Tuple, Dict, Union, Optional, Callable, Literal, List, Any,
@@ -558,7 +559,7 @@ class NumpyroBackend(InferenceBackend):
                 import graphviz
                 graph = numpyro.render_model(model, render_distributions=False)
                 graph.render(
-                    filename=f"{self.simulation.output_path}/probability_model",
+                    filename=os.path.join(self.simulation.output_path, "probability_model"),
                     view=False, cleanup=True, format="png",
                 ) 
             except graphviz.backend.ExecutableNotFound:
@@ -1496,10 +1497,10 @@ class NumpyroBackend(InferenceBackend):
         if output is not None:
             self.idata.to_netcdf(output)
         else:
-            self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
+            self.idata.to_netcdf(os.path.join(self.simulation.output_path, "numpyro_posterior.nc"))
 
     def load_results(self, file="numpyro_posterior.nc", cluster: Optional[int] = None):
-        idata = az.from_netcdf(f"{self.simulation.output_path}/{file}")
+        idata = az.from_netcdf(os.path.join(self.simulation.output_path, file))
         if cluster is not None:
             self.select_cluster(idata, cluster)
 
@@ -1538,7 +1539,7 @@ class NumpyroBackend(InferenceBackend):
         """
         sim = self.simulation
         pseudo_chains = glob.glob(
-            f"{sim.output_path}/{chain_location}/*/numpyro_posterior.nc"
+            os.path.join(sim.output_path, chain_location, "*", "numpyro_posterior.nc")
         )
 
         # just be aware that in the case of MAP this is not an acutal posterior.
