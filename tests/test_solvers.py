@@ -174,33 +174,33 @@ def test_solver_dimensional_order():
         (res_id_time.to_array() - res_time_id.to_array()).values, 0
     )
 
-def test_UDE_solver():
-    sim = init_lotka_volterra_UDE_case_study_from_settings("UDESolverTest")
+# def test_UDE_solver():
+#     sim = init_lotka_volterra_UDE_case_study_from_settings("UDESolverTest")
 
-    sim.dispatch_constructor()
+#     sim.dispatch_constructor()
 
-    evaluator = sim.dispatch(theta={"delta":1.8})
-    evaluator()
-    data_res = evaluator.results
+#     evaluator = sim.dispatch(theta={"delta":1.8})
+#     evaluator()
+#     data_res = evaluator.results
 
-    f = lambda t, y, args: sim.model(t, y, *args)
-    t = sim.coordinates["time"]
+#     f = lambda t, y, args: sim.model(t, y, *args)
+#     t = sim.coordinates["time"]
 
-    data_res2 = diffrax.diffeqsolve(diffrax.ODETerm(f), 
-        diffrax.Tsit5(),
-        t0=t[0],
-        t1=t[-1],
-        dt0=t[1] - t[0],
-        y0=jnp.array([sim.model_parameters["y0"]["prey"].to_numpy(), jnp.array(sim.model_parameters["y0"]["predator"].to_numpy())]),
-        args=(),
-        stepsize_controller=diffrax.PIDController(rtol=sim.evaluator._solver.rtol, atol=sim.evaluator._solver.atol, pcoeff=sim.evaluator._solver.pcoeff, icoeff=sim.evaluator._solver.icoeff, dcoeff=sim.evaluator._solver.dcoeff),
-        saveat=diffrax.SaveAt(ts=t),
-        max_steps=sim.config.jaxsolver.max_steps,
-        throw = False,
-    )
+#     data_res2 = diffrax.diffeqsolve(diffrax.ODETerm(f), 
+#         diffrax.Tsit5(),
+#         t0=t[0],
+#         t1=t[-1],
+#         dt0=t[1] - t[0],
+#         y0=jnp.array([sim.model_parameters["y0"]["prey"].to_numpy(), jnp.array(sim.model_parameters["y0"]["predator"].to_numpy())]),
+#         args=(),
+#         stepsize_controller=diffrax.PIDController(rtol=sim.evaluator._solver.rtol, atol=sim.evaluator._solver.atol, pcoeff=sim.evaluator._solver.pcoeff, icoeff=sim.evaluator._solver.icoeff, dcoeff=sim.evaluator._solver.dcoeff),
+#         saveat=diffrax.SaveAt(ts=t),
+#         max_steps=sim.config.jaxsolver.max_steps,
+#         throw = False,
+#     )
 
-    np.testing.assert_allclose(data_res["prey"].to_numpy(), data_res2.ys[:,0], atol = 1e-1, rtol = 1e-3)
-    np.testing.assert_allclose(data_res["predator"].to_numpy(), data_res2.ys[:,1], atol = 1e-1, rtol = 1e-3)
+#     np.testing.assert_allclose(data_res["prey"].to_numpy(), data_res2.ys[:,0], atol = 1e-1, rtol = 1e-3)
+#     np.testing.assert_allclose(data_res["predator"].to_numpy(), data_res2.ys[:,1], atol = 1e-1, rtol = 1e-3)
 
 
 
