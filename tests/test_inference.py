@@ -1,3 +1,4 @@
+import os
 import pytest
 from matplotlib import pyplot as plt
 from pymob.solvers import JaxSolver
@@ -273,6 +274,5 @@ def test_vector_field_lotka_volterra():
 
 if __name__ == "__main__":
     import sys
-    import os
     sys.path.append(os.getcwd())
     # test_scripting_api_pyabc()
