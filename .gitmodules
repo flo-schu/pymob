@@ -2,7 +2,3 @@
 	path = case_studies/lotka_volterra_case_study
 	url = git@github.com:flo-schu/lotka_volterra_case_study
 	branch = migration-pymob-6
-[submodule "case_studies/tktd_rna_pulse"]
-	path = case_studies/tktd_rna_pulse
-	url = https://github.com/flo-schu/tktd_rna_pulse.git
-	branch = dev

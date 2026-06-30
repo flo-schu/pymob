@@ -1,1 +1,0 @@
-from lotka_volterra_case_study.sim import Simulation_v2
