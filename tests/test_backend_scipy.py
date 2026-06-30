@@ -1,3 +1,5 @@
+import os
+
 import pytest
 import numpy as np
 from scipy.stats import norm
@@ -77,7 +79,7 @@ def test_parameter_parsing_different_priors_on_species():
     obs.rabbits.values = rng.poisson(e.results.rabbits+1e-6)
     obs.wolves.values = rng.poisson(e.results.wolves+1e-6)
     obs.to_netcdf(
-        f"{sim.data_path}/simulated_data_hierarchical_species_year.nc"
+        os.path.join(sim.data_path, "simulated_data_hierarchical_species_year.nc")
     )
 
     sim.observations = obs

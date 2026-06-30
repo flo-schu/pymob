@@ -1,6 +1,7 @@
 from functools import partial, lru_cache
 import glob
 import re
+import os
 import warnings
 from typing import (
     Tuple, Dict, Union, Optional, Callable, Literal, List, Any,
@@ -558,7 +559,7 @@ class NumpyroBackend(InferenceBackend):
                 import graphviz
                 graph = numpyro.render_model(model, render_distributions=False)
                 graph.render(
-                    filename=f"{self.simulation.output_path}/probability_model",
+                    filename=os.path.join(self.simulation.output_path, "probability_model"),
                     view=False, cleanup=True, format="png",
                 ) 
             except graphviz.backend.ExecutableNotFound:
@@ -648,7 +649,7 @@ class NumpyroBackend(InferenceBackend):
         else:
             msg = "not converged" 
 
-        msg += f"\navg. $\Delta$ = {change_avg:.1e} $\pm$ {change_std:.1e}"
+        msg += f"\navg. $\\Delta$ = {change_avg:.1e} $\\pm$ {change_std:.1e}"
 
         if msg == "not converged":
             warnings.warn(
@@ -666,7 +667,7 @@ class NumpyroBackend(InferenceBackend):
         axconv.axhline(0, color="grey", lw=.5)
         axconv.plot(range(sc, nc+sc),  change_convloss)
         axconv.set_yscale("linear")
-        axconv.set_ylabel("$\Delta$ Convoluted Loss")
+        axconv.set_ylabel("$\\Delta$ Convoluted Loss")
         axconv.text(0.95, 0.05, msg, transform=axconv.transAxes, ha="right", va="bottom")
         ax.set_ylabel("Loss")
         axconv.set_xlabel("Iteration")
@@ -1392,7 +1393,40 @@ class NumpyroBackend(InferenceBackend):
     def get_dict(group: xr.Dataset):
         data_dict = group.to_dict()["data_vars"]
         return {k: np.array(val["data"]) for k, val in data_dict.items()}
+    
+    @staticmethod
+    def compute_mask_scales(
+        masks: Dict[str, Any],
+        obs_vars: List[str],
+        prefix: str = "_scale_",
+    ) -> Dict[str, float]:
+        """Compute likelihood scales from masks using NumPy (tracer-safe).
+        UnexpectedTracerError can occur when using JAX transformations (e.g., vmap, grad)
+        with JAX arrays.
+        This function computes scales based on the number of observed data points for each
+        variablewithout relying on JAX operations, making it safe to use within JAX transformations."""
+        if not obs_vars:
+            return {}
 
+        counts: Dict[str, int] = {}
+        for name in obs_vars:
+            mask = masks.get(name)
+            if mask is None:
+                counts[name] = 0
+                continue
+            counts[name] = int(np.sum(np.asarray(mask)))
+
+        n_total = sum(counts.values())
+        weight = 1.0 / len(obs_vars)
+        scales: Dict[str, float] = {}
+        for name, n_obs in counts.items():
+            if n_total > 0 and n_obs:
+                scale = (n_total / n_obs) * weight
+            else:
+                scale = 1.0
+            scales[f"{prefix}{name}"] = float(scale)
+
+        return scales
 
     @lru_cache
     def posterior_predictions(self, n: Optional[int]=None, seed=1):
@@ -1463,10 +1497,10 @@ class NumpyroBackend(InferenceBackend):
         if output is not None:
             self.idata.to_netcdf(output)
         else:
-            self.idata.to_netcdf(f"{self.simulation.output_path}/numpyro_posterior.nc")
+            self.idata.to_netcdf(os.path.join(self.simulation.output_path, "numpyro_posterior.nc"))
 
     def load_results(self, file="numpyro_posterior.nc", cluster: Optional[int] = None):
-        idata = az.from_netcdf(f"{self.simulation.output_path}/{file}")
+        idata = az.from_netcdf(os.path.join(self.simulation.output_path, file))
         if cluster is not None:
             self.select_cluster(idata, cluster)
 
@@ -1505,7 +1539,7 @@ class NumpyroBackend(InferenceBackend):
         """
         sim = self.simulation
         pseudo_chains = glob.glob(
-            f"{sim.output_path}/{chain_location}/*/numpyro_posterior.nc"
+            os.path.join(sim.output_path, chain_location, "*", "numpyro_posterior.nc")
         )
 
         # just be aware that in the case of MAP this is not an acutal posterior.

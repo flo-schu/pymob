@@ -117,7 +117,8 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-        cache: 'pip' # caching pip dependencies
+        cache: 'pip'
+        cache-dependency-path: pyproject.toml
 
     - name: Install dependencies
       if: env.full-test == 'true' && needs.decide-to-test.outputs.changes == 'true' && needs.decide-to-test.outputs.tagged_commit == 'false' && github.event_name == 'pull_request'

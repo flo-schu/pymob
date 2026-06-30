@@ -10,6 +10,7 @@ __pycache__
 .pytest_cache
 case_studies/*/results/
 case_studies/*/tests/
+case_studies/*/scripts/case_studies
 
 config/settings.json
 *.aux
@@ -25,6 +26,8 @@ build
 
 .vscode
 .env
+
+hyperparams
 
 # linked case studies
 bufferguts

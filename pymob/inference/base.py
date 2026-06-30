@@ -13,6 +13,7 @@ from typing import (
     Protocol,
     Literal
 )
+import os
 from abc import ABC, abstractmethod
 import warnings
 
@@ -680,8 +681,8 @@ class InferenceBackend(ABC):
         ]
 
         out = self.simulation.output_path
-        _ = plot_trace(idata=self.idata, var_names=var_names, output=f"{out}/posterior_trace.png")
-        _ = plot_pairs(idata=self.idata, var_names=var_names, output=f"{out}/posterior_pairs.png")
+        _ = plot_trace(idata=self.idata, var_names=var_names, output=os.path.join(out, "posterior_trace.png"))
+        _ = plot_pairs(idata=self.idata, var_names=var_names, output=os.path.join(out, "posterior_pairs.png"))
 
 
     def check_prior_for_nans(self, idata):

@@ -1,5 +1,6 @@
 import warnings
 from typing import Literal, Union, List, Optional, Dict
+import os
 from functools import partial
 
 import numpy as np
@@ -454,8 +455,8 @@ def evaluate_posterior(sim, nesting_dimension, n_samples=10_000, vars_table={},
     # bic 
     msg, _ = bic(idata)
     if save:
-        log(table, out=f"{sim.output_path}/parameter_table.tex", mode="w")
-        log(msg=msg, out=f"{sim.output_path}/bic.md", mode="w")
+        log(table, out=os.path.join(sim.output_path, "parameter_table.tex"), mode="w")
+        log(msg=msg, out=os.path.join(sim.output_path, "bic.md"), mode="w")
 
     if show:
         print(table)
@@ -470,7 +471,7 @@ def evaluate_posterior(sim, nesting_dimension, n_samples=10_000, vars_table={},
     fig_param.set_size_inches(12, 30)
 
     if save:
-        fig_param.savefig(f"{sim.output_path}/multichain_parameter_estimates.jpg")
+        fig_param.savefig(os.path.join(sim.output_path, "multichain_parameter_estimates.jpg"))
 
     if show:
         plt.show()
@@ -526,7 +527,7 @@ def evaluate_posterior(sim, nesting_dimension, n_samples=10_000, vars_table={},
         az.plot_trace(idata.posterior.sel({nesting_dimension:coord}))
         
         if save:
-            plt.savefig(f"{sim.output_path}/multichain_pseudo_trace_{coord}.jpg")
+            plt.savefig(os.path.join(sim.output_path, f"multichain_pseudo_trace_{coord}.jpg"))
 
         if show:
             plt.show()
@@ -539,7 +540,7 @@ def evaluate_posterior(sim, nesting_dimension, n_samples=10_000, vars_table={},
         )
 
         if save:
-            fig.savefig(f"{sim.output_path}/multichain_pairs_{coord}.jpg")
+            fig.savefig(os.path.join(sim.output_path, f"multichain_pairs_{coord}.jpg"))
 
         if show:
             plt.show()

@@ -1,3 +1,4 @@
+import os
 import pytest
 from matplotlib import pyplot as plt
 from pymob.solvers import JaxSolver
@@ -18,7 +19,7 @@ def test_inference_evaluation():
 
     sim.inferer.load_results()
     fig = sim.inferer.plot_chains()
-    fig.savefig(sim.output_path + "/pyabc_chains.png")
+    fig.savefig(os.path.join(sim.output_path, "pyabc_chains.png"))
 
     # posterior predictions
     for data_var in sim.config.data_structure.data_variables:
@@ -29,7 +30,7 @@ def test_inference_evaluation():
         )
         fig = ax.get_figure()
 
-        fig.savefig(f"{sim.output_path}/pyabc_posterior_predictions_{data_var}.png")
+        fig.savefig(os.path.join(sim.output_path, f"pyabc_posterior_predictions_{data_var}.png"))
         plt.close()
 
 
@@ -239,7 +240,7 @@ def test_vector_field():
         n_vector_points=2,
     )
     ax.plot(-2,2,ls="", marker="o", color="black")
-    ax.figure.savefig(f"{sim.output_path}/test_loglikelihood_gradients.png")
+    ax.figure.savefig(os.path.join(sim.output_path, "test_loglikelihood_gradients.png"))
 
 def test_vector_field_lotka_volterra():
     sim = init_lotka_volterra_case_study_hierarchical_from_settings("lotka_volterra_hierarchical_presimulated_v1")
@@ -268,11 +269,10 @@ def test_vector_field_lotka_volterra():
         n_vector_points=2,
     )
 
-    ax.figure.savefig(f"{sim.output_path}/loglikelihood_gradients.png")
+    ax.figure.savefig(os.path.join(sim.output_path, "loglikelihood_gradients.png"))
 
 
 if __name__ == "__main__":
     import sys
-    import os
     sys.path.append(os.getcwd())
     # test_scripting_api_pyabc()

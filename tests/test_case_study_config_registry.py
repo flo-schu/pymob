@@ -18,7 +18,7 @@ register_case_study_config("dummy_case_study", DummySettings)
 
 @pytest.fixture
 def tmp_cfg(tmp_path):
-    cfg_path = tmp_path / "settings.cfg"
+    cfg_path = os.path.join(tmp_path, "settings.cfg")
     parser = configparser.ConfigParser()
     parser["case-study"] = {"name": "dummy_case_study", "scenario": "test"}
     parser["dummy_case_study"] = {"foo": "42", "bar": "hello"}
@@ -52,7 +52,7 @@ def test_registry_parses_section(tmp_cfg):
 
 @pytest.fixture
 def tmp_cfg_lv(tmp_path):
-    cfg_path = tmp_path / "settings.cfg"
+    cfg_path = os.path.join(tmp_path, "settings.cfg")
     return str(cfg_path)
 
 def test_lotka_volterra_with_case_study_section(tmp_cfg_lv):
@@ -103,7 +103,7 @@ def test_commandline_api_simulate():
         "--package=case_studies"
     result = runner.invoke(main, args.split(" "))
 
-    reloaded = Config("case_studies/lotka_volterra_case_study/scenarios/test_scenario_v2_with_config_section/settings.cfg")
+    reloaded = Config(os.path.join("case_studies", "lotka_volterra_case_study", "scenarios", "test_scenario_v2_with_config_section", "settings.cfg"))
     
     assert not reloaded.lotka_volterra.test_setting_1  # specified setting in file
     assert not reloaded.lotka_volterra.test_setting_2 == "I am Lotka!"  # default setting
