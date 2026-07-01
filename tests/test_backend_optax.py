@@ -2,7 +2,7 @@ import numpy as np
 from tests.fixtures import init_lotka_volterra_UDE_case_study_from_settings
 
 # def test_convergence_optax_backend():
-#     sim = init_lotka_volterra_UDE_case_study_from_settings("InfererTest")
+#     sim = init_lotka_volterra_UDE_case_study_from_settings("test_scenario_v2")
 
 #     sim.dispatch_constructor()
 
@@ -23,3 +23,15 @@ from tests.fixtures import init_lotka_volterra_UDE_case_study_from_settings
 
 #     obs_predator = np.where(np.isnan(sim.observations.predator.values), evaluator.Y["predator"], sim.observations.predator.values)
 #     np.testing.assert_allclose(evaluator.Y["predator"], obs_predator, atol = 1, rtol = 1)
+
+def test_ude_solve_with_evaluator():
+    sim = init_lotka_volterra_UDE_case_study_from_settings("test_scenario_v2")
+
+    sim.dispatch_constructor()
+
+    sim.model
+    sim.solver
+
+    e = sim.dispatch()
+
+    e()

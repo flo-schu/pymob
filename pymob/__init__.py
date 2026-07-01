@@ -3,6 +3,7 @@ from . import sim
 from . import utils
 from . import solvers
 from . import examples
+from . import model
 
 __version__ = "0.6.4"
 

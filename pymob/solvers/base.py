@@ -1,7 +1,7 @@
 import numpy
 import numpy as np
 from numpy.typing import ArrayLike
-from types import ModuleType
+from types import ModuleType, FunctionType, MethodType
 import xarray as xr
 from typing import (
     Callable, Dict, List, Optional, Sequence, Literal, Tuple, Union
@@ -12,6 +12,7 @@ import inspect
 from scipy.ndimage import gaussian_filter1d
 from diffrax import rectilinear_interpolation
 from pymob.utils.errors import PymobError
+from pymob.model.base import Model
 
 @dataclass(frozen=True)
 class SolverBase:
@@ -20,7 +21,7 @@ class SolverBase:
     to pass on important arguments of the simulation relevant to the 
     Solver. Therefore a solver can access all attributes of an Evaluator
     """
-    model: Callable
+    model: Model|FunctionType|MethodType
     dimensions: Tuple
     dimension_sizes: frozendict[str, int]
     parameter_dims: frozendict[str, Tuple[str, ...]]
@@ -240,10 +241,17 @@ class SolverBase:
             )
 
     def preprocess_parameters(self, parameters, num_backend: ModuleType=numpy):
+        if isinstance(self.model, (FunctionType, MethodType)):
+            _exclude_kwargs_model = self.exclude_kwargs_model
+            _model = self.model
+        else:
+            _exclude_kwargs_model = tuple(set([*self.exclude_kwargs_model, *self.model.exclude_model_kwargs])) 
+            _model = self.model.model
+
         ode_args = mappar(
-            self.model, 
+            _model, 
             parameters, 
-            exclude=self.exclude_kwargs_model, 
+            exclude=_exclude_kwargs_model, 
             to="dict"
         )
         ode_args_broadcasted = self._broadcast_args(

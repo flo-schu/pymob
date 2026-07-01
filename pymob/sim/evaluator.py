@@ -1,3 +1,4 @@
+import types
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 import inspect
 from frozendict import frozendict
@@ -6,7 +7,8 @@ import xarray as xr
 import numpy as np
 from numpy.typing import NDArray
 from pymob.solvers.base import mappar, SolverBase
-from pymob.utils.errors import import_optional_dependency
+from pymob.model.base import Model
+
 
 def create_dataset_from_numpy(Y, Y_names, coordinates):
     DeprecationWarning(
@@ -83,7 +85,7 @@ class Evaluator:
 
     def __init__(
             self,
-            model: Callable,
+            model: types.FunctionType|types.MethodType|Model,
             solver: type|Callable,
             dimensions: Sequence[str],
             dimension_sizes: Dict[str, int],
@@ -157,11 +159,13 @@ class Evaluator:
         self.batch_dimension = batch_dimension
         self.solver_options = solver_options
         
-
-        
+        if isinstance(model, (types.FunctionType, types.MethodType)):
+            model_equations = model
+        else:
+            model_equations = model.model
 
         self.parameter_dims = self._regularize_batch_dimensions(
-            arg_names=list(mappar(model, {}, to="names")) + list(mappar(post_processing, {}, to="names")), # type: ignore
+            arg_names=list(mappar(model_equations, {}, to="names")) + list(mappar(post_processing, {}, to="names")), # type: ignore
             arg_dims=parameter_dims
         )
 
@@ -186,6 +190,7 @@ class Evaluator:
         _ = [setattr(self, key, val) for key, val in kwargs.items()]
 
         self._signature = {}
+
 
         if callable(model):
             if hasattr(model, "__func__"):
@@ -241,15 +246,6 @@ class Evaluator:
                 solver_options.update(solver_extra_options)
 
                 model_solver = self.model
-
-                equinox = import_optional_dependency(
-                    "equinox", errors="ignore"
-                )
-                if equinox is not None:
-                    from pymob.solvers.diffrax import UDESolver
-                    import equinox as eqx
-                    if solver == UDESolver:
-                        model_params, model_solver = eqx.partition(self.model, eqx.is_array)             
 
                 self._solver = solver(
                     model=model_solver,
@@ -358,20 +354,7 @@ class Evaluator:
         if seed is not None:
             self._signature.update({"seed": seed})
 
-        equinox = import_optional_dependency(
-            "equinox", errors="ignore"
-        )
-        if equinox is not None:
-            from pymob.solvers.diffrax import UDESolver
-            import equinox as eqx
-            if isinstance(self._solver, UDESolver):
-                params, static = eqx.partition(self.model, eqx.is_array)
-                Y_ = self._solver(params, **self.parameters)
-            elif isinstance(self._solver, SolverBase):
-                Y_ = self._solver(**self.parameters)
-            else:
-                Y_  = self._solver(parameters=self.parameters, **self._signature)
-        elif isinstance(self._solver, SolverBase):
+        if isinstance(self._solver, SolverBase):
             Y_ = self._solver(**self.parameters)
         else:
             Y_ = self._solver(parameters=self.parameters, **self._signature)
