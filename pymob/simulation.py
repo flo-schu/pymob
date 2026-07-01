@@ -5,6 +5,8 @@ import warnings
 import textwrap
 import tempfile
 import importlib
+import types
+
 from copy import deepcopy
 from typing import Optional, List, Union, Literal, Any, Tuple, Sequence, Mapping, TypeVar
 from types import ModuleType
@@ -32,6 +34,8 @@ from pymob.sim.config import ParameterDict, DataVariable, Param, NumericArray, C
 from pymob.sim.plot import SimulationPlot
 from pymob.sim.report import Report
 from pymob.solvers.diffrax import UDESolver
+from pymob.model.base import Model
+
 
 config_deprecation = "Direct access of config options will be deprecated. Use `Simulation.config.OPTION` API instead"
 MODULES = ["sim", "mod", "prob", "data", "plot"]
@@ -195,7 +199,7 @@ class SimulationBase:
     """
     Report = Report
     SimulationPlot = SimulationPlot
-    model: Optional[Callable] = None
+    _model: Optional[Model] = None
     solver: Optional[Callable] = None
     solver_post_processing: Optional[Callable] = None
     _mod: ModuleType
@@ -274,6 +278,30 @@ class SimulationBase:
             model_parameters=copy.deepcopy(dict(self.model_parameters))
         )
         self.dispatch_constructor()
+
+
+    @property
+    def model(self):
+        return self._model
+    
+    @model.setter
+    def model(self, value):
+        if isinstance(value, (types.FunctionType, types.MethodType)):
+            warnings.warn(
+                "Use pymob.model.base.Model class instead of pure functions or methods " +
+                "For defining models.", category=DeprecationWarning
+            )
+                
+            _model = Model()
+            _model.model = value
+        elif isinstance(value, Model):
+            _model = value
+        else:
+            raise NotImplementedError("model must be function, method or Model type")
+
+        assert hasattr(_model, "model")
+
+        self._model = _model
 
     @property
     def model_parameters(self) -> Dict[Literal["parameters","y0","x_in"],Any]:
@@ -718,33 +746,21 @@ class SimulationBase:
         
     def infer_ode_states(self) -> int:
         if self.config.simulation.n_ode_states == -1:
-            try: 
-                equinox = import_optional_dependency(
-                    "equinox", errors="ignore"
-                )
-                if equinox is not None:
-                    from pymob.solvers.diffrax import UDESolver
-                    if self.solver == UDESolver:
-                        return_args = get_return_arguments(self.model.model)
-                    else:
-                        return_args = get_return_arguments(self.model)
-                else:
-                    return_args = get_return_arguments(self.model)
-                n_ode_states = len(return_args)
-                warnings.warn(
-                    "The number of ODE states was not specified in "
-                    "the config file [simulation] > 'n_ode_states = <n>'. "
-                    f"Extracted the return arguments {return_args} from the "
-                    "source code. "
-                    f"Setting 'n_ode_states={n_ode_states}."
-                )
-            except:  # noqa: E722
-                warnings.warn(
-                    "The number of ODE states was not specified in "
-                    "the config file [simulation] > 'n_ode_states = <n>' "
-                    "and could not be extracted from the return arguments."
-                )
-                n_ode_states = -1
+            if isinstance(self.model, (types.FunctionType, types.MethodType)):
+                return_args = get_return_arguments(self.model)
+            elif isinstance(self.model, Model):
+                return_args = get_return_arguments(self.model.model)
+            else:
+                raise NotImplementedError("model must be function, method or Model")
+
+            n_ode_states = len(return_args)
+            warnings.warn(
+                "The number of ODE states was not specified in "
+                "the config file [simulation] > 'n_ode_states = <n>'. "
+                f"Extracted the return arguments {return_args} from the "
+                "source code. "
+                f"Setting 'n_ode_states={n_ode_states}."
+            )
         else:
             n_ode_states = self.config.simulation.n_ode_states
 
@@ -860,6 +876,7 @@ class SimulationBase:
                 )
         else:
             model = self.model
+
 
         self.n_ode_states = self.infer_ode_states()
 

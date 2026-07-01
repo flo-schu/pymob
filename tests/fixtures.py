@@ -169,18 +169,21 @@ def create_simulation_for_test_numpyro_behavior():
     sim.config.save(force=True)
     
 def init_lotka_volterra_UDE_case_study_from_settings(option: str):
-    from lotka_volterra_UDE_case_study.mod import Func
+    from lotka_volterra_case_study.mod import Func
+    from pymob.utils.UDE import UDEModel
 
-    config = Config(f"case_studies/lotka_volterra_UDE_case_study/scenarios/{option}/settings.cfg")
+    config = Config(f"case_studies/lotka_volterra_case_study/scenarios/{option}/settings.cfg")
+
     sim = SimulationBase(config)
     sim.initialize(config)
 
     key = jr.PRNGKey(5678)
     data_key, model_key, loader_key = jr.split(key, 3)
-    sim.model = Func({"alpha":jnp.array(1.3), "delta":jnp.array(1.8)},key=model_key)
 
-    sim.solver = UDESolver
+    ude = Func({"alpha":jnp.array(1.3), "delta":jnp.array(1.8)},key=model_key)
 
-    sim.model_parameters["y0"] = sim.observations.sel(time = 0).drop_vars("time")
+    sim.model = UDEModel(ude=ude)
+
+    sim.solver = JaxSolver
 
     return sim

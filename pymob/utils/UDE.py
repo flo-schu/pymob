@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import jax.tree_util as jtu
 import jax.nn as jnn
 import jax.lax as jl
-from typing import Callable
+from typing import Any, Callable
 from pymob.utils.errors import import_optional_dependency
 equinox = import_optional_dependency(
     "equinox", errors="raise", extra="set_inferer(backend='equinox') was not executed successfully, because "
@@ -387,7 +387,11 @@ class UDEBase(eqx.Module):
         else:
             res = jnp.array(derivatives)
             return res.reshape((res.shape[0]))
-        
+
+    @staticmethod
+    def model(t, y, x_in, *args, **kwargs):
+        raise NotImplementedError
+
     @staticmethod
     def loss(y_obs, y_pred):
         '''
@@ -426,3 +430,33 @@ class UDEBase(eqx.Module):
     
     def __eq__(self, other):
         return type(self) == type(other) and self.__hash__() == other.__hash__()
+    
+
+from pymob.model.base import Model
+
+# TODO: UDE.py Should be moved to pymob.model.ude.py
+
+class UDEModel(Model):
+    """Thin wrapper around UDEBase to obtain standard model evaluation logic with pytrees,
+    that cannot have mutable attributes. In the evaluator, the UDEModel is created
+    from the defined UDE
+    """
+    exclude_model_kwargs = ("t", "y", "x_in", "mlp")
+
+    def __call__(self, t, y, x_in, *args, **kwargs) -> Any:
+        # implement logic to convert theta into a pytree compatible with the static ude model
+        # theta is a dictionary of model parameters, where one key should be the biases
+        # and another key are the weights, the remaining keys are the non-NN model parameters
+        # ...
+
+        # combine the static pytree with the parameters
+        eqx.combine(self.ude, )
+        self.ude()
+
+        # implement logic to obtain the output of the pytree
+
+    def __init__(self, ude: UDEBase) -> None:
+        # this is required for consistency purposes
+        self.model = ude.model
+        _, static_ude_model = eqx.partition(ude, filter_spec=eqx.is_array)
+        self.ude = static_ude_model
