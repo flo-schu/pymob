@@ -140,7 +140,7 @@ def test_convergence_svi_kernel_jaxsolver_truncated_alpha():
 
     sim.config.inference_numpyro.kernel = "svi"
     sim.config.inference_numpyro.svi_iterations = 10_000
-    sim.config.inference_numpyro.svi_learning_rate = 0.01
+    sim.config.inference_numpyro.svi_learning_rate = 0.005
     sim.set_inferer(backend="numpyro")
     sim.inferer.run()
     
