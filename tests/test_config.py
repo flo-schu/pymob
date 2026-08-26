@@ -83,7 +83,7 @@ def test_load_generated_settings():
     assert sim.config.case_study.scenario == "test_scenario_scripting_api"
     assert sim.config.case_study.package == "case_studies"
     assert sim.config.case_study.data == None
-    assert normalize_path(sim.config.case_study.data_path) == normalize_path("case_studies\\lotka_volterra_case_study\\data")
+    assert normalize_path(sim.config.case_study.data_path) == normalize_path("case_studies/lotka_volterra_case_study/data")
     assert sim.config.case_study.output == None
     assert normalize_path(sim.config.case_study.output_path) == \
         normalize_path("case_studies/lotka_volterra_case_study/results/test_scenario_scripting_api")
