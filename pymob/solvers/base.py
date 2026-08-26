@@ -302,11 +302,24 @@ class SolverBase:
             # present
             target_shape = self.shapes_parameter_coordinates.get(arg_name, (n_batch, ))
 
-            # make sure the argument is an array with one dimension
-            # promoting to two dimension (including a batch dimension will be done)
-            # in the different conditional branches
-            arg_promoted = num_backend.array(arg, ndmin=1, dtype=float)
-            
+            # make sure the argument is an array 
+            arg_promoted = num_backend.array(arg, dtype=float)
+
+            # if the dimensionality of the arg is zero, then it is a scalar and should
+            # not be an array. It should consequently be only broadcasted to the target
+            # shape which should not raise any broadcasting errors
+            if arg_promoted.ndim == 0:
+                if arg_name in self.shapes_parameter_coordinates:
+                    arg_broadcasted = num_backend.broadcast_to(
+                        arg_promoted, shape=self.shapes_parameter_coordinates[arg_name]
+                    )
+                else:
+                    # if there is no broadcasting shape, assume the batch dimension
+                    # is one and there is no alternative broadcasting necessary
+                    arg_broadcasted = num_backend.broadcast_to(
+                        arg_promoted, shape=(1,)
+                    )
+
             # if the size of the 1st dimension of the argument array 
             # is identical to the size of the specified first dimension
             # we know that the input array was constructed to match the size.
@@ -316,20 +329,14 @@ class SolverBase:
             # different order (other than batch_dimension first)
             # This problem has been fixed, as the dimensional order is now
             # checked in the Evaluator.__init__
-            if arg_promoted.shape[0] == target_shape[0]:
-                # if the dimensionality of the argument array is 1
-                # we add a dummy dimension at the end, in order
-                # to harmonize it with arguments that are vectors
-                if arg_promoted.ndim == 1:
-                    arg_broadcasted = num_backend.expand_dims(arg_promoted, -1)
-                else:
-                    # if greater zero (zero dim not possible because of the 
-                    # promotion to 1D arrays at the beginning of the loop)
-                    # then it is assumed that the array correctly contains 
-                    # more than one value for each id in the batch dimension
-                    # i.e. vector, matrix or nd-array parameters in the ODE
-                    # We leave the array as is
-                    arg_broadcasted = arg_promoted
+            elif arg_promoted.shape[0] == target_shape[0]:
+                # if greater zero (zero dim not possible because of the 
+                # promotion to 1D arrays at the beginning of the loop)
+                # then it is assumed that the array correctly contains 
+                # more than one value for each id in the batch dimension
+                # i.e. vector, matrix or nd-array parameters in the ODE
+                # We leave the array as is
+                arg_broadcasted = arg_promoted
 
             elif (
                 # this is when passed and expected shapes have the same number
@@ -443,10 +450,6 @@ class SolverBase:
 
             # also here we apply broadcasting to the array if the result has 
             # only one dimension
-            if y0_vals_broadcasted.ndim == 1:
-                y0_vals_broadcasted = num_backend.expand_dims(
-                    y0_vals_broadcasted, -1
-                )
 
             Y0.append(y0_vals_broadcasted)
         return Y0
