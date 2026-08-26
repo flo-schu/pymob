@@ -402,6 +402,7 @@ def go_to_case_studies(case_study_dir="case_studies", stop_inside_case_studies=T
 
 def normalize_path(path):
     # Replace all slashes/backslashes with the OS separator
-    clean_path = re.sub(r"[\\/]+", os.sep, path)
-    # Optionally, remove redundant separators and up-level references
-    return Path(clean_path)
+    # Convert input to string if it's a Path object
+    path_str = str(path) if not isinstance(path, str) else path
+
+    return Path(os.path.normpath(path_str))
