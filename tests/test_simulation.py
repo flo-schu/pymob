@@ -1,12 +1,12 @@
+import numpy as np
 import pytest
 import xarray as xr
-import numpy as np
 from click.testing import CliRunner
 
+from pymob.sim.config import DataVariable, Param
 from pymob.simulation import SimulationBase
-from pymob.sim.config import Param, DataVariable
-
 from tests.fixtures import init_simulation_casestudy_api, linear_model
+
 
 def test_simulation():
     sim = init_simulation_casestudy_api()
@@ -121,8 +121,8 @@ def test_input_parsing():
     sim.config.data_structure.X = DataVariable(dimensions=["x", "y"])
     sim.config.simulation.y0 = ["X=Array([0, 1])"]
     y0 = sim.parse_input(input="y0", drop_dims=[])
-    np.testing.assert_equal(y0.X.isel(y=0), np.zeros((5)))
-    np.testing.assert_equal(y0.X.isel(y=1), np.ones((5)))
+    np.testing.assert_equal(y0.X.isel(y=0), np.zeros(5))
+    np.testing.assert_equal(y0.X.isel(y=1), np.ones(5))
 
     # test if broadcasting is done correctly
     sim.config.data_structure.X = DataVariable(dimensions=["y", "x"])
@@ -209,6 +209,6 @@ def test_commandline_api_simulate():
 
 
 if __name__ == "__main__":
-    import sys
     import os
+    import sys
     sys.path.append(os.getcwd())
