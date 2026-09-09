@@ -891,14 +891,18 @@ class SimulationBase:
             
         solver_options = {}
         if isinstance(solver, type):
-            solver_classes = [solver] + [c for c in solver.__mro__ if c not in [solver, object]]
+            # solver goes last to overwrite options in base-class solvers if they are 
+            # multiply defined
+            solver_classes = [c for c in solver.__mro__ if c not in [solver, object]] + [solver]
 
             for sc in solver_classes:
                 try:
-                    solver_options = getattr(self.config, sc.__name__.lower())
-                    solver_options = solver_options.model_dump()
-                    break
+                    _solver_config = getattr(self.config, sc.__name__.lower())
+                    solver_options.update(_solver_config.model_dump())
                 except AttributeError:
+                    warnings.warn(
+                        f"Options of {solver} could not be accessed in sim.config"
+                    )
                     continue
 
         self.evaluator = Evaluator(
