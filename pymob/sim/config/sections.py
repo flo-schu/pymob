@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import sys
 from ast import literal_eval as make_tuple
 import warnings
@@ -21,6 +22,8 @@ from pydantic.functional_validators import BeforeValidator
 from pydantic.functional_serializers import PlainSerializer
 
 from pymob.sim.config.parameters import Param, NumericArray, OptionRV
+from pymob.utils.callables import load, dump, Module
+
 # this loads at the import of the module
 default_path = sys.path.copy()
 
@@ -555,6 +558,35 @@ OptionParam = Annotated[
 ]
 
 
+def callable_or_string_to_callable(func: str | Callable):
+    if callable(func):
+        return func
+    else:
+        return load(func)
+
+def callable_to_string(func: Callable):
+    return dump(func)
+
+
+OptionCallable = Annotated[
+    Callable,
+    BeforeValidator(callable_or_string_to_callable),
+    PlainSerializer(callable_to_string, return_type=str, when_used="json")
+]
+
+
+def module_to_string(module: Module) -> str:
+    """JSON-serialize a Module for a config file (escaping '$' for ExtendedInterpolation)."""
+    return json.dumps(module.model_dump(mode="json"), indent=4).replace("$", "$$")
+
+
+OptionModule = Annotated[
+    Module,
+    BeforeValidator(lambda v: json.loads(v) if isinstance(v, str) else v),
+    PlainSerializer(module_to_string, return_type=str, when_used="json"),
+]
+
+
 class Casestudy(PymobModel):
     """
     Configuration model for a case study.
@@ -762,14 +794,16 @@ class Simulation(PymobModel):
     model_config = ConfigDict(validate_assignment=True, extra="allow", protected_namespaces=())
 
     model: Optional[str] = Field(default=None, validate_default=True, description="The deterministic model")
-    model_class: Optional[str] = Field(
-        default=None, 
-        validate_default=True, 
+    model_class: OptionModule | None = Field(
+        default=None,
+        validate_default=True,
         description=(
-            "A class that holds the mechanistic model. This is the path to the module " +
-            "class, e.g. `lotka_volterra_case_study.mod.Model`."
+            "An instance of the class that holds the mechanistic model. Stored as JSON "
+            "with the class reference (`obj`, e.g. `lotka_volterra_case_study.mod:Model`) "
+            "and its constructor arguments (`init_kwargs`)."
         )
     )
+    data_class: OptionModule | None = None
     solver: Optional[str] = Field(default=None, validate_default=True)
     
     y0: OptionListStr = []
@@ -1272,9 +1306,9 @@ class Numpyro(PymobModel):
         SVI settings.
     """
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
-    user_defined_probability_model: Optional[str] = None
-    user_defined_error_model: Optional[str] = None
-    user_defined_preprocessing: Optional[str] = None
+    user_defined_probability_model: OptionCallable | None = None
+    user_defined_error_model: OptionCallable | None = None
+    user_defined_preprocessing: OptionCallable | None = None
     gaussian_base_distribution: bool = False
     
     # inference arguments
