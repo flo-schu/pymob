@@ -130,10 +130,7 @@ class NumpyroBackend(InferenceBackend):
 
         # parse the probability model
         if self.user_defined_probability_model is not None:
-            inference_model = getattr(
-                self.simulation._prob, 
-                self.user_defined_probability_model
-            )
+            inference_model = self.user_defined_probability_model
             self.inference_model = partial(
                 inference_model,
                 indices = self.indices
@@ -144,22 +141,7 @@ class NumpyroBackend(InferenceBackend):
             self.inference_model = self.parse_probabilistic_model()
 
         if self.user_defined_error_model is not None:
-            if "." in self.user_defined_error_model:
-                # if "." in the name of the model assume that this is the 
-                # fully quailified name of the function (including module)
-                module, func = self.user_defined_error_model.rsplit(".", 1)
-                
-                # import the module
-                _module = importlib.import_module(module)
-            else:
-                # if not qualified name
-                # use plain name, assuming this is the function
-                func = self.user_defined_error_model
-
-                # use already imported _prob module from the case study
-                _module = self.simulation._prob
-
-            user_error_model = getattr(_module, func)
+            user_error_model = self.user_defined_error_model
 
             self.inference_model = partial(
                 self.inference_model,

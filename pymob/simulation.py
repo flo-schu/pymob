@@ -562,11 +562,9 @@ class SimulationBase:
         return self.config.model_parameters.all
 
     @property
-    def _model_class(self):
+    def _model_class(self) -> object:
         if self.config.simulation.model_class is not None:
-            module, attr = self.config.simulation.model_class.rsplit(".", 1)
-            _module = importlib.import_module(module)
-            return getattr(_module, attr)
+            return self.config.simulation.model_class.initialized
         else:
             return None
 

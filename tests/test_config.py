@@ -95,6 +95,24 @@ def test_load_interpolated_settings():
 
 
 
+def test_model_class_roundtrip(tmp_path):
+    from pymob.utils.callables import Module
+    from tests.test_callables import Model, Solver, hazard, survival
+
+    config = Config()
+    model = Model({"hazard": hazard, "solver": Solver(survival, rtol=1e-3)}, option="$x")
+    config.simulation.model_class = Module[Model](obj=model)
+
+    fp = str(tmp_path / "settings.cfg")
+    config.save(fp=fp, force=True)
+    loaded = Config(fp).simulation.model_class.initialized
+
+    assert loaded.option == "$x"
+    assert loaded.model_spec["hazard"](2) == 4
+    assert loaded.model_spec["solver"].rtol == 1e-3
+    assert loaded.model_spec["solver"].rhs(2) == 3
+
+
 def test_standalone_casestudy():
     wd = os.getcwd()
     case_study_name = "lotka_volterra_case_study_standalone"
