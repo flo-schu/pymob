@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pymob"
-version = "0.5.32b0"
+version = "0.5.32"
 authors = [
   { name="Florian Schunck", email="fluncki@protonmail.com" },
 ]
@@ -93,7 +93,7 @@ pymoo = ["pymoo >= 0.6.0, <1.0.0", "pathos >= 0.3.1, <1.0.0"]
 interactive = ["ipywidgets >= 8.1.1, <9.0.0", "IPython >= 8.17.2, <9.0.0"]
 
 [tool.bumpver]
-current_version = "0.5.32b0"
+current_version = "0.5.32"
 version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
 commit_message = "bump version {old_version} -> {new_version}"
 tag_message = "{new_version}"
