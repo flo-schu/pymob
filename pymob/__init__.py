@@ -4,7 +4,7 @@ from . import utils
 from . import solvers
 from . import examples
 
-__version__ = "0.5.32b0"
+__version__ = "0.5.32"
 
 
 from .simulation import SimulationBase

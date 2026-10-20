@@ -15,7 +15,7 @@ sys.path.insert(0, basedir)
 project = "pymob"
 copyright = "2024, Florian Schunck"
 author = "Florian Schunck"
-release = "0.5.32b0"
+release = "0.5.32"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
