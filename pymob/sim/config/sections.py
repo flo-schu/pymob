@@ -28,6 +28,35 @@ from pymob.utils.callables import load, dump, Module
 default_path = sys.path.copy()
 
 
+def callable_or_string_to_callable(func: str | Callable):
+    if callable(func):
+        return func
+    else:
+        return load(func)
+
+def callable_to_string(func: Callable):
+    return dump(func)
+
+
+OptionCallable = Annotated[
+    Callable,
+    BeforeValidator(callable_or_string_to_callable),
+    PlainSerializer(callable_to_string, return_type=str, when_used="json")
+]
+
+
+def module_to_string(module: Module) -> str:
+    """JSON-serialize a Module for a config file (escaping '$' for ExtendedInterpolation)."""
+    return json.dumps(module.model_dump(mode="json"), indent=4).replace("$", "$$")
+
+
+OptionModule = Annotated[
+    Module,
+    BeforeValidator(lambda v: json.loads(v) if isinstance(v, str) else v),
+    PlainSerializer(module_to_string, return_type=str, when_used="json"),
+]
+
+
 class PymobModel(BaseModel):
     """
     Base class for all configuration models used in *pymob*.
@@ -133,6 +162,7 @@ class DataVariable(BaseModel):
     max: float = np.nan
     observed: bool = True
     dimensions_evaluator: Optional[List[str]] = None
+    plot: OptionCallable | None = None
 
     @model_validator(mode="after")
     def post_update(self) -> "DataVariable":
@@ -557,34 +587,6 @@ OptionParam = Annotated[
     serialize_param_to_string
 ]
 
-
-def callable_or_string_to_callable(func: str | Callable):
-    if callable(func):
-        return func
-    else:
-        return load(func)
-
-def callable_to_string(func: Callable):
-    return dump(func)
-
-
-OptionCallable = Annotated[
-    Callable,
-    BeforeValidator(callable_or_string_to_callable),
-    PlainSerializer(callable_to_string, return_type=str, when_used="json")
-]
-
-
-def module_to_string(module: Module) -> str:
-    """JSON-serialize a Module for a config file (escaping '$' for ExtendedInterpolation)."""
-    return json.dumps(module.model_dump(mode="json"), indent=4).replace("$", "$$")
-
-
-OptionModule = Annotated[
-    Module,
-    BeforeValidator(lambda v: json.loads(v) if isinstance(v, str) else v),
-    PlainSerializer(module_to_string, return_type=str, when_used="json"),
-]
 
 
 class Casestudy(PymobModel):
