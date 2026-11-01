@@ -188,6 +188,9 @@ class Module(BaseModel, Generic[T]):
 
     obj: ObjRef
     init_kwargs: dict[str, Any] = Field(default={})
+    # if the module is initialized with the init method (None), or by a constructor method
+    # (method_name)
+    init_method: str | None = None
 
     @model_validator(mode="after")
     def set_init_kwargs(self):
@@ -195,12 +198,26 @@ class Module(BaseModel, Generic[T]):
         # or re-validated) is kept as is, together with its init_kwargs.
         if not (isinstance(self.obj, type) or inspect.isroutine(self.obj)):
             self.init_kwargs = dump(self.obj)["init"]
+            self.init_method = self.init_kwargs.pop("__constructor__", None)
             self.obj = type(self.obj)
         return self
 
     @property
     def initialized(self) -> T:
-        return self.obj(**_load_nested(self.init_kwargs))
+        if self.init_method is None:
+            return self.obj(**_load_nested(self.init_kwargs))
+        else:
+            return getattr(self.obj, self.init_method)(**_load_nested(self.init_kwargs))
+
+    def initialize(self, **kwargs):
+        """Used if the initialize call requires a number of kwargs
+        that cannot be serialized well.
+        """
+        if self.init_method is None:
+            return self.obj(**kwargs, **_load_nested(self.init_kwargs))
+        else:
+            return getattr(self.obj, self.init_method)(**kwargs, **_load_nested(self.init_kwargs))
+
         
     model_config = ConfigDict(
         # validate assignment leads to infitite recursion
@@ -208,3 +225,53 @@ class Module(BaseModel, Generic[T]):
         extra="forbid", 
         protected_namespaces=()
     )
+
+
+def make_reinitializable(
+        obj: object, 
+        constructor: str | None = None, 
+        map_init_kwargs_from_obj: dict[str,str] = {}, 
+        override_init_kwargs: dict[str,Any] = {},
+        ignore_init_kwargs: list[str] = []
+    ):
+    """Adds an _init_kwargs dict to obj.__dict__ with parameters to __init__ signature
+    or to the specified constructor method. Compatible with `Module(obj)`
+
+    Parameters
+    ----------
+
+    constructor : str
+        name of the constructor method
+
+    map_init_kwargs_from_obj : dict[str,str]
+        matches object attributes with constructor parameters. Retrieves from object 
+        to pass to the init method.
+    
+    override_init_kwargs : dict[str,Any]
+        explicitly sets the constructor parameters
+
+    ignore_init_kwargs : List[str]
+        constructor parameters to be set during initialization.
+    """
+
+    if hasattr(obj.__dict__, "_init_kwargs"):
+        return
+    else:
+        obj.__dict__["_init_kwargs"] = {}
+    
+    if constructor is None:
+        sig = inspect.signature(obj.__init__)
+    else:
+        sig = inspect.signature(getattr(obj, constructor))
+        obj.__dict__["_init_kwargs"]["__constructor__"] = constructor
+    
+    for key, value in sig.parameters.items():
+        if key in ignore_init_kwargs:
+            continue
+        # use ref map otherwise use key
+        ref = map_init_kwargs_from_obj.get(key, key)
+        # use object, otherwise use the default 
+        val = getattr(obj, ref, value.default)
+        # use overrides finally
+        val = override_init_kwargs.get(key, val)
+        obj.__dict__["_init_kwargs"][key] = val
