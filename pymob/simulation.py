@@ -1036,17 +1036,23 @@ class SimulationBase:
                     f"Or Specify reference_data that contains '{key}' " 
                 )
                 
+            if expr in self.config.data_structure.all:
+                # directly use the lookup from reference data, if 
+                # the expr is contained in the reference data
+                # This prevents sympy mixups, where E is interpreted as the euler number
+                value = lookup_args(expr, reference_data)[expr]
 
-            func, args = lambdify_expression(expr)
-            if len(args) > 0 and reference_data is None:
-                raise AssertionError(
-                    f"Pymob is trying to look up the values of {args} in the "+
-                    "reference data, but `reference_data=None`. Provide "+
-                    "reference data if necessary and check if the right input "+
-                    f"key is used (currently: `input='{input}'`)."
-                )
-            kwargs = lookup_args(args, reference_data)
-            value = func(**kwargs)
+            else:
+                func, args = lambdify_expression(expr)
+                if len(args) > 0 and reference_data is None:
+                    raise AssertionError(
+                        f"Pymob is trying to look up the values of {args} in the "+
+                        "reference data, but `reference_data=None`. Provide "+
+                        "reference data if necessary and check if the right input "+
+                        f"key is used (currently: `input='{input}'`)."
+                    )
+                kwargs = lookup_args(args, reference_data)
+                value = func(**kwargs)
             
             # parse dims and coords
             if reference_data is None:
