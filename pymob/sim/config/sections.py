@@ -805,7 +805,6 @@ class Simulation(PymobModel):
             "and its constructor arguments (`init_kwargs`)."
         )
     )
-    data_class: OptionModule | None = None
     solver: Optional[str] = Field(default=None, validate_default=True)
     
     y0: OptionListStr = []
