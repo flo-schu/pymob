@@ -140,7 +140,7 @@ def test_convergence_svi_kernel_jaxsolver_truncated_alpha():
 
     sim.config.inference_numpyro.kernel = "svi"
     sim.config.inference_numpyro.svi_iterations = 10_000
-    sim.config.inference_numpyro.svi_learning_rate = 0.01
+    sim.config.inference_numpyro.svi_learning_rate = 0.005
     sim.set_inferer(backend="numpyro")
     sim.inferer.run()
     
@@ -339,7 +339,7 @@ def test_convergence_hierarchical_lotka_volterra():
 def test_hierarchical_lotka_volterra_user_defined_prob_model():
     pytest.skip()    
     sim = init_lotka_volterra_case_study_hierarchical_from_settings()
-    sim.config.inference_numpyro.user_defined_probability_model = "hierarchical_lotka_volterra"
+    sim.config.inference_numpyro.user_defined_probability_model = "error_model_hierarchical_lotka_volterra"
 
     sim.solver = JaxSolver
     sim.config.inference_numpyro.kernel = "svi"

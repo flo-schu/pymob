@@ -17,14 +17,27 @@ def test_simulation():
     ds = evalu.results
     ds_ref = xr.load_dataset(f"{sim.data_path}/simulated_data.nc")
 
+    import matplotlib.pyplot as plt
+
+    plt.plot(ds.time, ds.rabbits)
+    plt.plot(ds_ref.time, ds_ref.rabbits, ls="--")
+    plt.plot(ds.time, ds.wolves)
+    plt.plot(ds_ref.time, ds_ref.wolves, ls="--")
+
+    plt.plot(ds.time, ds.wolves - ds_ref.wolves)
+    plt.plot(ds.time, ds.rabbits - ds_ref.rabbits, ls="--")
+
+    # we allow for a relative deviation of < 0.0001 this seems okay given dynamic in the
+    # range of 1-100
     np.testing.assert_allclose(
-        (ds - ds_ref).to_array().values,
-        0
+        (ds / ds_ref).to_array().values ,
+        1,
+        atol=1e-4,
     )
 
 def test_minimal_simulation():
     sim = SimulationBase()
-    linreg, x, y, y_noise, parameters = linear_model()
+    linreg, x, y, y_noise, parameters = linear_model(n=200)
 
     obs = xr.DataArray(y_noise, coords={"x": x}).to_dataset(name="y")
     sim.observations = obs

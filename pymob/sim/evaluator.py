@@ -176,7 +176,7 @@ class Evaluator:
 
         # can be initialized
         if post_processing is None:
-            self.post_processing = lambda results, time, interpolation: results
+            self.post_processing = lambda t, y, x_in: y
         else: 
             self.post_processing = post_processing
                 
@@ -243,20 +243,36 @@ class Evaluator:
                 self._solver = solver(
                     model=self.model,
                     post_processing=self.post_processing,
-                    
+
+                    # TODO: THis should be simplified
                     coordinates=frozen_coordinates,
-                    coordinates_input_vars=frozen_coordinates_input_vars,
-                    dims_input_vars=frozen_dims_input_vars,
-                    coordinates_indices=frozen_coordinates_indices,
+
+                    # should be automatically derivable from coordinates
                     dimensions=tuple(self.dimensions),
                     dimension_sizes=frozendict(self.dimension_sizes),
+
+                    # this can be derived from coordinates where x_in has usually (batch, time, ...)
+                    # and y0 has (batch, ...)
+                    coordinates_input_vars=frozen_coordinates_input_vars,
+                    dims_input_vars=frozen_dims_input_vars,
+
+                    # automatic from coordinates and knowledge of which variables are parameters
                     parameter_dims=frozendict(self.parameter_dims),
                     data_variables=tuple(self.data_variables),
+
+                    # automatic
                     data_structure_and_dimensionality=data_structure_dims,
 
+                    # should be possible to automate by passing indices
+                    coordinates_indices=frozen_coordinates_indices,
                     indices=frozendict({k: tuple(v.values) for k, v in self.indices.items()}),
+
                     n_ode_states=self.n_ode_states,
+
+                    # not really necessary here
                     is_stochastic=self.is_stochastic,
+
+                    # simple enough
                     batch_dimension=self.batch_dimension,
                     **solver_options
 

@@ -23,13 +23,15 @@ def test_solver_preprocessing():
     solver = setup_solver(sim, solver=SolverBase)
     y0 = sim.parse_input("y0",drop_dims=["time"])
     y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
-    np.testing.assert_equal([y.shape for y in y0_solver], [(1,1), (1,1)])
+
+    # assert that only a batch dimension has been added
+    np.testing.assert_equal([y.shape for y in y0_solver], [(1,), (1,)])
 
     # test jax solver
     solver = setup_solver(sim, solver=JaxSolver)
     y0 = sim.parse_input("y0",drop_dims=["time"])
     y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
-    np.testing.assert_equal([y.shape for y in y0_solver], [(1,1), (1,1)])
+    np.testing.assert_equal([y.shape for y in y0_solver], [(1,), (1,)])
 
 def test_solver_preprocessing_replicated():
     sim = init_lotkavolterra_simulation_replicated()
@@ -38,8 +40,11 @@ def test_solver_preprocessing_replicated():
     solver = setup_solver(sim, solver=SolverBase)
     y0 = sim.parse_input("y0",drop_dims=["time"])
     y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
-    np.testing.assert_equal([y.shape for y in y0_solver], [(2,1), (2,1)])
-    np.testing.assert_equal(y0_solver, [np.array([[9],[5]]), np.array([[40], [50]])])
+
+    # assert that no batch dimension has been added
+    np.testing.assert_equal([y.shape for y in y0_solver], [(2,), (2,)])
+    # input should not change, because it already has an id dimension
+    np.testing.assert_equal(y0_solver, list(sim.validate_model_input(y0).values()))
 
     sim.config.simulation.batch_dimension = "idx" # this is not existing
     solver = setup_solver(sim, solver=JaxSolver)
@@ -52,15 +57,15 @@ def test_solver_preprocessing_replicated():
     solver = setup_solver(sim, solver=JaxSolver)
     y0 = sim.parse_input("y0",drop_dims=["time"])
     y0_solver = solver.preprocess_y_0(sim.validate_model_input(y0))
-    np.testing.assert_equal([y.shape for y in y0_solver], [(2,1), (2,1)])
-    np.testing.assert_equal(y0_solver, [np.array([[9],[5]]), np.array([[40], [50]])])
+    np.testing.assert_equal([y.shape for y in y0_solver], [(2,), (2,)])
+    np.testing.assert_equal(y0_solver, [np.array([9, 5]), np.array([40, 50])])
     
     # test parameter processing
     theta = sim.model_parameter_dict
     theta_solver_ode, theta_solver_pp = solver.preprocess_parameters(theta)
     np.testing.assert_equal(
         [t.shape for t in theta_solver_ode], 
-        [(2,1), (2,1), (2,1), (2,1)]
+        [(2,), (2,), (2,), (2,)]
     )
 
 
@@ -144,7 +149,7 @@ def test_solver_preprocessing_complex_parameters():
 
     np.testing.assert_equal(
         [t.shape for t in theta_solver_ode], 
-        [(2,1), (2,1), (2,3), (2,1)]
+        [(2,), (2,), (2,3), (2,)]
     )
 
 def test_solver_dimensional_order():
