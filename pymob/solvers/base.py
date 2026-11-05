@@ -9,6 +9,8 @@ from typing import (
 from frozendict import frozendict
 from dataclasses import dataclass, field
 import inspect
+import functools
+import warnings
 from scipy.ndimage import gaussian_filter1d
 from diffrax import rectilinear_interpolation
 from pymob.utils.errors import PymobError
@@ -33,13 +35,18 @@ class SolverBase:
     data_structure_and_dimensionality: frozendict[str, frozendict[str, int]]
     is_stochastic: bool
     post_processing: Callable
+
+    # optional
     solver_kwargs: frozendict = frozendict()
     indices: frozendict[str, Tuple] = field(repr=False, default=frozendict())
 
     x_dim: str = "time"
     batch_dimension: str = "batch_id"
-    exclude_kwargs_model: Tuple[str, ...] = ("t", "x_in", "y", "X")
-    exclude_kwargs_postprocessing: Tuple[str, ...] = ("t", "time", "interpolation", "results")
+    # the defaults of pymob.sim.config.sections.Solverbase must reflect these
+    exclude_kwargs_model: Tuple[str, ...] = ("t", "y", "x_in",)
+    # post_processing is validated in __post_init__ and always has the
+    # signature f(t, y, x_in, **params) (legacy functions are wrapped)
+    exclude_kwargs_postprocessing: Tuple[str, ...] = ("t", "y", "x_in",)
 
     # fields that are computed post_init
     x: Tuple[float] = field(init=False, repr=False)
@@ -50,6 +57,23 @@ class SolverBase:
     x_shape_batched: Tuple[int, ...] = field(init=False)
 
     def __post_init__(self, *args, **kwargs):
+        # translate legacy argument names (results, time, interpolation) in
+        # exclude_kwargs_postprocessing to the current names (y, t, x_in)
+        exclude_kwargs_postprocessing = self._translate_legacy_exclude_kwargs_postprocessing(
+            self.exclude_kwargs_postprocessing
+        )
+        object.__setattr__(
+            self, "exclude_kwargs_postprocessing", exclude_kwargs_postprocessing
+        )
+
+        # make sure the model follows the signature f(t, y, [x_in], *params)
+        self.validate_model(self.model)
+
+        # make sure post processing follows the signature f(t, y, x_in, **params)
+        # legacy functions f(results, time, interpolation, *params) are wrapped
+        post_processing = self.validate_post_processing(self.post_processing)
+        object.__setattr__(self, "post_processing", post_processing)
+
         x = self.coordinates[self.x_dim]
         if not np.all(x[:-1] <= x[1:]):
             raise ValueError(
@@ -457,6 +481,283 @@ class SolverBase:
 
     def solve(self):
         raise NotImplementedError("Solver must implement a solve method.")
+
+    @staticmethod
+    def _translate_legacy_exclude_kwargs_postprocessing(
+        exclude_kwargs: Sequence[str]
+    ) -> Tuple[str, ...]:
+        """Translate legacy names in ``exclude_kwargs_postprocessing`` to the
+        names of the current post-processing signature f(t, y, x_in, **params)
+        (``results -> y``, ``time -> t``, ``interpolation -> x_in``).
+
+        Duplicates are removed. The current arguments are ordered as
+        ``(t, y, x_in)`` and followed by any other names in their given order.
+        A ``DeprecationWarning`` is issued if legacy names are found.
+        """
+        exclude_kwargs = tuple(exclude_kwargs)
+        legacy_names = [
+            k for k in exclude_kwargs if k in LEGACY_POST_PROCESSING_NAME_MAP
+        ]
+        if len(legacy_names) == 0:
+            return exclude_kwargs
+
+        warnings.warn(
+            f"exclude_kwargs_postprocessing={exclude_kwargs} contains the legacy "
+            f"argument names {legacy_names}. They are translated to the current "
+            "post-processing signature f(t, y, x_in, **params) "
+            f"({', '.join(f'{k} -> {v}' for k, v in LEGACY_POST_PROCESSING_NAME_MAP.items())}). "
+            "Update your configuration to `exclude_kwargs_postprocessing = t y x_in` "
+            "in the [solverbase] section (or `sim.config.solverbase."
+            "exclude_kwargs_postprocessing = ('t', 'y', 'x_in')`). Support for the "
+            "legacy names will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+        translated = [LEGACY_POST_PROCESSING_NAME_MAP.get(k, k) for k in exclude_kwargs]
+        core = [k for k in ("t", "y", "x_in") if k in translated]
+        others = []
+        for k in translated:
+            if k not in core and k not in others:
+                others.append(k)
+
+        return tuple(core + others)
+
+    @staticmethod
+    def _check_reserved_parameters(
+        func: Callable,
+        reserved: Tuple[str, ...],
+        n_leading: int,
+        func_type: str,
+        expected_signature: str,
+    ) -> None:
+        """Raise an error if any parameter after the ``n_leading`` arguments
+        of ``func`` has a name that is listed in ``reserved``."""
+        signature = inspect.signature(func)
+        parameters = list(signature.parameters.values())[n_leading:]
+        clashing = [p.name for p in parameters if p.name in reserved]
+
+        if len(clashing) > 0:
+            raise PymobError(
+                f"The {func_type} function '{getattr(func, '__name__', func)}"
+                f"{signature}' contains the parameter(s) {clashing}, which are "
+                f"reserved arguments {reserved}."
+                "\n\n"
+                "Why does this error occur?\n"
+                "--------------------------\n"
+                f"{func_type.capitalize()} functions must have the signature "
+                f"{expected_signature}. The reserved arguments {reserved} are "
+                "passed by the solver and must be the leading arguments of the "
+                "function. All following arguments are interpreted as parameters "
+                "and are looked up in the model parameters. Reserved arguments "
+                "cannot be used as parameter names, because they would not be "
+                "passed to the function."
+                "\n\n"
+                "How to fix this error?\n"
+                "----------------------\n"
+                f"Make sure that {clashing} are only used as the leading "
+                f"arguments of the function {expected_signature}, or rename "
+                "the parameter(s)."
+            )
+
+    def validate_model(self, func: Callable) -> None:
+        """Validate the signature of the model ``f(t, y, [x_in], *params)``.
+
+        The arguments listed in ``exclude_kwargs_model`` are passed by the
+        solver. They may only appear as leading arguments of the model.
+        A ``PymobError`` is raised if any of the parameters following the
+        leading reserved arguments is listed in ``exclude_kwargs_model``.
+        """
+        if not callable(func):
+            raise PymobError(
+                f"The model '{func}' (type: {type(func)}) is not callable. "
+                "Provide a function with the signature f(t, y, [x_in], *params)."
+            )
+
+        reserved = tuple(self.exclude_kwargs_model)
+        parameter_names = list(inspect.signature(func).parameters.keys())
+        n_leading = 0
+        for name in parameter_names:
+            if name not in reserved:
+                break
+            n_leading += 1
+
+        self._check_reserved_parameters(
+            func=func,
+            reserved=reserved,
+            n_leading=n_leading,
+            func_type="model",
+            expected_signature=f"f({', '.join(reserved)}, *params)",
+        )
+
+    def validate_post_processing(self, func: Callable) -> Callable:
+        """Validate the signature of a post-processing function.
+
+        The current pymob signature of post-processing functions is
+        ``f(t, y, x_in, **params)``, where the leading arguments are defined by
+        ``exclude_kwargs_postprocessing``. Functions that contain all of these
+        arguments are returned unchanged.
+
+        Legacy post-processing functions with the signature
+        ``f(results, time, interpolation, *params)`` are wrapped for backwards
+        compatibility. In legacy functions only the positional order of the first
+        three arguments was relevant, so they are mapped by position:
+        ``results -> y``, ``time -> t``, ``interpolation -> x_in``. The remaining
+        parameters are passed on unchanged.
+
+        In both cases a ``PymobError`` is raised if any parameter following the
+        leading arguments is listed in ``exclude_kwargs_postprocessing``.
+
+        Parameters
+        ----------
+        func : Callable
+            The post-processing function
+
+        Returns
+        -------
+        Callable
+            A function that can be called as ``f(t, y, x_in, **params)`` and whose
+            signature (``inspect.signature``) is ``(t, y, x_in, **params)``.
+        """
+        if not callable(func):
+            raise PymobError(
+                f"The post-processing function '{func}' (type: {type(func)}) is "
+                "not callable. Provide a function with the signature "
+                "f(t, y, x_in, **params)."
+            )
+
+        reserved = tuple(self.exclude_kwargs_postprocessing)
+        parameter_names = list(inspect.signature(func).parameters.keys())
+
+        if all(arg in parameter_names for arg in reserved):
+            # function follows the current signature
+            self._check_reserved_parameters(
+                func=func,
+                reserved=reserved,
+                n_leading=len(reserved),
+                func_type="post-processing",
+                expected_signature=f"f({', '.join(reserved)}, **params)",
+            )
+            return func
+
+        return self.wrap_legacy_post_processing(func)
+
+    def wrap_legacy_post_processing(self, func: Callable) -> Callable:
+        """Wrap a legacy post-processing function ``f(results, time, interpolation,
+        *params)`` so that it can be called as ``f(t, y, x_in, **params)``.
+
+        The first three positional parameters of the legacy function are mapped
+        by position (``results -> y``, ``time -> t``, ``interpolation -> x_in``).
+        The wrapper accepts ``t``, ``y`` and ``x_in`` either as keywords or
+        positionally (in the order ``t, y, x_in``). Any additional positional
+        arguments and keyword arguments are forwarded to the legacy function
+        after the first three arguments.
+        """
+        reserved = tuple(self.exclude_kwargs_postprocessing)
+        missing = [a for a in LEGACY_POST_PROCESSING_MAP if a not in reserved]
+        if len(missing) > 0:
+            raise PymobError(
+                f"Legacy post-processing function '{getattr(func, '__name__', func)}' "
+                f"cannot be wrapped, because the arguments {missing} are not "
+                f"listed in exclude_kwargs_postprocessing={reserved}. Legacy "
+                "post-processing functions require the arguments "
+                f"{LEGACY_POST_PROCESSING_MAP}."
+            )
+
+        signature = inspect.signature(func)
+        parameters = list(signature.parameters.values())
+        positional_kinds = (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD
+        )
+        n_legacy = len(LEGACY_POST_PROCESSING_MAP)
+        legacy_positional = [
+            p for p in parameters[:n_legacy] if p.kind in positional_kinds
+        ]
+
+        if len(legacy_positional) < n_legacy:
+            raise PymobError(
+                f"The post-processing function '{getattr(func, '__name__', func)}"
+                f"{signature}' could not be validated. "
+                "\n\n"
+                "Why does this error occur?\n"
+                "--------------------------\n"
+                "Post-processing functions must have the signature "
+                f"f({', '.join(reserved)}, **params). For backwards compatibility, "
+                "legacy functions with the signature "
+                "f(results, time, interpolation, *params) are also accepted, "
+                "where the first three positional arguments are mapped by "
+                "position (results -> y, time -> t, interpolation -> x_in). "
+                f"The provided function neither contains all arguments {reserved} "
+                "nor at least three leading positional arguments."
+                "\n\n"
+                "How to fix this error?\n"
+                "----------------------\n"
+                "Change the signature of the post-processing function to "
+                f"f({', '.join(reserved)}, **params), e.g.: \n"
+                f"`def post_processing({', '.join(reserved)}, my_param): ...`"
+            )
+
+        self._check_reserved_parameters(
+            func=func,
+            reserved=reserved,
+            n_leading=n_legacy,
+            func_type="legacy post-processing",
+            expected_signature="f(results, time, interpolation, *params)",
+        )
+
+        remaining_parameters = parameters[n_legacy:]
+
+        # construct the signature of the wrapper, so that `mappar` and other
+        # inspection-based utilities see (t, y, x_in, *params)
+        new_parameters = [
+            inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            for name in reserved
+        ]
+        for p in remaining_parameters:
+            if p.kind == inspect.Parameter.POSITIONAL_ONLY:
+                p = p.replace(kind=inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            new_parameters.append(p)
+        new_signature = signature.replace(parameters=new_parameters)
+
+        @functools.wraps(func)
+        def legacy_post_processing_wrapper(*args, **kwargs):
+            args = list(args)
+            # t, y and x_in may be given as keywords (then all positional args
+            # are parameters) or positionally in the order (t, y, x_in)
+            core = {name: kwargs.pop(name) for name in reserved if name in kwargs}
+            for name in reserved:
+                if name not in core:
+                    if len(args) == 0:
+                        raise TypeError(
+                            f"Post-processing function '{func.__name__}' missing "
+                            f"required argument: '{name}'"
+                        )
+                    core[name] = args.pop(0)
+
+            legacy_args = [core[name] for name in LEGACY_POST_PROCESSING_MAP]
+            return func(*legacy_args, *args, **kwargs)
+
+        # __signature__ takes precedence over __wrapped__ in inspect.signature
+        legacy_post_processing_wrapper.__signature__ = new_signature # type: ignore
+        legacy_post_processing_wrapper.__pymob_legacy_post_processing__ = True # type: ignore
+
+        return legacy_post_processing_wrapper
+
+
+# Positional order of the legacy post-processing signature
+# f(results, time, interpolation, *params) expressed in the names of the
+# current signature f(t, y, x_in, **params): results -> y, time -> t,
+# interpolation -> x_in
+LEGACY_POST_PROCESSING_MAP: Tuple[str, str, str] = ("y", "t", "x_in")
+
+# Translation of legacy argument names in exclude_kwargs_postprocessing
+LEGACY_POST_PROCESSING_NAME_MAP: Dict[str, str] = {
+    "results": "y",
+    "time": "t",
+    "interpolation": "x_in"
+}
+
 
 def mappar(
     func, 

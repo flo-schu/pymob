@@ -880,8 +880,8 @@ class SimulationBase:
             if self.config.simulation.solver_post_processing is not None:
                 post_processing = getattr(self._mod, self.config.simulation.solver_post_processing)
             else:
-                def post_processing(results, time, interpolation):
-                    return results
+                def post_processing(t, y, x_in):
+                    return y
         else:
             post_processing = self.solver_post_processing
 

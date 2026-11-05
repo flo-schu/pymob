@@ -260,4 +260,4 @@ class JaxSolver(SolverBase):
         
         res_dict = OrderedDict({v:val for v, val in zip(odestates, sol)})
 
-        return self.post_processing(res_dict, jnp.array(self.x), interp, *ppargs)
+        return self.post_processing(t=jnp.array(self.x), y=res_dict, x_in=interp, *ppargs)

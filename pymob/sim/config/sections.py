@@ -986,8 +986,9 @@ class Solverbase(PymobModel):
         extra="ignore"
     )
     x_dim: str = "time"
-    exclude_kwargs_model: OptionTupleStr = ("t", "time", "x_in", "y", "x", "Y", "X")
-    exclude_kwargs_postprocessing: OptionTupleStr = ("t", "time", "interpolation", "results")
+    # defaults reflect pymob.solvers.base.SolverBase
+    exclude_kwargs_model: OptionTupleStr = ("t", "y", "x_in")
+    exclude_kwargs_postprocessing: OptionTupleStr = ("t", "y", "x_in")
 
 
 class Jaxsolver(PymobModel):

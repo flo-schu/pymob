@@ -123,10 +123,7 @@ class NumpyroBackend(InferenceBackend):
         super().__init__(simulation=simulation)
         # parse preprocessing
         if self.user_defined_preprocessing is not None:
-            self.preprocessing = getattr(
-                self.simulation._prob,
-                self.user_defined_preprocessing
-            )
+            self.preprocessing = self.user_defined_preprocessing
 
         # parse the probability model
         if self.user_defined_probability_model is not None:
