@@ -1,10 +1,8 @@
-import warnings
 from functools import partial
 from types import ModuleType
 from collections import OrderedDict
 from typing import Optional, List, Dict, Literal, Tuple, OrderedDict
 from pymob.solvers.base import mappar, SolverBase
-from pymob.utils.errors import PymobError
 from frozendict import frozendict
 from dataclasses import dataclass, field
 import jax.numpy as jnp
@@ -214,8 +212,15 @@ class JaxSolver(SolverBase):
             jumps = None
 
         # make sure the derivatives returned by the model have the shapes of the
-        # ODE states (backwards compatibility for models written for 1-D states)
-        f = self._match_state_shapes(f=f, t0=self.x[0], y0=tuple(y0), args=args)
+        # ODE states (backwards compatibility for models written for 1-D states).
+        # Shapes are static, so this is evaluated only once during tracing
+        out = jax.eval_shape(lambda t, y: f(t, y, args), self.x[0], tuple(y0))
+        f = self._match_state_shapes(
+            f=f,
+            y_shapes=tuple(jnp.shape(y) for y in y0),
+            out_shapes=tuple(jnp.shape(o) for o in out),
+            num_backend=jnp,
+        )
 
         term = ODETerm(f)
         solver = self.diffrax_solver() # type: ignore (diffrax_solver is ensured
@@ -254,96 +259,6 @@ class JaxSolver(SolverBase):
         )
         
         return tuple(sol.ys), interp
-
-    def _match_state_shapes(self, f, t0, y0, args):
-        """Return a vector field whose outputs have the shapes of the ODE states.
-
-        Before pymob 0.7, scalar ODE states and parameters were promoted to 1-D
-        arrays of length 1. Models written for this behavior return derivatives
-        of shape (1,) for scalar states of shape (). If the shapes of derivatives
-        and states differ only by axes of length 1, the derivatives are reshaped
-        (with a DeprecationWarning). Any other mismatch raises a PymobError.
-        The shapes are static, so the check runs only once during tracing.
-        """
-        out = jax.eval_shape(lambda t, y: f(t, y, args), t0, y0)
-
-        # the number of returned derivatives is not checked here (diffrax does this)
-        if not isinstance(out, (tuple, list)) or len(out) != len(y0):
-            return f
-
-        y_shapes = tuple(jnp.shape(y) for y in y0)
-        out_shapes = tuple(o.shape for o in out)
-        if out_shapes == y_shapes:
-            return f
-
-        state_names = tuple(self.coordinates_input_vars.get("y0", {}).keys())
-        if len(state_names) != len(y0):
-            state_names = tuple(f"state_{i}" for i in range(len(y0)))
-
-        def _without_singletons(shape):
-            return tuple(s for s in shape if s != 1)
-
-        mismatch = {
-            name: (y_shape, out_shape)
-            for name, y_shape, out_shape in zip(state_names, y_shapes, out_shapes)
-            if _without_singletons(y_shape) != _without_singletons(out_shape)
-        }
-
-        if len(mismatch) > 0:
-            raise PymobError(
-                f"The ODE model '{getattr(self.model, '__name__', self.model)}' "
-                f"returned derivatives with shapes {list(out_shapes)} for the ODE "
-                f"states {list(state_names)} with shapes {list(y_shapes)} "
-                f"(shapes per element of the batch dimension '{self.batch_dimension}'). "
-                f"The shapes do not match for: {mismatch} (state shape, derivative shape).\n\n"
-
-                "Why does this error occur?\n"
-                "--------------------------\n"
-                "The solver requires that the model returns one derivative for each "
-                "ODE state with the same shape as the state. Pymob passes ODE states, "
-                "parameters and x_in to the model with exactly the dimensions declared "
-                "in the simulation (without the batch dimension). If a parameter or an "
-                "x_in variable has a dimension that the state does not have, the "
-                "derivative computed from it inherits this dimension.\n\n"
-
-                "How can I fix this error?\n"
-                "-------------------------\n"
-                "Make sure that the dimensions of the ODE states, parameters and x_in "
-                "are consistent.\n"
-                "* If the state should have the extra dimension, add it to the data "
-                "variable and re-parse y0:\n"
-                "  >>> sim.config.data_structure.STATE.dimensions = [..., 'EXTRA_DIM']\n"
-                "  >>> sim.model_parameters['y0'] = sim.parse_input('y0', drop_dims=['time'])\n"
-                "* If a parameter has more values than the state, check its dimensions "
-                "and values in sim.config.model_parameters.\n"
-                "* If x_in has an extra dimension, reduce it inside the model "
-                "(e.g. with jnp.sum or by indexing).\n\n"
-
-                "Details\n"
-                "-------\n"
-                f"ODE states (shape per batch element): {dict(zip(state_names, y_shapes))}\n"
-                f"Derivatives returned by the model: {dict(zip(state_names, out_shapes))}\n"
-                f"Declared dimensions of the states: "
-                f"{ {k: list(self.data_structure_and_dimensionality.get(k, {})) for k in state_names} }"
-            )
-
-        warnings.warn(
-            f"The ODE model '{getattr(self.model, '__name__', self.model)}' returned "
-            f"derivatives with shapes {list(out_shapes)} for the ODE states "
-            f"{list(state_names)} with shapes {list(y_shapes)}. The derivatives are "
-            "reshaped to the shapes of the states, because they differ only by axes "
-            "of length 1. This automatic reshaping is deprecated. Return derivatives "
-            "with the same shape as the ODE states, e.g. by reducing the extra axis "
-            "in the model (x[0], jnp.squeeze) or by using scalar parameter values "
-            "(value=1.0 instead of value=[1.0]).",
-            category=DeprecationWarning,
-        )
-
-        def f_matched(t, y, args):
-            dy = f(t, y, args)
-            return tuple(jnp.reshape(dy_i, s) for dy_i, s in zip(dy, y_shapes))
-
-        return f_matched
 
     @partial(jax.jit, static_argnames=["self", "odestates", "n_odeargs", "n_ppargs", "n_xin"])
     def odesolve_splitargs(self, *args, odestates, n_odeargs, n_ppargs, n_xin):
