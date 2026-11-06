@@ -1,11 +1,14 @@
 import os
 import time
+import warnings
 import numpy as np
+import jax.numpy as jnp
 import pytest
 
 from pymob.sim.config import Param, DataVariable
 from pymob.solvers import JaxSolver, SolverBase
 from pymob.solvers.base import rect_interpolation
+from pymob.utils.errors import PymobError
 from tests.fixtures import (
     init_simulation_casestudy_api, 
     init_lotkavolterra_simulation_replicated,
@@ -13,6 +16,7 @@ from tests.fixtures import (
 )
 
 from pymob import SimulationBase
+from lotka_volterra_case_study.mod import lotka_volterra # type: ignore
 
 def test_solver_preprocessing():
     sim = init_simulation_casestudy_api()
@@ -177,6 +181,63 @@ def test_solver_dimensional_order():
     )
 
 
+
+
+def _lotka_volterra_legacy(t, y, alpha, beta, gamma, delta):
+    # models written for pymob < 0.7 receive states of shape (1,) and return
+    # derivatives of shape (1,). Here the extra axis is added explicitly.
+    prey, predator = y
+    dprey_dt = alpha * prey - beta * prey * predator
+    dpredator_dt = delta * prey * predator - gamma * predator
+    return jnp.reshape(dprey_dt, (1,)), jnp.reshape(dpredator_dt, (1,))
+
+
+def _lotka_volterra_wrong_shape(t, y, alpha, beta, gamma, delta):
+    # the derivative of the predator has 2 values for a scalar state
+    prey, predator = y
+    dprey_dt = alpha * prey - beta * prey * predator
+    dpredator_dt = (delta * prey * predator - gamma * predator) * jnp.ones(2)
+    return dprey_dt, dpredator_dt
+
+
+def _solve_lotka_volterra_replicated(model):
+    sim = init_lotkavolterra_simulation_replicated()
+    theta = sim.model_parameter_dict
+    sim.solver = JaxSolver
+    sim.model = model
+    sim.dispatch_constructor()
+    e = sim.dispatch(theta)
+    e()
+    return e.results
+
+
+def test_solver_scalar_states_without_warning():
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        results = _solve_lotka_volterra_replicated(model=lotka_volterra)
+
+    assert results.wolves.dims == ("id", "time")
+    assert not any(
+        "automatic reshaping is deprecated" in str(w.message) for w in record
+    )
+
+
+def test_solver_legacy_model_output_shapes():
+    """Models that return derivatives with extra axes of length 1 (pymob < 0.7)
+    are solved with a DeprecationWarning and give the same results."""
+    results = _solve_lotka_volterra_replicated(model=lotka_volterra)
+
+    with pytest.warns(DeprecationWarning, match="automatic reshaping is deprecated"):
+        results_legacy = _solve_lotka_volterra_replicated(model=_lotka_volterra_legacy)
+
+    np.testing.assert_allclose(
+        results.to_array().values, results_legacy.to_array().values
+    )
+
+
+def test_solver_model_output_shape_mismatch_error():
+    with pytest.raises(PymobError, match="returned derivatives with shapes"):
+        _solve_lotka_volterra_replicated(model=_lotka_volterra_wrong_shape)
 
 
 def test_benchmark_time():
