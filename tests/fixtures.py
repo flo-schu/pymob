@@ -151,7 +151,7 @@ def create_simulation_for_test_numpyro_behavior():
     sim.config.inference_numpyro.kernel = "nuts"
     sim.config.inference_numpyro.init_strategy = "init_to_median"
     sim.config.inference_numpyro.gaussian_base_distribution = False
-    sim.config.inference_numpyro.user_defined_probability_model = "lotka_volterra"
+    sim.config.inference_numpyro.user_defined_probability_model = "error_model_user_defined_lotka_volterra"
     sim.config.inference_numpyro.user_defined_preprocessing = "dummy_preprocessing"
 
     sim.config.error_model.wolves = "norm(loc=0,scale=1,obs=(obs-wolves)/jnp.sqrt(wolves+1e-6),obs_inv=res*jnp.sqrt(wolves+1e-06)+wolves)"
