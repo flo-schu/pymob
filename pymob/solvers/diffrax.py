@@ -211,6 +211,17 @@ class JaxSolver(SolverBase):
             args = args
             jumps = None
 
+        # make sure the derivatives returned by the model have the shapes of the
+        # ODE states (backwards compatibility for models written for 1-D states).
+        # Shapes are static, so this is evaluated only once during tracing
+        out = jax.eval_shape(lambda t, y: f(t, y, args), self.x[0], tuple(y0))
+        f = self._match_state_shapes(
+            f=f,
+            y_shapes=tuple(jnp.shape(y) for y in y0),
+            out_shapes=tuple(jnp.shape(o) for o in out),
+            num_backend=jnp,
+        )
+
         term = ODETerm(f)
         solver = self.diffrax_solver() # type: ignore (diffrax_solver is ensured
                                        # to be _MetaAbstractSolver type during 

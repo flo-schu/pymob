@@ -478,6 +478,100 @@ class SolverBase:
             Y0.append(y0_vals_broadcasted)
         return Y0
 
+    def _match_state_shapes(
+        self,
+        f: Callable,
+        y_shapes: Tuple[Tuple[int, ...], ...],
+        out_shapes: Tuple[Tuple[int, ...], ...],
+        num_backend: ModuleType = numpy,
+    ) -> Callable:
+        """Return a vector field f(t, y, args) whose outputs have the shapes of
+        the ODE states.
+
+        Before pymob 0.7, scalar ODE states and parameters were promoted to 1-D
+        arrays of length 1. Models written for this behavior return derivatives
+        of shape (1,) for scalar states of shape (). If the shapes of derivatives
+        (out_shapes) and states (y_shapes) differ only by axes of length 1, the
+        derivatives are reshaped (with a DeprecationWarning). Any other mismatch
+        raises a PymobError. The shapes are computed by the solver backend
+        (e.g. with jax.eval_shape in the JaxSolver).
+        """
+        # the number of returned derivatives is not checked here (the ODE
+        # solver library does this)
+        if len(out_shapes) != len(y_shapes) or out_shapes == y_shapes:
+            return f
+
+        state_names = tuple(self.coordinates_input_vars.get("y0", {}).keys())
+        if len(state_names) != len(y_shapes):
+            state_names = tuple(f"state_{i}" for i in range(len(y_shapes)))
+
+        def _without_singletons(shape):
+            return tuple(s for s in shape if s != 1)
+
+        mismatch = {
+            name: (y_shape, out_shape)
+            for name, y_shape, out_shape in zip(state_names, y_shapes, out_shapes)
+            if _without_singletons(y_shape) != _without_singletons(out_shape)
+        }
+        model_name = getattr(self.model, "__name__", self.model)
+
+        if len(mismatch) > 0:
+            raise PymobError(
+                f"The ODE model '{model_name}' returned derivatives with shapes "
+                f"{list(out_shapes)} for the ODE states {list(state_names)} with "
+                f"shapes {list(y_shapes)} (shapes per element of the batch "
+                f"dimension '{self.batch_dimension}'). The shapes do not match "
+                f"for: {mismatch} (state shape, derivative shape).\n\n"
+
+                "Why does this error occur?\n"
+                "--------------------------\n"
+                "The solver requires that the model returns one derivative for each "
+                "ODE state with the same shape as the state. Pymob passes ODE states, "
+                "parameters and x_in to the model with exactly the dimensions declared "
+                "in the simulation (without the batch dimension). If a parameter or an "
+                "x_in variable has a dimension that the state does not have, the "
+                "derivative computed from it inherits this dimension.\n\n"
+
+                "How can I fix this error?\n"
+                "-------------------------\n"
+                "Make sure that the dimensions of the ODE states, parameters and x_in "
+                "are consistent.\n"
+                "* If the state should have the extra dimension, add it to the data "
+                "variable and re-parse y0:\n"
+                "  >>> sim.config.data_structure.STATE.dimensions = [..., 'EXTRA_DIM']\n"
+                "  >>> sim.model_parameters['y0'] = sim.parse_input('y0', drop_dims=['time'])\n"
+                "* If a parameter has more values than the state, check its dimensions "
+                "and values in sim.config.model_parameters.\n"
+                "* If x_in has an extra dimension, reduce it inside the model "
+                "(e.g. with jnp.sum or by indexing).\n\n"
+
+                "Details\n"
+                "-------\n"
+                f"ODE states (shape per batch element): {dict(zip(state_names, y_shapes))}\n"
+                f"Derivatives returned by the model: {dict(zip(state_names, out_shapes))}\n"
+                f"Declared dimensions of the states: "
+                f"{ {k: list(self.data_structure_and_dimensionality.get(k, {})) for k in state_names} }"
+            )
+
+        warnings.warn(
+            f"The ODE model '{model_name}' returned derivatives with shapes "
+            f"{list(out_shapes)} for the ODE states {list(state_names)} with shapes "
+            f"{list(y_shapes)}. The derivatives are reshaped to the shapes of the "
+            "states, because they differ only by axes of length 1. This automatic "
+            "reshaping is deprecated. Return derivatives with the same shape as the "
+            "ODE states, e.g. by reducing the extra axis in the model (x[0], "
+            "jnp.squeeze) or by using scalar parameter values (value=1.0 instead "
+            "of value=[1.0]).",
+            category=DeprecationWarning,
+        )
+
+        def f_matched(t, y, args):
+            dy = f(t, y, args)
+            return tuple(
+                num_backend.reshape(dy_i, s) for dy_i, s in zip(dy, y_shapes)
+            )
+
+        return f_matched
 
     def solve(self):
         raise NotImplementedError("Solver must implement a solve method.")

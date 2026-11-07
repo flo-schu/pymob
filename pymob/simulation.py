@@ -1036,7 +1036,7 @@ class SimulationBase:
                 # directly use the lookup from reference data, if 
                 # the expr is contained in the reference data
                 # This prevents sympy mixups, where E is interpreted as the euler number
-                value = lookup_args(expr, reference_data)[expr]
+                value = lookup_args([expr], reference_data)[expr]
 
             else:
                 func, args = lambdify_expression(expr)
